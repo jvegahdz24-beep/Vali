@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Edge-Compatible JWT Module
+// ValiAutoFlow — Edge-Compatible JWT Module
 // Used by middleware (runs in Edge Runtime — NO Node.js APIs)
 // Pure Web Crypto API — ZERO external dependencies
 // Replaces jose package to eliminate Turbopack bundling issues

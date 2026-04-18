@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Single Agent API
+// ValiAutoFlow — Single Agent API
 // PUT /api/agents/:id — Update agent
 // DELETE /api/agents/:id — Delete agent
 // ═══════════════════════════════════════════════════════════════

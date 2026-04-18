@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Stripe Customer Portal Endpoint
+// ValiAutoFlow — Stripe Customer Portal Endpoint
 // POST /api/billing/portal — Create a Customer Portal session
 // ═══════════════════════════════════════════════════════════════
 

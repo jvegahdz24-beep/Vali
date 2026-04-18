@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Single Conversation API
+// ValiAutoFlow — Single Conversation API
 // GET /api/conversations/:id — Get conversation with messages
 // POST /api/conversations/:id/messages — Send message
 // ═══════════════════════════════════════════════════════════════

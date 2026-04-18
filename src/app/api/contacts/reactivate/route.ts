@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Lead Reactivation API
+// ValiAutoFlow — Lead Reactivation API
 // POST /api/contacts/reactivate
 // Generates personalized reactivation messages and sends via WhatsApp
 // ═══════════════════════════════════════════════════════════════

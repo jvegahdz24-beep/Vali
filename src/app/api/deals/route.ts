@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Deals API
+// ValiAutoFlow — Deals API
 // GET /api/deals — List deals
 // POST /api/deals — Create deal
 // PUT /api/deals — Update deal (id in body)

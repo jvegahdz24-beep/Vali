@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Google OAuth Initiation Endpoint
+// ValiAutoFlow — Google OAuth Initiation Endpoint
 // GET /api/auth/google — Redirect to Google OAuth consent screen
 // ═══════════════════════════════════════════════════════════════
 

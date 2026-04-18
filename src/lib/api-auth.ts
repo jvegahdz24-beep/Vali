@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — API Route Protection Helpers
+// ValiAutoFlow — API Route Protection Helpers
 // Use these in all API routes to require authentication & workspace access
 // ═══════════════════════════════════════════════════════════════
 

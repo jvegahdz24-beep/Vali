@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Analytics API
+// ValiAutoFlow — Analytics API
 // GET /api/analytics — Analytics data for charts
 // ═══════════════════════════════════════════════════════════════
 

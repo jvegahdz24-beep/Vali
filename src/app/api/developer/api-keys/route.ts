@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Developer API Keys Endpoint
+// ValiAutoFlow — Developer API Keys Endpoint
 // GET /api/developer/api-keys — Retrieve API keys from workspace settings
 // PUT /api/developer/api-keys — Save API keys to workspace settings
 // ═══════════════════════════════════════════════════════════════

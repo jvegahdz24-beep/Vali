@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Stripe Checkout Endpoint
+// ValiAutoFlow — Stripe Checkout Endpoint
 // POST /api/billing/checkout — Create a Stripe Checkout session
 // ═══════════════════════════════════════════════════════════════
 

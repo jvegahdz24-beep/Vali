@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Conversation Analysis API
+// ValiAutoFlow — Conversation Analysis API
 // GET /api/analytics/conversation-analysis?workspaceId=X
 // Scans all conversations: cold leads, lost opportunities, reactivation candidates
 // ═══════════════════════════════════════════════════════════════

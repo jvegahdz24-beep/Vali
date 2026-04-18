@@ -158,7 +158,7 @@ export default function SignupPage() {
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
             <Car className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiFlow Pro</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiAutoFlow</h1>
           <p className="text-sm text-gray-500 mt-1">CRM Inteligente con IA</p>
         </div>
 
@@ -430,7 +430,7 @@ export default function SignupPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} ValiFlow Pro. Todos los derechos reservados.
+          © {new Date().getFullYear()} ValiAutoFlow. Todos los derechos reservados.
         </p>
       </div>
 
@@ -444,23 +444,23 @@ export default function SignupPage() {
           <div className="max-h-[400px] overflow-y-auto text-sm text-gray-600 space-y-4 pr-2">
             <div>
               <h4 className="font-semibold text-gray-900">1. Aceptación de los Términos</h4>
-              <p>Al acceder y utilizar ValiFlow Pro, usted acepta estar sujeto a estos Términos y Condiciones. Si no está de acuerdo con alguno de estos términos, le rogamos que no utilice nuestro servicio.</p>
+              <p>Al acceder y utilizar ValiAutoFlow, usted acepta estar sujeto a estos Términos y Condiciones. Si no está de acuerdo con alguno de estos términos, le rogamos que no utilice nuestro servicio.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">2. Descripción del Servicio</h4>
-              <p>ValiFlow Pro es una plataforma SaaS de automatización de ventas y CRM con inteligencia artificial diseñada para concesionarias automotrices en México. El servicio incluye gestión de contactos, automatización de WhatsApp, análisis de conversaciones y herramientas de ventas asistidas por IA.</p>
+              <p>ValiAutoFlow es una plataforma SaaS de automatización de ventas y CRM con inteligencia artificial diseñada para concesionarias automotrices en México. El servicio incluye gestión de contactos, automatización de WhatsApp, análisis de conversaciones y herramientas de ventas asistidas por IA.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">3. Cuentas de Usuario</h4>
-              <p>Usted es responsable de mantener la confidencialidad de su cuenta y contraseña. ValiFlow Pro no se hace responsable por el uso no autorizado de su cuenta. Debe notificar inmediatamente cualquier uso no autorizado.</p>
+              <p>Usted es responsable de mantener la confidencialidad de su cuenta y contraseña. ValiAutoFlow no se hace responsable por el uso no autorizado de su cuenta. Debe notificar inmediatamente cualquier uso no autorizado.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">4. Uso Aceptable</h4>
-              <p>Se prohíbe el uso del servicio para actividades ilegales, envío de spam, acoso, o cualquier actividad que viole las leyes mexicanas aplicables. ValiFlow Pro se reserva el derecho de suspender cuentas que violen estos términos.</p>
+              <p>Se prohíbe el uso del servicio para actividades ilegales, envío de spam, acoso, o cualquier actividad que viole las leyes mexicanas aplicables. ValiAutoFlow se reserva el derecho de suspender cuentas que violen estos términos.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">5. Limitación de Responsabilidad</h4>
-              <p>ValiFlow Pro se proporciona &quot;tal cual&quot; sin garantías de ningún tipo. No seremos responsables por pérdidas de datos, interrupciones del servicio, o daños derivados del uso de la plataforma.</p>
+              <p>ValiAutoFlow se proporciona &quot;tal cual&quot; sin garantías de ningún tipo. No seremos responsables por pérdidas de datos, interrupciones del servicio, o daños derivados del uso de la plataforma.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">6. Facturación</h4>
@@ -468,7 +468,7 @@ export default function SignupPage() {
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">7. Modificaciones</h4>
-              <p>ValiFlow Pro se reserva el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor a partir de su publicación en la plataforma.</p>
+              <p>ValiAutoFlow se reserva el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor a partir de su publicación en la plataforma.</p>
             </div>
             <p className="text-xs text-gray-400">Para dudas contacte a: legal@valiflow.com</p>
           </div>

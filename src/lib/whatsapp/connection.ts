@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — WhatsApp Connection Manager (Singleton)
+// ValiAutoFlow — WhatsApp Connection Manager (Singleton)
 // Baileys-based WhatsApp Web connection for real-time messaging
 // Uses dynamic imports to avoid Turbopack bundling issues
 // ═══════════════════════════════════════════════════════════════
@@ -207,7 +207,7 @@ class WhatsAppManager {
         logger,
         printQRInTerminal: true,
         generateHighQualityLinkPreview: true,
-        browser: ['ValiFlow Pro', 'Chrome', '120.0.0'],
+        browser: ['ValiAutoFlow', 'Chrome', '120.0.0'],
         getMessage: async () => undefined as any,
       })
 

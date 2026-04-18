@@ -22,13 +22,13 @@ async function sendPasswordResetEmail(email: string, resetToken: string, userNam
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'ValiFlow <noreply@valiflow.com>',
+          from: process.env.EMAIL_FROM || 'ValiAutoFlow <noreply@valiflow.com>',
           to: email,
-          subject: '🔑 Restablece tu contraseña — ValiFlow Pro',
+          subject: '🔑 Restablece tu contraseña — ValiAutoFlow',
           html: `
             <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #059669, #0d9488); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-                <h1 style="color: white; margin: 0; font-size: 24px;">ValiFlow Pro</h1>
+                <h1 style="color: white; margin: 0; font-size: 24px;">ValiAutoFlow</h1>
               </div>
               <p style="font-size: 16px; color: #374151;">Hola ${userName},</p>
               <p style="font-size: 16px; color: #374151;">Recibimos una solicitud para restablecer tu contraseña. Haz clic en el botón de abajo para crear una nueva:</p>
@@ -39,7 +39,7 @@ async function sendPasswordResetEmail(email: string, resetToken: string, userNam
               </div>
               <p style="font-size: 14px; color: #6b7280;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
               <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
-                <p style="font-size: 12px; color: #9ca3af;">ValiFlow Pro — WhatsApp + IA para la industria automotriz</p>
+                <p style="font-size: 12px; color: #9ca3af;">ValiAutoFlow — WhatsApp + IA para la industria automotriz</p>
               </div>
             </div>
           `,

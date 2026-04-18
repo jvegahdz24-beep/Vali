@@ -85,7 +85,7 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
   const userEmail = user?.email || ''
   const userInitials = getInitials(userName)
   const userImage = user?.image
-  const workspaceName = user?.workspaceName || 'AutoMax Guadalajara'
+  const workspaceName = user?.workspaceName || 'Mi Negocio'
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
@@ -100,7 +100,7 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <h1 className="text-sm font-bold text-white tracking-tight animate-vf-fadeIn">ValiFlow Pro</h1>
+            <h1 className="text-sm font-bold text-white tracking-tight animate-vf-fadeIn">ValiAutoFlow</h1>
             <p className="text-[10px] text-zinc-500">CRM Inteligente</p>
           </div>
         )}

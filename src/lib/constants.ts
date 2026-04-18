@@ -1,10 +1,10 @@
 import type { PlanLimits } from './types'
 
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Application Constants
+// ValiAutoFlow — Application Constants
 // ═══════════════════════════════════════════════════════════════
 
-export const APP_NAME = 'ValiFlow Pro'
+export const APP_NAME = 'ValiAutoFlow'
 export const APP_VERSION = '1.0.0'
 
 // ─── Agent Types ──────────────────────────────────────────────
@@ -186,7 +186,7 @@ export const AI_PROVIDERS = {
 
 // ─── JHON System Prompt ──────────────────────────────────────
 
-export const JHON_SYSTEM_PROMPT = `# IDENTIDAD VALIFLOW
+export const JHON_SYSTEM_PROMPT = `# IDENTIDAD VALIAUTOFLOW
 Eres el asistente de ventas de [NOMBRE_AGENCIA]. No eres un bot. Eres un asesor de ventas inteligente que ayuda al equipo a dar seguimiento inmediato y personalizado a cada lead. Tu objetivo es que cada persona que escriba sienta que hay alguien real y cálido al otro lado.
 
 # PERSONALIDAD Y TONO

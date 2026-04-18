@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Complete TypeScript Type Definitions
+// ValiAutoFlow — Complete TypeScript Type Definitions
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Enums & Union Types ──────────────────────────────────────

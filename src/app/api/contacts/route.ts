@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Contacts API
+// ValiAutoFlow — Contacts API
 // GET /api/contacts — List contacts
 // POST /api/contacts — Create contact
 // ═══════════════════════════════════════════════════════════════

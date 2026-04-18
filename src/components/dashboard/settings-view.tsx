@@ -71,7 +71,7 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   const [saving, setSaving] = useState(false)
 
   // ── General Tab State ──
-  const [workspaceName, setWorkspaceName] = useState(() => localStorage.getItem('vf_workspaceName') || 'AutoMax Guadalajara')
+  const [workspaceName, setWorkspaceName] = useState(() => localStorage.getItem('vf_workspaceName') || 'Mi Negocio')
   const [industry, setIndustry] = useState(() => localStorage.getItem('vf_industry') || 'automotive')
   const [language, setLanguage] = useState(() => localStorage.getItem('vf_language') || 'es')
   const [generalSaved, setGeneralSaved] = useState(false)
@@ -716,7 +716,7 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
                 <div className="space-y-3">
                   {[
                     { num: '1', title: 'Escanea el QR', desc: 'Vincula tu WhatsApp como si fuera WhatsApp Web. No necesitas cuenta de Meta Business ni verificación.' },
-                    { num: '2', title: 'Recibe mensajes automáticamente', desc: 'Cuando un cliente te escribe, el mensaje llega a ValiFlow y se guarda en tu CRM automáticamente.' },
+                    { num: '2', title: 'Recibe mensajes automáticamente', desc: 'Cuando un cliente te escribe, el mensaje llega a ValiAutoFlow y se guarda en tu CRM automáticamente.' },
                     { num: '3', title: 'IA responde por ti (JHON)', desc: 'Nuestro agente IA analiza el mensaje, califica al lead y responde automáticamente con la personalidad JHON.' },
                     { num: '4', title: 'Gestiona desde el Inbox', desc: 'Ve todas las conversaciones, toma el control cuando quieras, o deja que la IA maneje todo.' },
                   ].map(step => (

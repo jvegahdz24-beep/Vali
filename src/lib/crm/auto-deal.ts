@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Auto Deal Creator
+// ValiAutoFlow — Auto Deal Creator
 // Creates pipeline deals automatically when leads qualify
 // Called from message-processor after CRM updates
 // ═══════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Workspaces API
+// ValiAutoFlow — Workspaces API
 // GET /api/workspaces — List user's workspaces
 // POST /api/workspaces — Create workspace
 // ═══════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Dashboard Stats API
+// ValiAutoFlow — Dashboard Stats API
 // GET /api/dashboard/stats — Aggregated dashboard metrics
 // ═══════════════════════════════════════════════════════════════
 

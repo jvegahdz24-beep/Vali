@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Customer Archetype Detection
+// ValiAutoFlow — Customer Archetype Detection
 // Detects customer profiles silently from conversation
 // ═══════════════════════════════════════════════════════════════
 

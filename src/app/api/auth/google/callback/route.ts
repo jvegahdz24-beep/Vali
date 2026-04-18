@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Google OAuth Callback Endpoint
+// ValiAutoFlow — Google OAuth Callback Endpoint
 // GET /api/auth/google/callback — Handle Google OAuth callback,
 // exchange code for tokens, find/create user, create session.
 // ═══════════════════════════════════════════════════════════════

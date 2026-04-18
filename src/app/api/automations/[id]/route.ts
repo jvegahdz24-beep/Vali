@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Automation by ID API
+// ValiAutoFlow — Automation by ID API
 // GET /api/automations/[id] — Get automation
 // PUT /api/automations/[id] — Update automation
 // DELETE /api/automations/[id] — Delete automation

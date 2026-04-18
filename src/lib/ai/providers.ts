@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Multi-Provider AI Abstraction Layer
+// ValiAutoFlow — Multi-Provider AI Abstraction Layer
 // All providers route through z-ai-web-dev-sdk
 // ═══════════════════════════════════════════════════════════════
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — AI Chat Endpoint
+// ValiAutoFlow — AI Chat Endpoint
 // POST /api/ai/chat — Frontend → Revenue Engine pipeline
 //
 // UNIFIED: This route is a FORWARDER only.

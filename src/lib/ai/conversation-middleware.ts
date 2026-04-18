@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Conversation Middleware
+// ValiAutoFlow — Conversation Middleware
 // Capa de control ligera que NO altera el sistema base
 // Arquitectura: INPUT → debounce → extractor → modelo → post-procesador → OUTPUT
 // ═══════════════════════════════════════════════════════════════

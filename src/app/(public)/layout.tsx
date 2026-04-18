@@ -7,7 +7,7 @@ const geistSans = Geist({
 })
 
 export const metadata: Metadata = {
-  title: 'ValiFlow Pro — Automatiza tus ventas con IA y WhatsApp',
+  title: 'ValiAutoFlow — Automatiza tus ventas con IA y WhatsApp',
   description: 'CRM Inteligente con IA para WhatsApp. Automatiza ventas, gestiona leads y cierra más tratos con agentes IA y pipeline visual.',
 }
 

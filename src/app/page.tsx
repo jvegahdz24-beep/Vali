@@ -131,7 +131,7 @@ export default function Home() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-1">Verificando sesión</h2>
-            <p className="text-sm text-muted-foreground">Cargando ValiFlow Pro...</p>
+            <p className="text-sm text-muted-foreground">Cargando ValiAutoFlow...</p>
           </div>
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function Home() {
             <Database className="h-10 w-10 text-emerald-600 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-1">Preparando ValiFlow Pro</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-1">Preparando ValiAutoFlow</h2>
             <p className="text-sm text-muted-foreground">{initStep || 'Cargando datos de demostración...'}</p>
           </div>
           <Loader2 className="h-5 w-5 text-emerald-600 animate-spin" />

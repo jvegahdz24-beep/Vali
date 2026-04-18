@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Stripe Integration
+// ValiAutoFlow — Stripe Integration
 // Payment processing for plan subscriptions
 // ═══════════════════════════════════════════════════════════════
 

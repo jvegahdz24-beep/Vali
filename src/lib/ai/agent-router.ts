@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Agent Router with Intent Detection
+// ValiAutoFlow — Agent Router with Intent Detection
 // PicoClaw-style routing: analyzes lead data to pick the right agent
 // ═══════════════════════════════════════════════════════════════
 

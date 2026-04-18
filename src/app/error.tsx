@@ -13,7 +13,7 @@ export default function ErrorPage({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('[ValiFlow Pro Error]', error)
+    console.error('[ValiAutoFlow Error]', error)
   }, [error])
 
   return (
@@ -27,7 +27,7 @@ export default function ErrorPage({
             <Car className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            ValiFlow Pro
+            ValiAutoFlow
           </h1>
         </div>
 
@@ -62,7 +62,7 @@ export default function ErrorPage({
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} ValiFlow Pro. Todos los derechos reservados.
+          © {new Date().getFullYear()} ValiAutoFlow. Todos los derechos reservados.
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Agents API
+// ValiAutoFlow — Agents API
 // GET /api/agents — List agents
 // POST /api/agents — Create agent
 // ═══════════════════════════════════════════════════════════════

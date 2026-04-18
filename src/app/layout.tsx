@@ -16,21 +16,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ValiFlow Pro — CRM Inteligente con IA",
+  title: "ValiAutoFlow — CRM Inteligente con IA",
   description: "Automatiza ventas con WhatsApp + IA. Pipeline CRM, Agentes inteligentes y automatización para el sector automotriz.",
   keywords: ["CRM", "WhatsApp", "IA", "ventas", "automotriz", "SaaS", "automatización"],
-  authors: [{ name: "ValiFlow Pro" }],
+  authors: [{ name: "ValiAutoFlow" }],
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>",
   },
   openGraph: {
-    title: "ValiFlow Pro — CRM Inteligente con IA",
+    title: "ValiAutoFlow — CRM Inteligente con IA",
     description: "Automatiza ventas con WhatsApp + IA para el sector automotriz mexicano.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ValiFlow Pro",
+    title: "ValiAutoFlow",
     description: "CRM Inteligente con IA para ventas automotrices.",
   },
 };

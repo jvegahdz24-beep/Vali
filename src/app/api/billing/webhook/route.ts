@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Stripe Webhook Endpoint
+// ValiAutoFlow — Stripe Webhook Endpoint
 // POST /api/billing/webhook — Handle Stripe webhook events
 // ═══════════════════════════════════════════════════════════════
 

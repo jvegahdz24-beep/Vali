@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Get Current User API Endpoint
+// ValiAutoFlow — Get Current User API Endpoint
 // GET /api/auth/me — Return authenticated user info from JWT
 // ═══════════════════════════════════════════════════════════════
 

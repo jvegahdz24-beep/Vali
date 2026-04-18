@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Contact by ID API
+// ValiAutoFlow — Contact by ID API
 // GET /api/contacts/[id] — Get contact
 // PUT /api/contacts/[id] — Update contact
 // DELETE /api/contacts/[id] — Soft-delete (archive) contact

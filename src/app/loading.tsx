@@ -14,7 +14,7 @@ export default function Loading() {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-1">
-            ValiFlow Pro
+            ValiAutoFlow
           </h2>
           <p className="text-sm text-muted-foreground">
             Cargando...

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Personality System
+// ValiAutoFlow — Personality System
 // JHON (default, Mexican automotive) + Professional, Friendly, Aggressive
 // ═══════════════════════════════════════════════════════════════
 
@@ -24,7 +24,7 @@ export interface PersonalityConfig {
 export const PERSONALITIES: Record<string, PersonalityConfig> = {
   JHON: {
     name: 'JHON',
-    description: 'Asistente de ventas ValiFlow. Natural, cercano, como un vendedor humano real. Detecta arquetipos en silencio y adapta su tono.',
+    description: 'Asistente de ventas ValiAutoFlow. Natural, cercano, como un vendedor humano real. Detecta arquetipos en silencio y adapta su tono.',
     tone: 'Amable, cercano, profesional sin ser frío. Español mexicano natural.',
     language: 'Español mexicano',
     systemPrompt: JHON_SYSTEM_PROMPT,

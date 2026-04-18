@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Seed Demo Data
+// ValiAutoFlow — Seed Demo Data
 // POST /api/seed — Seeds realistic Mexican automotive sector data
 // ═══════════════════════════════════════════════════════════════
 
@@ -239,8 +239,8 @@ export async function POST(req: NextRequest) {
       const defaultPlan = PLANS.pro
       workspace = await db.workspace.create({
         data: {
-          name: 'AutoMax Guadalajara',
-          slug: 'automax-guadalajara',
+          name: 'Mi Negocio',
+          slug: 'mi-negocio',
           ownerId: demoUser.id,
           industry: 'automotive',
           logo: null,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — System Diagnostic Endpoint
+// ValiAutoFlow — System Diagnostic Endpoint
 // GET /api/debug/system — Full system health check in 1 request
 // No auth required — designed for rapid debugging
 // ═══════════════════════════════════════════════════════════════

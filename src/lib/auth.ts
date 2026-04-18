@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Auth Module (Node.js Runtime)
+// ValiAutoFlow — Auth Module (Node.js Runtime)
 // Used by API routes — safe to import bcryptjs here
 // Re-exports JWT functions from auth-edge for convenience
 // ═══════════════════════════════════════════════════════════════

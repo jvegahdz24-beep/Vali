@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Pipeline API
+// ValiAutoFlow — Pipeline API
 // GET /api/pipeline — Get pipelines with stages and deals
 // POST /api/pipeline — Create pipeline
 // ═══════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Google OAuth Helper Functions
+// ValiAutoFlow — Google OAuth Helper Functions
 // Handles Google OAuth consent URL generation, token exchange,
 // and user profile fetching for the custom JWT auth system.
 // ═══════════════════════════════════════════════════════════════

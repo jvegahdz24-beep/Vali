@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — DB-Backed WhatsApp Auth State
+// ValiAutoFlow — DB-Backed WhatsApp Auth State
 // Loads credentials from SQLite → tmpdir, saves back on update.
 // Survives server restarts in ephemeral filesystems (ChatGLM Space).
 // ═══════════════════════════════════════════════════════════════

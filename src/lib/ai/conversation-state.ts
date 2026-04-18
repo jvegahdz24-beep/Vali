@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Conversation State Manager
+// ValiAutoFlow — Conversation State Manager
 // In-memory structured state per conversation (by phone number)
 // Tracks extracted data, prevents repetition, detects stage
 // ═══════════════════════════════════════════════════════════════

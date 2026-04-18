@@ -80,7 +80,7 @@ export default function ResetPasswordPage() {
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
             <Car className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">ValiFlow Pro</h1>
+          <h1 className="text-2xl font-bold text-gray-900">ValiAutoFlow</h1>
         </div>
         <Card className="border-0 shadow-xl">
           <CardHeader className="text-center pb-2">

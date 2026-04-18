@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — In-Memory Rate Limiter
+// ValiAutoFlow — In-Memory Rate Limiter
 // Simple sliding-window rate limiter with TTL cleanup
 // ═══════════════════════════════════════════════════════════════
 

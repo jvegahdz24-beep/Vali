@@ -79,7 +79,7 @@ const steps = [
 const faqs = [
   {
     question: '¿Necesito pagar la API de Meta Business para usar WhatsApp?',
-    answer: 'No. ValiFlow Pro se conecta directamente a WhatsApp sin necesidad de la API oficial de Meta. Esto reduce costos significativamente y elimina la complejidad de configuración.',
+    answer: 'No. ValiAutoFlow se conecta directamente a WhatsApp sin necesidad de la API oficial de Meta. Esto reduce costos significativamente y elimina la complejidad de configuración.',
   },
   {
     question: '¿Cómo funcionan los agentes IA?',
@@ -91,7 +91,7 @@ const faqs = [
   },
   {
     question: '¿Es seguro conectar mi WhatsApp?',
-    answer: 'ValiFlow Pro cumple con ValiGuard, nuestro sistema de cumplimiento que integra consentimiento en cada conversación, maneja datos responsablemente y cumple con regulaciones de protección de datos.',
+    answer: 'ValiAutoFlow cumple con ValiGuard, nuestro sistema de cumplimiento que integra consentimiento en cada conversación, maneja datos responsablemente y cumple con regulaciones de protección de datos.',
   },
   {
     question: '¿Cuánto tiempo toma la configuración inicial?',
@@ -205,7 +205,7 @@ export default function LandingPage() {
               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600">
                 <Bot className="h-4.5 w-4.5 text-white" />
               </div>
-              <span className="text-lg font-bold tracking-tight">ValiFlow Pro</span>
+              <span className="text-lg font-bold tracking-tight">ValiAutoFlow</span>
             </div>
 
             {/* Desktop nav */}
@@ -306,7 +306,7 @@ export default function LandingPage() {
             <div className="relative rounded-2xl overflow-hidden border border-zinc-200 shadow-2xl shadow-zinc-900/10 bg-zinc-950">
               <Image
                 src="/hero-illustration.png"
-                alt="ValiFlow Pro Dashboard"
+                alt="ValiAutoFlow Dashboard"
                 width={1344}
                 height={768}
                 className="w-full h-auto"
@@ -475,7 +475,7 @@ export default function LandingPage() {
                 Comienza a automatizar tu negocio hoy
               </h2>
               <p className="text-emerald-100 text-lg max-w-xl mx-auto mb-10">
-                Únete a las 500+ concesionarias que ya venden más con ValiFlow Pro.
+                Únete a las 500+ concesionarias que ya venden más con ValiAutoFlow.
               </p>
               <Link href="/signup">
                 <Button size="lg" className="bg-white text-emerald-700 hover:bg-emerald-50 h-12 px-8 text-base font-semibold gap-2 shadow-lg">
@@ -496,7 +496,7 @@ export default function LandingPage() {
               <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-600">
                 <Bot className="h-4 w-4 text-white" />
               </div>
-              <span className="text-sm font-bold">ValiFlow Pro</span>
+              <span className="text-sm font-bold">ValiAutoFlow</span>
             </div>
             <div className="flex items-center gap-6">
               <a href="/signup" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Privacidad</a>
@@ -504,7 +504,7 @@ export default function LandingPage() {
               <a href="mailto:soporte@valiflow.com" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Contacto</a>
             </div>
             <p className="text-xs text-zinc-400">
-              © {new Date().getFullYear()} ValiFlow Pro. Todos los derechos reservados.
+              © {new Date().getFullYear()} ValiAutoFlow. Todos los derechos reservados.
             </p>
           </div>
         </div>

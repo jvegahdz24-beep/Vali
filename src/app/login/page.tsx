@@ -81,7 +81,7 @@ export default function LoginPage() {
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
             <Car className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiFlow Pro</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiAutoFlow</h1>
           <p className="text-sm text-gray-500 mt-1">CRM Inteligente con IA</p>
         </div>
 
@@ -255,7 +255,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} ValiFlow Pro. Todos los derechos reservados.
+          © {new Date().getFullYear()} ValiAutoFlow. Todos los derechos reservados.
         </p>
       </div>
 

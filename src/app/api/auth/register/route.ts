@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Registration API
+// ValiAutoFlow — Registration API
 // POST /api/auth/register — Create new user + workspace + membership
 // ═══════════════════════════════════════════════════════════════
 

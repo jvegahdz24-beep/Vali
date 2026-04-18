@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Conversations API
+// ValiAutoFlow — Conversations API
 // GET /api/conversations — List conversations
 // ═══════════════════════════════════════════════════════════════
 

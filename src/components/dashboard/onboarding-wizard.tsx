@@ -287,7 +287,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-emerald-100 mb-6">
                 <Bot className="h-10 w-10 text-emerald-600" />
               </div>
-              <h2 className="text-2xl font-bold text-zinc-900 mb-2">¡Bienvenido a ValiFlow Pro!</h2>
+              <h2 className="text-2xl font-bold text-zinc-900 mb-2">¡Bienvenido a ValiAutoFlow!</h2>
               <p className="text-zinc-600 mb-2">Vamos a configurar tu espacio de trabajo</p>
               <p className="text-sm text-zinc-500 mb-8">Solo toma 3 minutos y estarás listo para automatizar tus ventas.</p>
 
@@ -310,7 +310,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
                   <Input
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="Ej: AutoMax Guadalajara"
+                    placeholder="Ej: Mi Negocio"
                     className="h-10"
                   />
                 </div>

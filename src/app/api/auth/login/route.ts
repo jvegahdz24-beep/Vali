@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Login API Endpoint
+// ValiAutoFlow — Login API Endpoint
 // POST /api/auth/login — Authenticate user and set session cookie
 // ═══════════════════════════════════════════════════════════════
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Closing Engine
+// ValiAutoFlow — Closing Engine
 // Assesses deal closability, suggests techniques, generates closing messages
 // ═══════════════════════════════════════════════════════════════
 

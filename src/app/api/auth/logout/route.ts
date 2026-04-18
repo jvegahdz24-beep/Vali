@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Logout API Endpoint
+// ValiAutoFlow — Logout API Endpoint
 // POST /api/auth/logout — Clear session cookie
 // ═══════════════════════════════════════════════════════════════
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — AI Response Humanizer
+// ValiAutoFlow — AI Response Humanizer
 // Transforms AI responses into natural, human-like WhatsApp messages
 // ═══════════════════════════════════════════════════════════════
 

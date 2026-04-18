@@ -1,7 +1,7 @@
 'use client'
 
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Custom Auth Hook & Provider
+// ValiAutoFlow — Custom Auth Hook & Provider
 // Replaces next-auth/react useSession with custom JWT auth
 // ═══════════════════════════════════════════════════════════════
 

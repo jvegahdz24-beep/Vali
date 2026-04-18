@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Automations API
+// ValiAutoFlow — Automations API
 // GET /api/automations — List automations
 // POST /api/automations — Create automation
 // ═══════════════════════════════════════════════════════════════
