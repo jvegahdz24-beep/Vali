@@ -1,4 +1,4 @@
-# ValiFlow Pro — Work Log
+# ValiAutoFlow — Work Log
 
 ---
 Task ID: 10 — dashboard-crash-fix
@@ -111,3 +111,30 @@ Stage Summary:
 - Subida de archivos desde el UI con auto-send por WhatsApp
 - API de serve con Range support para streaming de video/audio
 - DB: modelo MediaFile con indices optimizados
+
+---
+Task ID: 12 — git-repo-creation
+Agent: Super Z (main)
+Task: Create clean Git repository, apply critical bug fixes, brand cleanup, rebuild
+
+Work Log:
+- Analyzed existing .git: 540 tracked files, 189MB repo.tar, screenshots, videos, PDFs, DB in tracking
+- Wrote comprehensive .gitignore (node_modules, uploads, downloads, media, DB, .env, skills, .whatsapp-auth, etc.)
+- Deleted old .git and initialized fresh repo on main branch
+- Initial commit: d602717 — 183 files, 50,795 lines of clean source code only (2.4MB .git)
+- Fixed P0 contact duplication: removed status:{not:'archived'} filter, now searches ALL contacts by phone and re-activates archived ones
+- Fixed P0 webhook dedup: added _processedMessageIds Set with 10-min TTL auto-cleanup in webhooks/whatsapp/route.ts
+- Fixed P1 personality cache: added _personalityCache Map with 5-min TTL per workspace to prevent personality flip during hot-reloads
+- Fixed ghost connection: added isSocketAlive() checking ws.readyState + 5-min stale threshold
+- All 4 fixes committed in 393fd81 (130 insertions, 13 deletions, 4 files)
+- Complete brand cleanup: ValiFlow Pro → ValiAutoFlow, AutoMax Guadalajara → Mi Negocio across 65 files
+- Also cleaned .env NEXT_PUBLIC_APP_NAME from "ValiFlow Pro" to "ValiAutoFlow"
+- Brand cleanup committed in af5cc7a (98 insertions, 98 deletions, 65 files)
+- Rebuilt Next.js: compiled successfully in 11.4s, health check 200 OK
+- Server running on port 3000
+
+Stage Summary:
+- Clean repo: 3 commits, 183 source files, 0 binary artifacts, 0 brand residues
+- Archive: /home/z/my-project/download/ValiAutoFlow-v2.0-repo.tar.gz (1.6MB)
+- GitHub upload blocked: no GITHUB_TOKEN available, needs user PAT
+- Build: successful, server running
