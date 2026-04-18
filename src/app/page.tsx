@@ -124,14 +124,14 @@ export default function Home() {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="p-4 rounded-2xl bg-emerald-500/10">
             <Loader2 className="h-10 w-10 text-emerald-600 animate-spin" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-1">Verificando sesión</h2>
-            <p className="text-sm text-muted-foreground">Cargando ValiAutoFlow...</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Verificando sesión</h2>
+            <p className="text-sm text-gray-500">Cargando ValiAutoFlow...</p>
           </div>
         </div>
       </div>
@@ -141,14 +141,14 @@ export default function Home() {
   // Show loading while seeding
   if (isSeeding) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="p-4 rounded-2xl bg-emerald-500/10">
             <Database className="h-10 w-10 text-emerald-600 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-1">Preparando ValiAutoFlow</h2>
-            <p className="text-sm text-muted-foreground">{initStep || 'Cargando datos de demostración...'}</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Preparando ValiAutoFlow</h2>
+            <p className="text-sm text-gray-500">{initStep || 'Cargando datos de demostración...'}</p>
           </div>
           <Loader2 className="h-5 w-5 text-emerald-600 animate-spin" />
         </div>
@@ -159,14 +159,14 @@ export default function Home() {
   // Show error if seeding failed
   if (seedError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
           <div className="p-4 rounded-2xl bg-red-500/10">
             <AlertCircle className="h-10 w-10 text-red-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-1">Error al inicializar</h2>
-            <p className="text-sm text-muted-foreground">{seedError}</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Error al inicializar</h2>
+            <p className="text-sm text-gray-500">{seedError}</p>
           </div>
           <Button onClick={initializeData} variant="outline" className="gap-2">
             <Database className="h-4 w-4" />
@@ -180,10 +180,10 @@ export default function Home() {
   // Not ready yet — show loading (shouldn't happen normally)
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="h-8 w-8 text-emerald-600 animate-spin" />
-          <p className="text-sm text-muted-foreground">Cargando...</p>
+          <p className="text-sm text-gray-500">Cargando...</p>
         </div>
       </div>
     )
