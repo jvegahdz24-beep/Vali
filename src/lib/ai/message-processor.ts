@@ -1,8 +1,21 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Central Message Processor
+// ValiAutoFlow — Central Message Processor
 // SINGLE source of truth for: DB ops + AI pipeline + CRM updates
 // Used by: connection.ts (WhatsApp), webhook, api/ai/chat
 // ═══════════════════════════════════════════════════════════════
+
+// ─── Personality Cache (Fix P1: avoid personality flip on hot-reload) ───
+interface PersonalityCacheEntry {
+  name: string
+  temperature: number
+  provider: string
+  customPrompt: string
+  dynamicContext: string
+  workspaceId: string
+  timestamp: number
+}
+const _personalityCache = new Map<string, PersonalityCacheEntry>()
+const PERSONALITY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 import { db } from '@/lib/db'
 import { RevenueEngine } from '@/lib/ai'
@@ -114,12 +127,15 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   console.log(`[Core:2] ✅ Workspace: ${workspace.name}`)
 
   // ── 2. Find or create contact ──
+  // FIX P0: Search ALL contacts by phone (including archived) to prevent duplicates.
+  // Previously, filtering `status: { not: 'archived' }` would create a new contact
+  // when an archived one already existed for the same phone number.
   let contact
   if (forcedContactId) {
     contact = await db.contact.findUnique({ where: { id: forcedContactId } })
   } else {
     contact = await db.contact.findFirst({
-      where: { workspaceId: workspace.id, phone, status: { not: 'archived' } },
+      where: { workspaceId: workspace.id, phone },
     })
     if (!contact) {
       contact = await db.contact.create({
@@ -132,9 +148,13 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
         },
       })
     } else {
+      // Re-activate archived contacts and update timestamp
       await db.contact.update({
         where: { id: contact.id },
-        data: { lastMessageAt: new Date() },
+        data: {
+          lastMessageAt: new Date(),
+          ...(contact.status === 'archived' ? { status: 'active' } : {}),
+        },
       })
     }
   }
@@ -230,19 +250,50 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   console.log(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
   console.log(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
 
-  // Read workspace AI settings
+  // Read workspace AI settings — FIX P1: Use personality cache to avoid
+  // personality flip during hot-reloads. Cache persists across requests for 5 min.
   let personalityName = 'JHON'
   let aiTemperature = 0.75
   let aiProvider = 'groq'
   let customSystemPrompt = ''
   let dynamicContext = ''
   try {
-    const wsSettings = typeof workspace.settings === 'string'
-      ? JSON.parse(workspace.settings || '{}')
-      : (workspace.settings || {})
-    if (wsSettings.defaultPersonality) personalityName = wsSettings.defaultPersonality
-    if (wsSettings.aiTemperature !== undefined) aiTemperature = wsSettings.aiTemperature
-    if (wsSettings.apiProvider) aiProvider = wsSettings.apiProvider
+    const cacheKey = workspace.id
+    const cached = _personalityCache.get(cacheKey)
+    const now = Date.now()
+
+    if (cached && cached.workspaceId === workspace.id && (now - cached.timestamp) < PERSONALITY_CACHE_TTL) {
+      // Use cached personality settings (prevents flip during hot-reload)
+      personalityName = cached.name
+      aiTemperature = cached.temperature
+      aiProvider = cached.provider
+      customSystemPrompt = cached.customPrompt
+      dynamicContext = cached.dynamicContext
+      console.log(`[AI] Using cached personality: ${personalityName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
+    } else {
+      // Cache miss or expired — read from workspace settings
+      const wsSettings = typeof workspace.settings === 'string'
+        ? JSON.parse(workspace.settings || '{}')
+        : (workspace.settings || {})
+
+      if (wsSettings.defaultPersonality) personalityName = wsSettings.defaultPersonality
+      if (wsSettings.aiTemperature !== undefined) aiTemperature = wsSettings.aiTemperature
+      if (wsSettings.apiProvider) aiProvider = wsSettings.apiProvider
+      if (wsSettings.customSystemPrompt) customSystemPrompt = wsSettings.customSystemPrompt
+      if (wsSettings.dynamicContext) dynamicContext = wsSettings.dynamicContext
+
+      // Update cache
+      _personalityCache.set(cacheKey, {
+        name: personalityName,
+        temperature: aiTemperature,
+        provider: aiProvider,
+        customPrompt: customSystemPrompt,
+        dynamicContext,
+        workspaceId: workspace.id,
+        timestamp: now,
+      })
+      console.log(`[AI] Personality loaded and cached: ${personalityName}`)
+    }
   } catch (e) {
     console.warn('[AI] Could not parse workspace settings:', e)
   }

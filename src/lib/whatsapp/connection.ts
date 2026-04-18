@@ -548,6 +548,30 @@ class WhatsAppManager {
     return this._connected
   }
 
+  // FIX: Check if the underlying Baileys socket is actually alive.
+  // Prevents "ghost connection" where _connected=true but the socket
+  // was closed/lost without triggering connection.update event.
+  isSocketAlive(): boolean {
+    if (!this._connected || !this.sock) return false
+    try {
+      // Baileys socket has an `ws` property (WebSocket) that has a `readyState`.
+      // 1 = OPEN, 0 = CONNECTING, 2 = CLOSING, 3 = CLOSED
+      const ws = (this.sock as any).ws
+      if (ws && typeof ws.readyState === 'number') {
+        return ws.readyState === 1
+      }
+      // If we can't check ws.readyState, trust the flag but add a heartbeat check
+      const lastAct = this._lastActivity
+      if (lastAct) {
+        const staleThreshold = 5 * 60 * 1000 // 5 minutes
+        return (Date.now() - new Date(lastAct).getTime()) < staleThreshold
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // ─── Message Text Extraction ────────────────────────────────
 
   private extractMessageText(msg: WAMessage): string | null {
