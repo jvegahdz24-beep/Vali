@@ -318,35 +318,16 @@ class WhatsAppManager {
       // y genera UNA sola respuesta en vez de múltiples
       this.sock.ev.on('messages.upsert', async (m: any) => {
         try {
-          console.log('[DEBUG 1] Evento recibido:', JSON.stringify(m, null, 2))
-
           const msg = m.messages[0] as WAMessage
-          if (!msg) {
-            console.log('[DEBUG 1.5] Sin mensajes en event, skip')
-            return
-          }
+          if (!msg) return
 
-          if (msg.key.fromMe) {
-            console.log('[DEBUG 1.5] fromMe=true, skip')
-            return
-          }
+          if (msg.key.fromMe) return
 
           const remoteJid = msg.key.remoteJid || ''
-          if (remoteJid.includes('@g.us')) {
-            console.log('[DEBUG 1.5] Grupo detectado, skip')
-            return
-          }
-          if (remoteJid.includes('@broadcast')) {
-            console.log('[DEBUG 1.5] Broadcast detectado, skip')
-            return
-          }
+          if (remoteJid.includes('@g.us')) return
+          if (remoteJid.includes('@broadcast')) return
 
-          if (m.type !== 'notify') {
-            console.log('[DEBUG 1.5] type=', m.type, '≠ notify, skip')
-            return
-          }
-
-          console.log('[DEBUG 2] Mensaje entrante detectado')
+          if (m.type !== 'notify') return
 
           const phone = remoteJid.split('@')[0]
           const pushName = msg.pushName || undefined
@@ -355,10 +336,7 @@ class WhatsAppManager {
           const mediaInfo = detectMedia(msg)
           const text = this.extractMessageText(msg)
 
-          if (!text && !mediaInfo) {
-            console.log('[DEBUG 2.5] extractMessageText=null && no media, skip')
-            return
-          }
+          if (!text && !mediaInfo) return
 
           const displayText = text || `[${mediaInfo?.type || 'media'}]`
           console.log(`[WhatsApp] Message from ${phone}: ${displayText.slice(0, 80)}...${mediaInfo ? ` [MEDIA: ${mediaInfo.type}]` : ''}`)
@@ -379,29 +357,18 @@ class WhatsAppManager {
 
           // ─── PROCESS TEXT MESSAGE ────────────────────────
           if (text) {
-            console.log('[DEBUG 2.5] Enqueue para batching, esperando consolidacion...')
             enqueueMessage(phone, text, pushName)
               .then((consolidatedText) => {
-                console.log(`[DEBUG 3] Batch consolidado (${consolidatedText.length} chars), llamando processIncomingMessage`)
                 this.processIncomingMessage(phone, consolidatedText, pushName!, remoteJid, msg.key.id!, { mediaInfo })
-                  .then(() => {
-                    console.log('[DEBUG 4] processIncomingMessage completado OK')
-                  })
                   .catch((err) => {
                     console.error('[WhatsApp] Error processing incoming message:', err)
-                    console.error('[FATAL ERROR WHATSAPP]:', err)
                   })
               })
               .catch((err) => {
                 console.error('[WhatsApp] Error in message batching:', err)
-                console.error('[FATAL ERROR WHATSAPP]:', err)
                 this.processIncomingMessage(phone, text, pushName!, remoteJid, msg.key.id!, { mediaInfo })
-                  .then(() => {
-                    console.log('[DEBUG 4] processIncomingMessage fallback completado OK')
-                  })
                   .catch((err2) => {
                     console.error('[WhatsApp] Error processing fallback:', err2)
-                    console.error('[FATAL ERROR WHATSAPP]:', err2)
                   })
               })
           } else if (mediaInfo) {
@@ -412,7 +379,7 @@ class WhatsAppManager {
               })
           }
         } catch (err) {
-          console.error('[FATAL ERROR WHATSAPP]:', err)
+          console.error('[WhatsApp] Error processing messages.upsert event:', err)
         }
       })
 
@@ -648,7 +615,6 @@ class WhatsAppManager {
     }
   ): Promise<void> {
     const pipelineStart = Date.now()
-    console.log(`[WhatsApp:1] 📩 Incoming from ${phone}: "${text.slice(0, 60)}"`)
 
     try {
       // ── CORE: All DB + AI logic in ONE place ──
@@ -665,8 +631,7 @@ class WhatsAppManager {
 
       // ── WHATSAPP-SPECIFIC: Humanize + send via socket ──
       const { aiReplyText } = coreResult
-      console.log(`[DEBUG 5] Respuesta generada: "${(aiReplyText || 'NULL').slice(0, 80)}"`)
-      console.log(`[WhatsApp:10] 📤 Sending reply: "${(aiReplyText || 'NULL').slice(0, 60)}" (${Date.now() - pipelineStart}ms total)`)
+      console.log(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
 
       if (aiReplyText && this.sock && this._connected) {
         const humanizedText = humanizeResponse(aiReplyText)
@@ -674,8 +639,7 @@ class WhatsAppManager {
           ? humanizedText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
           : humanizedText
 
-        console.log('[DEBUG 6] Enviando mensaje a WhatsApp...')
-        console.log(`[DEBUG 6] sock=${!!this.sock}, connected=${this._connected}, finalText.length=${finalText.length}`)
+
 
         // Typing indicator
         try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
@@ -686,24 +650,16 @@ class WhatsAppManager {
         // Send
         let sentMessageId: string | undefined
         try {
-          console.log('[DEBUG 6] sock.sendMessage() llamando...')
           const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
           sentMessageId = sendResult?.key?.id ?? undefined
-          console.log(`[WhatsApp] ✅ Reply sent to ${phone} (${finalText.length} chars, id: ${sentMessageId})`)
-          console.log('[DEBUG 6] ✅ Mensaje enviado a WhatsApp OK')
+          console.log(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
         } catch (sendErr) {
-          console.error(`[WhatsApp] ❌ Send failed to ${phone}:`, sendErr)
-          console.error('[FATAL ERROR WHATSAPP]: send failed', sendErr)
+          console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
         }
-      } else {
-        console.log(`[DEBUG 6] ⚠️ No enviado: aiReplyText=${!!aiReplyText}, sock=${!!this.sock}, connected=${this._connected}`)
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error)
-      console.error(`[WhatsApp:ERR] ❌ Pipeline failed after ${Date.now() - pipelineStart}ms:`, errMsg)
-      if (error instanceof Error && error.stack) {
-        console.error('[WhatsApp:ERR] Stack:', error.stack.split('\n').slice(0, 5).join('\n'))
-      }
+      console.error(`[WhatsApp] Pipeline failed for ${phone} after ${Date.now() - pipelineStart}ms:`, errMsg)
     }
   }
 }
