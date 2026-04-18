@@ -1,6 +1,6 @@
-# ValiFlow Pro — Deployment Guide
+# ValiAutoFlow — Deployment Guide
 
-Production-ready deployment instructions for ValiFlow Pro CRM with AI.
+Production-ready deployment instructions for ValiAutoFlow CRM with AI.
 
 ---
 
@@ -32,8 +32,8 @@ Production-ready deployment instructions for ValiFlow Pro CRM with AI.
 ### 1. Clone the repository
 
 ```bash
-git clone <repo-url> valiflow-pro
-cd valiflow-pro
+git clone <repo-url> valiautoflow
+cd valiautoflow
 ```
 
 ### 2. Install dependencies
@@ -55,7 +55,7 @@ cp .env.example .env
 | `DATABASE_URL` | ✅ | SQLite file path: `file:/path/to/app/db/custom.db` |
 | `NEXTAUTH_URL` | ✅ | Your production URL: `https://app.yourdomain.com` |
 | `NEXTAUTH_SECRET` | ✅ | Random 32+ char string. Generate: `openssl rand -base64 32` |
-| `NEXT_PUBLIC_APP_NAME` | Optional | App name shown in UI (default: ValiFlow Pro) |
+| `NEXT_PUBLIC_APP_NAME` | Optional | App name shown in UI (default: ValiAutoFlow) |
 | `NEXT_PUBLIC_APP_URL` | ✅ | Same as `NEXTAUTH_URL` |
 | `WHATSAPP_AUTH_DIR` | Optional | WhatsApp auth session directory (default: `.whatsapp-auth`) |
 | `SEED_PIN` | ✅ | PIN to protect seed endpoint. Use a strong random value. |
@@ -66,7 +66,7 @@ cp .env.example .env
 
 ## Database Setup
 
-ValiFlow Pro uses SQLite via Prisma ORM. No external database server needed.
+ValiAutoFlow uses SQLite via Prisma ORM. No external database server needed.
 
 ### Initialize database
 
@@ -132,13 +132,13 @@ CMD ["node", "server.js"]
 ```
 
 ```bash
-docker build -t valiflow-pro .
+docker build -t valiautoflow .
 docker run -p 3000:3000 \
   -e DATABASE_URL="file:/app/db/custom.db" \
   -e NEXTAUTH_URL="https://app.yourdomain.com" \
   -e NEXTAUTH_SECRET="your-secret" \
   -v ./db:/app/db \
-  valiflow-pro
+  valiautoflow
 ```
 
 ### Nginx Reverse Proxy
@@ -188,7 +188,7 @@ server {
 ### Important Notes
 
 - **Session persistence:** The `.whatsapp-auth/` directory contains your WhatsApp session state. **Back this up regularly.**
-- **Single connection:** Only one WhatsApp connection per ValiFlow instance.
+- **Single connection:** Only one WhatsApp connection per ValiAutoFlow instance.
 - **Rate limits:** WhatsApp has message rate limits. The built-in rate limiter helps prevent issues.
 - **Reconnection:** The system auto-reconnects on disconnection (up to 10 attempts with exponential backoff).
 - **Media directory:** If using media features, ensure `/tmp` is writable.

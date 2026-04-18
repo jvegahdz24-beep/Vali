@@ -2,7 +2,7 @@ import { whatsAppManager } from '@/lib/whatsapp/connection'
 
 async function main() {
   console.log('═══════════════════════════════════════════════════')
-  console.log('📱 ValiFlow Pro — WhatsApp Baileys Connection')
+  console.log('📱 ValiAutoFlow — WhatsApp Baileys Connection')
   console.log('═══════════════════════════════════════════════════')
   console.log('')
 

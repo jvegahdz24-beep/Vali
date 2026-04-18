@@ -12,7 +12,7 @@ const AUTH_DIR = path.join(process.cwd(), '.whatsapp-auth')
 
 async function connectWhatsApp() {
   console.log('═════════════════════════════════════════════════════')
-  console.log('📱 ValiFlow Pro — Conexión WhatsApp')
+  console.log('📱 ValiAutoFlow — Conexión WhatsApp')
   console.log('═════════════════════════════════════════════════════')
 
   // Ensure auth dir exists
@@ -44,7 +44,7 @@ async function connectWhatsApp() {
     logger,
     printQRInTerminal: true,  // ← QR visible en consola
     generateHighQualityLinkPreview: true,
-    browser: ['ValiFlow Pro', 'Chrome', '120.0.0'],
+    browser: ['ValiAutoFlow', 'Chrome', '120.0.0'],
     getMessage: async () => null,
   })
 

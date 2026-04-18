@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Revenue Engine
+// ValiAutoFlow — Revenue Engine
 // Full 9-step pipeline: Analyze → Trigger → Decide → Objection →
 // Generate → Follow-up → CRM → Route → Deliver
 // ═══════════════════════════════════════════════════════════════

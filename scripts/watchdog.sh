@@ -1,11 +1,11 @@
 #!/bin/bash
-# ValiFlow Pro — Keep-alive watchdog
+# ValiAutoFlow — Keep-alive watchdog
 # Reinicia el servidor automáticamente si se muere
 
 cd /home/z/my-project
 
 while true; do
-  echo "[$(date '+%H:%M:%S')] 🚀 Iniciando ValiFlow Pro..."
+  echo "[$(date '+%H:%M:%S')] 🚀 Iniciando ValiAutoFlow..."
   
   # Run Next.js dev server
   npx next dev -p 3000 2>&1 | tee -a /tmp/valiflow-watchdog.log

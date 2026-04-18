@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Configuration Seed Script
+// ValiAutoFlow — Configuration Seed Script
 // Creates: Agent Personas, updates Agent prompts, fixes pipeline
 // ═══════════════════════════════════════════════════════════════
 
@@ -7,10 +7,10 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-const WORKSPACE_SLUG = 'automax-guadalajara'
+const WORKSPACE_SLUG = 'mi-negocio'
 
 async function main() {
-  console.log('🔧 ValiFlow Pro — Configuration Seed')
+  console.log('🔧 ValiAutoFlow — Configuration Seed')
   console.log('═'.repeat(50))
 
   // ── 1. Find workspace ──
@@ -306,7 +306,7 @@ TIPOS DE FOLLOW-UP:
     where: { id: { not: workspace.id }, plan: 'free' },
     data: { isActive: false },
   })
-  console.log('\n✅ AutoMax Guadalajara is now the sole active workspace')
+  console.log('\n✅ Mi Negocio is now the sole active workspace')
 
   console.log('\n' + '═'.repeat(50))
   console.log('🎉 Seed complete! Changes:')
