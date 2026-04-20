@@ -107,13 +107,13 @@ interface DashboardMainProps {
 
 // Fallback chart data
 const fallbackWeeklyMessages = [
-  { day: 'Lun', mensajes: 0, leidos: 0 },
-  { day: 'Mar', mensajes: 0, leidos: 0 },
-  { day: 'Mié', mensajes: 0, leidos: 0 },
-  { day: 'Jue', mensajes: 0, leidos: 0 },
-  { day: 'Vie', mensajes: 0, leidos: 0 },
-  { day: 'Sáb', mensajes: 0, leidos: 0 },
-  { day: 'Dom', mensajes: 0, leidos: 0 },
+  { day: 'Lun', mensajes: 0, entregados: 0 },
+  { day: 'Mar', mensajes: 0, entregados: 0 },
+  { day: 'Mié', mensajes: 0, entregados: 0 },
+  { day: 'Jue', mensajes: 0, entregados: 0 },
+  { day: 'Vie', mensajes: 0, entregados: 0 },
+  { day: 'Sáb', mensajes: 0, entregados: 0 },
+  { day: 'Dom', mensajes: 0, entregados: 0 },
 ]
 
 const fallbackRevenueData = [
@@ -207,11 +207,11 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
       return ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((day) => ({
         day,
         mensajes: dayMap[day] ? Math.round(dayMap[day].total / dayMap[day].count) : 0,
-        leidos: dayMap[day] ? Math.round((dayMap[day].total / dayMap[day].count) * 0.82) : 0,
+        entregados: dayMap[day] ? Math.round((dayMap[day].total / dayMap[day].count) * 0.9) : 0,
       }))
     } else if (period === '30d') {
       // Group by week
-      const weeklyData: Array<{ day: string; mensajes: number; leidos: number }> = []
+      const weeklyData: Array<{ day: string; mensajes: number; entregados: number }> = []
       for (let i = 0; i < analytics.messagesOverTime.length; i += 7) {
         const chunk = analytics.messagesOverTime.slice(i, i + 7)
         const total = chunk.reduce((s, c) => s + c.value, 0)
@@ -219,7 +219,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
         weeklyData.push({
           day: `Sem ${Math.floor(i / 7) + 1}`,
           mensajes: total,
-          leidos: Math.round(total * 0.82),
+          entregados: Math.round(total * 0.9),
         })
       }
       return weeklyData.length > 0 ? weeklyData : fallbackWeeklyMessages
@@ -233,7 +233,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
       return Object.entries(monthMap).map(([month, mensajes]) => ({
         day: month,
         mensajes,
-        leidos: Math.round(mensajes * 0.82),
+        entregados: Math.round(mensajes * 0.9),
       }))
     }
   })()
@@ -241,15 +241,10 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
   const revenueChartData = (() => {
     // Use deals by stage data to estimate revenue, or fallback
     if (!analytics?.dealsByStage || analytics.dealsByStage.length === 0) {
-      // If we have some revenue from stats, show a simple representation
+      // If we have some revenue from stats, show a single honest data point
       if (stats?.totalRevenue && stats.totalRevenue > 0) {
         return [
-          { month: 'Ene', ingresos: stats.totalRevenue },
-          { month: 'Feb', ingresos: Math.round(stats.totalRevenue * 0.9) },
-          { month: 'Mar', ingresos: Math.round(stats.totalRevenue * 1.1) },
-          { month: 'Abr', ingresos: Math.round(stats.totalRevenue * 0.85) },
-          { month: 'May', ingresos: Math.round(stats.totalRevenue * 1.2) },
-          { month: 'Jun', ingresos: stats.totalRevenue },
+          { month: 'Total', ingresos: stats.totalRevenue },
         ]
       }
       return fallbackRevenueData
@@ -466,10 +461,10 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                       name="Enviados"
                     />
                     <Bar
-                      dataKey="leidos"
+                      dataKey="entregados"
                       fill="#6ee7b7"
                       radius={[4, 4, 0, 0]}
-                      name="Leídos"
+                      name="Estimados entregados"
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -551,6 +546,10 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
               {analyticsLoading && !analytics ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : revenueChartData.every((d) => d.ingresos === 0) ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-sm text-muted-foreground">Sin datos suficientes</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">

@@ -647,6 +647,9 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
 
   useEffect(() => {
     fetchConversations()
+    // Poll for new conversations/messages every 10s
+    const pollInterval = setInterval(fetchConversations, 10000)
+    return () => clearInterval(pollInterval)
   }, [fetchConversations])
 
   // Fetch messages for selected conversation
@@ -657,17 +660,24 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
       const res = await fetch(`/api/conversations/${selectedConversation}`)
       if (!res.ok) throw new Error('Error al cargar mensajes')
       const data = await res.json()
-      setMessages(data.messages || [])
+      const newMessages = data.messages || []
+      // Only update if there are actually new messages (avoid scroll reset)
+      if (newMessages.length !== messages.length) {
+        setMessages(newMessages)
+      }
       setCurrentContact(data.conversation?.contact || null)
     } catch (err) {
       console.error('Error fetching messages:', err)
     } finally {
       setIsLoadingMessages(false)
     }
-  }, [selectedConversation])
+  }, [selectedConversation, messages.length])
 
   useEffect(() => {
     fetchMessages()
+    // Poll for new messages every 8s when a conversation is selected
+    const pollInterval = setInterval(fetchMessages, 8000)
+    return () => clearInterval(pollInterval)
   }, [fetchMessages])
 
   // Scroll to bottom when messages change
@@ -1145,21 +1155,47 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                 </div>
               ) : (
                 <div className="max-w-2xl mx-auto space-y-3">
-                  {/* System Event Messages */}
-                  {messages.length > 0 && (
+                  {/* System Event Messages — only shown when AI-detected events exist in message metadata */}
+                  {messages.some((msg) => {
+                    if (msg.senderType !== 'system') return false
+                    try {
+                      const meta = msg.metadata ? JSON.parse(msg.metadata) : {}
+                      return meta?.type === 'lead_detected'
+                    } catch { return false }
+                  }) && (
                     <div className="flex justify-center">
                       <div className="bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-3 py-1 text-xs text-center max-w-fit">
                         ⚡ Lead nuevo detectado
                       </div>
                     </div>
                   )}
-                  {messages.length > 3 && (
-                    <div className="flex justify-center">
-                      <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-full px-3 py-1 text-xs text-center max-w-fit">
-                        🧠 Arquetipo detectado: Comprador Urgente
+                  {messages.some((msg) => {
+                    if (msg.senderType !== 'system') return false
+                    try {
+                      const meta = msg.metadata ? JSON.parse(msg.metadata) : {}
+                      return meta?.type === 'archetype_detected'
+                    } catch { return false }
+                  }) && (() => {
+                    const sysMsg = messages.find((msg) => {
+                      if (msg.senderType !== 'system') return false
+                      try {
+                        const meta = msg.metadata ? JSON.parse(msg.metadata) : {}
+                        return meta?.type === 'archetype_detected'
+                      } catch { return false }
+                    })
+                    let archetypeLabel = 'Arquetipo detectado'
+                    try {
+                      const meta = sysMsg?.metadata ? JSON.parse(sysMsg.metadata) : {}
+                      if (meta?.archetype) archetypeLabel = `Arquetipo detectado: ${meta.archetype}`
+                    } catch { /* use default label */ }
+                    return (
+                      <div className="flex justify-center">
+                        <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-full px-3 py-1 text-xs text-center max-w-fit">
+                          🧠 {archetypeLabel}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                   {messages.map((msg) => (
                     <div
                       key={msg.id}

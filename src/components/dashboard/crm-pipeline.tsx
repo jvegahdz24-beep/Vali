@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   DndContext,
   closestCorners,
@@ -53,6 +53,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Check, ChevronsUpDown } from 'lucide-react'
 
 // ── Types ──
 
@@ -222,7 +236,39 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
   const [newDealValue, setNewDealValue] = useState('')
   const [newDealStage, setNewDealStage] = useState('')
   const [newDealContact, setNewDealContact] = useState('')
+  const [contactPickerOpen, setContactPickerOpen] = useState(false)
+  const [contacts, setContacts] = useState<Array<{ id: string; firstName: string; lastName: string | null; phone: string | null }>>([])
+  const [contactSearch, setContactSearch] = useState('')
+  const [loadingContacts, setLoadingContacts] = useState(false)
   const [creatingDeal, setCreatingDeal] = useState(false)
+
+  // Fetch contacts when deal dialog opens
+  const fetchContacts = useCallback(async (search = '') => {
+    if (!workspaceId) return
+    try {
+      setLoadingContacts(true)
+      const params = new URLSearchParams({ workspaceId, limit: '50' })
+      if (search) params.set('search', search)
+      const res = await fetch(`/api/contacts?${params.toString()}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setContacts(data.items || [])
+    } catch {
+      // Silently fail — contact picker is optional
+    } finally {
+      setLoadingContacts(false)
+    }
+  }, [workspaceId])
+
+  // Debounced search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleContactSearch = useCallback((value: string) => {
+    setContactSearch(value)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      fetchContacts(value)
+    }, 250)
+  }, [fetchContacts])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -423,6 +469,7 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       setNewDealValue('')
       setNewDealStage('')
       setNewDealContact('')
+      setContactSearch('')
       setShowNewDeal(false)
       fetchPipeline()
     } catch (err: unknown) {
@@ -547,8 +594,83 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>ID de contacto (opcional)</Label>
-                <Input placeholder="Dejar vacío para sin contacto" value={newDealContact} onChange={(e) => setNewDealContact(e.target.value)} />
+                <Label>Contacto (opcional)</Label>
+                <Popover open={contactPickerOpen} onOpenChange={(open) => {
+                  setContactPickerOpen(open)
+                  if (open) fetchContacts(contactSearch)
+                }}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={contactPickerOpen}
+                      className="w-full justify-between text-left font-normal h-9"
+                    >
+                      {newDealContact
+                        ? (() => {
+                            const selected = contacts.find((c) => c.id === newDealContact)
+                            return selected
+                              ? `${selected.firstName} ${selected.lastName || ''}`.trim()
+                              : 'Seleccionar contacto...'
+                          })()
+                        : 'Seleccionar contacto...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Buscar contacto..."
+                        value={contactSearch}
+                        onValueChange={handleContactSearch}
+                      />
+                      <CommandList className="max-h-64">
+                        <CommandEmpty>
+                          {loadingContacts ? 'Buscando...' : 'No se encontraron contactos.'}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {contacts.map((contact) => (
+                            <CommandItem
+                              key={contact.id}
+                              value={contact.id}
+                              onSelect={() => {
+                                setNewDealContact(contact.id === newDealContact ? '' : contact.id)
+                                setContactPickerOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4 shrink-0',
+                                  newDealContact === contact.id ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">
+                                  {contact.firstName} {contact.lastName || ''}
+                                </span>
+                                {contact.phone && (
+                                  <span className="text-xs text-muted-foreground">{contact.phone}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {newDealContact && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setNewDealContact('')
+                      setContactSearch('')
+                    }}
+                  >
+                    Quitar contacto seleccionado
+                  </button>
+                )}
               </div>
               <Button
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"

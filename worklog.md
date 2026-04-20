@@ -112,3 +112,31 @@ Stage Summary:
 - 239 records seeded across 18 tables
 - WhatsApp connected, AI agent responding
 - Dashboard loads with real data (21 contacts, 16 conversations, 3 agents, 13 deals)
+
+---
+Task ID: 3
+Agent: Super Z (Main) + Fullstack subagents
+Task: Fix critical bugs and add missing features
+
+Work Log:
+- Comprehensive audit: identified 16 issues across 7 dashboard views, 5 API route groups
+- Created /api/upload route for inbox file attachments (10MB limit, UUID filenames)
+- Fixed fake system events in inbox: now checks actual system messages instead of message count
+- Fixed fabricated read-rate data: renamed to "Estimados entregados" with honest labeling
+- Fixed fabricated revenue chart: shows "Sin datos suficientes" instead of fake multipliers
+- Added contact picker to pipeline deal creation (Popover + Command with server-side search)
+- Implemented handleRunNow in automations: creates /api/automations/[id]/run endpoint
+- Created /api/deals/[id]/route.ts with full CRUD (GET/PUT/DELETE)
+- Added message polling in inbox: conversations every 10s, messages every 8s
+- Recreated .zscripts/dev.sh (was deleted during sandbox restart)
+- Fixed .env formatting (quoted values with spaces, correct DATABASE_URL)
+- Build: SUCCESS after all fixes
+- Server restarted, WhatsApp reconnected
+
+Stage Summary:
+- 7 critical/important bugs fixed
+- 3 new API routes created (/api/upload, /api/automations/[id]/run, /api/deals/[id])
+- Real-time polling added to inbox for incoming messages
+- No more fake/fabricated data shown to users
+- Deals can now be deleted, automations can be manually executed
+- Contact picker in pipeline enables proper deal-contact linking

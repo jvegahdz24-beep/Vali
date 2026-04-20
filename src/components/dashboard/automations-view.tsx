@@ -232,8 +232,23 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
     }
   }
 
-  const handleRunNow = () => {
-    toast.success('Ejecución manual de automatización iniciada')
+  const [runningId, setRunningId] = useState<string | null>(null)
+
+  const handleRunNow = async (automationId: string) => {
+    try {
+      setRunningId(automationId)
+      const res = await fetch(`/api/automations/${automationId}/run`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error('Error al ejecutar automatización')
+      const data = await res.json()
+      toast.success(data.message || 'Automatización ejecutada correctamente')
+      fetchAutomations()
+    } catch {
+      toast.error('Error al ejecutar la automatización')
+    } finally {
+      setRunningId(null)
+    }
   }
 
   if (loading) {
@@ -398,9 +413,15 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
                               <Pencil className="h-3 w-3 mr-1" />
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleRunNow}>
-                              <Play className="h-3 w-3 mr-1" />
-                              Ejecutar ahora
+                            <DropdownMenuItem
+                              onClick={() => handleRunNow(automation.id)}
+                              disabled={runningId === automation.id}
+                            >
+                              {runningId === automation.id ? (
+                                <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando...</>
+                              ) : (
+                                <><Play className="h-3 w-3 mr-1" />Ejecutar ahora</>
+                              )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600"
