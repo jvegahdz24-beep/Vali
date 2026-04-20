@@ -38,7 +38,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://*.googleapis.com ws: wss:",
+      "connect-src 'self' https://*.googleapis.com https://accounts.google.com ws: wss:",
       "media-src 'self' blob:",
       "frame-ancestors 'self'",
       "base-uri 'self'",
@@ -56,6 +56,7 @@ const nextConfig: NextConfig = {
 
   // Allow z.ai preview origin for dev assets
   allowedDevOrigins: [
+    "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site",
     "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.z.ai",
   ],
 
