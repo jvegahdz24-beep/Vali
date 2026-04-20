@@ -51,6 +51,7 @@
     "@stripe/stripe-js": "^9.0.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
+    "@swc/helpers": "^0.5.21",
     "@tanstack/react-query": "^5.82.0",
     "@tanstack/react-table": "^8.21.3",
     "@types/pg": "^8.20.0",
