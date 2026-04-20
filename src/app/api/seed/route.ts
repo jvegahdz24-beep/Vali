@@ -1,12 +1,18 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Seed Demo Data
-// POST /api/seed — Seeds realistic Mexican automotive sector data
+// POST /api/seed — Seeds realistic business automation services data
+// Unified under jvegahdz24@gmail.com workspace
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
-import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+
+// SHA-256 password hashing (bcrypt OOM-kills in low-memory environments)
+function hashPassword(plain: string): string {
+  return crypto.createHash('sha256').update(plain).digest('hex')
+}
 
 // ─── Demo Data Constants ─────────────────────────────────────
 
@@ -37,27 +43,27 @@ const MEXICAN_NAMES = [
   { first: 'Renata', last: 'Ríos' },
 ]
 
-const VEHICLES = [
-  { model: 'Nissan Sentra', price: 420000, category: 'sedan' },
-  { model: 'Nissan Versa', price: 310000, category: 'sedan' },
-  { model: 'Nissan Kicks', price: 455000, category: 'suv' },
-  { model: 'Nissan Frontier', price: 620000, category: 'pickup' },
-  { model: 'Toyota Corolla', price: 398000, category: 'sedan' },
-  { model: 'Toyota RAV4', price: 560000, category: 'suv' },
-  { model: 'Toyota Hilux', price: 680000, category: 'pickup' },
-  { model: 'Honda Civic', price: 450000, category: 'sedan' },
-  { model: 'Honda CR-V', price: 590000, category: 'suv' },
-  { model: 'Mazda CX-5', price: 535000, category: 'suv' },
-  { model: 'Volkswagen Jetta', price: 430000, category: 'sedan' },
-  { model: 'Volkswagen Tiguan', price: 580000, category: 'suv' },
-  { model: 'Chevrolet Tracker', price: 475000, category: 'suv' },
-  { model: 'Chevrolet Silverado', price: 850000, category: 'pickup' },
-  { model: 'Kia Sportage', price: 520000, category: 'suv' },
-  { model: 'Hyundai Tucson', price: 505000, category: 'suv' },
-  { model: 'Ford Mustang', price: 950000, category: 'deportivo' },
-  { model: 'Ford Ranger', price: 720000, category: 'pickup' },
-  { model: 'Kia Seltos', price: 445000, category: 'suv' },
-  { model: 'Mazda 3', price: 410000, category: 'sedan' },
+const SERVICES = [
+  { name: 'Automatización WhatsApp', minPrice: 8500, category: 'automatización' },
+  { name: 'CRM Personalizado', minPrice: 20000, category: 'crm' },
+  { name: 'Desarrollo Web', minPrice: 15000, category: 'desarrollo' },
+  { name: 'Consultoría IA', minPrice: 10000, category: 'ia' },
+  { name: 'Marketing Digital', minPrice: 5000, category: 'marketing' },
+  { name: 'Análisis de Datos', minPrice: 12000, category: 'datos' },
+  { name: 'Soporte Técnico', minPrice: 3000, category: 'soporte' },
+  { name: 'Integración de APIs', minPrice: 18000, category: 'desarrollo' },
+  { name: 'Chatbot Inteligente', minPrice: 7500, category: 'automatización' },
+  { name: 'Business Intelligence', minPrice: 22000, category: 'datos' },
+  { name: 'App Móvil', minPrice: 35000, category: 'desarrollo' },
+  { name: 'E-commerce', minPrice: 25000, category: 'desarrollo' },
+  { name: 'Automatización Email', minPrice: 4000, category: 'automatización' },
+  { name: 'Redes Sociales', minPrice: 6000, category: 'marketing' },
+  { name: 'SEO & SEM', minPrice: 8000, category: 'marketing' },
+  { name: 'Cloud Migration', minPrice: 30000, category: 'ia' },
+  { name: 'Data Pipeline', minPrice: 16000, category: 'datos' },
+  { name: 'Landing Page', minPrice: 8000, category: 'desarrollo' },
+  { name: 'Flujos Automatizados', minPrice: 9000, category: 'automatización' },
+  { name: 'Auditoría Digital', minPrice: 7000, category: 'consultoría' },
 ]
 
 const MEXICAN_CITIES = [
@@ -75,59 +81,59 @@ const PHONES_MOCK = [
 ]
 
 const INITIAL_MESSAGES = [
-  'Hola, busco información sobre un auto nuevo',
-  'Buenos días, quiero saber precios de SUV',
-  'Me interesa el financiamiento de un sedan',
-  '¿Cuánto enganche necesito para un auto?',
-  'Hola vi su anuncio en Facebook, quiero información',
-  'Tengo un Nissan de trade-in, me interesa cambiarlo',
-  '¿Tienen disponibilidad para prueba de manejo?',
-  'Quiero agendar una cita para ver el auto',
-  'Cuál es el precio del Nissan Sentra 2024?',
-  '¿A cuántos meses puedo financiar?',
-  'Tengo mi crédito INFONAVIT, ¿puedo usarlo?',
-  '¿Cuánto es la mensualidad de un SUV?',
-  'Me interesa pero está muy caro',
-  '¿Tienen promociones este mes?',
-  'Ya vi en otra agencia un mejor precio',
-  'Lo voy a pensar, necesito consultar con mi esposa',
-  '¿Qué documentos necesito para el crédito?',
-  'TengoBURO limpio, ¿me aprueban rápido?',
-  '¿Tienen unidades en color blanco?',
-  'Quiero algo economico para mi primera compra',
+  'Hola, necesito información sobre sus servicios de automatización',
+  'Buenos días, quiero saber precios de desarrollo web',
+  'Me interesa una consultoría de IA para mi empresa',
+  '¿Cuánto cuesta implementar un CRM?',
+  'Necesito ayuda con marketing digital para mi negocio',
+  'Tengo un proyecto de análisis de datos, ¿pueden ayudarme?',
+  '¿Ofrecen soporte técnico para mi sistema?',
+  'Quiero agendar una llamada para conocer más',
+  'Cuál es el precio de la automatización con WhatsApp?',
+  '¿A cuántos meses puedo pagar un proyecto?',
+  '¿Tienen experiencia con empresas de mi sector?',
+  '¿Cuánto es la mensualidad del servicio?',
+  'Me interesa pero necesito comparar opciones',
+  '¿Tienen promociones para nuevos clientes?',
+  'Ya vi otra empresa con mejor precio',
+  'Lo voy a pensar, necesito consultar con mi socio',
+  '¿Qué incluyen en el servicio de consultoría?',
+  '¿Pueden hacer una demo antes de contratar?',
+  '¿Tienen referencias de clientes anteriores?',
+  'Necesito algo económico para empezar',
 ]
 
 const AI_RESPONSES = [
-  '¡Hola! Bienvenido a nuestra agencia. Me gustaría conocer un poco más sobre lo que buscas. ¿Qué tipo de vehículo tienes en mente y cuál es tu presupuesto aproximado?',
-  '¡Excelente elección! Las SUV son muy versátiles y perfectas para la ciudad. ¿Lo usarías principalmente para ciudad o también viajes largos?',
-  'Perfecto, el financiamiento es una excelente opción. Tenemos planes desde 24 hasta 48 meses sin intereses. ¿Cuál es el monto mensual con el que te sentirías cómodo?',
-  'El enganche varía según el modelo. Tenemos opciones desde 10% del valor del vehículo. Para darte una mejor opción, ¿cuál es tu presupuesto total?',
-  '¡Gracias por contactarnos! Me encantaría ayudarte a encontrar el vehículo ideal. ¿Ya tienes algún modelo en mente o quieres que te muestre las opciones disponibles?',
-  '¡Perfecto! El trade-in es una excelente opción para reducir el enganche. ¿Podrías decirme el modelo, año y kilometraje de tu auto actual?',
-  '¡Por supuesto! Las pruebas de manejo son completamente gratuitas y sin compromiso. ¿Qué día de la semana te queda mejor?',
-  '¡Excelente idea! Agendar una cita es el mejor paso. ¿Te gustaría venir por la mañana o por la tarde? Tenemos disponibilidad de lunes a sábado.',
-  'El Sentra es uno de nuestros mejores vendedores. Tiene excelente valor de reventa y bajo consumo. ¿Te gustaría saber sobre financiamiento o pagaría de contado?',
-  'Ofrecemos planes flexibles de 24 a 60 meses. A 48 meses sin intereses el Sentra quedaría en aproximadamente $8,700 MXN mensuales. ¿Te gustaría agendar una cita para verlo?',
-  'El INFONAVIT se puede utilizar en algunos desarrollos, pero para vehículos contado es diferente. Sin embargo, tenemos opciones de crédito automotriz muy accesibles.',
-  'Las mensualidades de SUV dependen del modelo. ¿Te interesa algo compacto como una Kicks ($9,200/mes) o algo más grande como un Pathfinder ($15,800/mes)?',
-  'Entiendo tu preocupación sobre el precio. Sin embargo, un auto no es un gasto, es una herramienta que genera valor. Hablemos de financiamiento: desde $5,000 MXN mensuales. ¿Cuánto pagarías al mes?',
-  '¡Sí! Este mes tenemos una promoción especial: enganche desde 10% y 48 meses sin intereses en modelos seleccionados. ¿Te gustaría saber más detalles?',
-  'Entiendo que has comparado precios. ¿Pudiste verificar que incluye el mismo seguro, garantía y servicio? Nuestro paquete integral es muy competitivo.',
-  'Es excelente que consultes con tu pareja. ¿Qué te parece si agendamos una cita para que vengan juntos? Así pueden ver el auto, hacer prueba de manejo y tomar la decisión juntos.',
-  'Para el crédito necesitas: identificación oficial, comprobante de domicilio (no mayor a 3 meses), comprobante de ingresos y dos referencias. ¿Tienes estos documentos listos?',
-  '¡Excelente! Tener BURO limpio acelera mucho el proceso. La aprobación puede ser en menos de 24 horas. ¿Te gustaría iniciar el proceso ahora?',
-  '¡Sí! Tenemos unidades en varios colores incluyendo blanco, gris plata y negro. ¿Te gustaría que te aparte una para que la veas?',
-  '¡Perfecto para tu primera compra! Te recomiendo algo económico pero confiable. El Nissan Versa o el Kia Seltos son excelentes opciones para empezar. ¿Cuál te llama más la atención?',
+  '¡Hola! Bienvenido a ValiAutoFlow. Me gustaría conocer un poco más sobre tu negocio. ¿Qué tipo de automatización necesitas?',
+  '¡Excelente! El desarrollo web es una de nuestras especialidades. ¿Tienes un proyecto en mente o necesitas algo desde cero?',
+  'La consultoría de IA puede transformar tu operación. ¿Cuántos procesos manejas actualmente de forma manual?',
+  'Un CRM personalizado empieza desde $15,000 MXN dependiendo de la complejidad. ¿Qué procesos necesitas gestionar?',
+  '¡Gracias por contactarnos! Me encantaría ayudarte a encontrar la solución ideal para tu negocio. ¿Ya tienes algún sistema en mente?',
+  'El marketing digital es clave para crecer. ¿Ya tienes presencia en redes o comenzamos desde cero?',
+  '¡Por supuesto! Agendar una llamada es sin compromiso. ¿Qué día te queda mejor?',
+  '¡Excelente idea! Una llamada es el mejor paso. ¿Te gustaría esta semana por la mañana o por la tarde?',
+  'La automatización con WhatsApp es nuestro servicio más popular. Reduce respuestas manuales hasta 80%. ¿Te gustaría saber más?',
+  'Ofrecemos planes flexibles de pago. ¿Prefieres pagar en una sola exhibición o a meses con descuento?',
+  'Tenemos experiencia en más de 15 sectores: retail, servicios, salud, educación y más. ¿En qué sector estás?',
+  'Las mensualidades dependen del servicio. ¿Buscas algo desde $5,000 MXN al mes?',
+  'Entiendo, comparar es inteligente. ¿Pudiste verificar que incluyen soporte, capacitación y actualizaciones?',
+  '¡Sí! Este mes tenemos 20% de descuento en nuevos proyectos. ¿Te gustaría agendar una llamada?',
+  'Es buena idea comparar. Nuestro paquete es integral con soporte dedicado. ¿Qué incluye la otra opción?',
+  'Perfecto, es importante que tu socio también esté convencido. ¿Qué te parece si agendamos una llamada para ambos?',
+  'La consultoría incluye diagnóstico, implementación, capacitación y 30 días de soporte. ¿Te gustaría una demo?',
+  '¡Con gusto! Agendemos una demo de 30 minutos. ¿Qué día te queda mejor?',
+  'Tenemos más de 50 clientes satisfechos. ¿Te gustaría ver algunos casos de éxito?',
+  'Para empezar te recomendamos nuestro plan Starter. ¿Quieres que te comparta los detalles?',
 ]
 
 const TAGS_OPTIONS = [
-  'interesa_suv', 'interesa_sedan', 'interesa_pickup', 'interesa_deportivo',
-  'tiene_interes_financiero', 'enganche_bajo', 'buero_limpio', 'infonavit',
+  'interesa_automatización', 'interesa_crm', 'interesa_desarrollo_web',
+  'interesa_consultoría_ia', 'interesa_marketing_digital', 'interesa_análisis_de_datos',
+  'tiene_interes_financiero', 'alto_presupuesto', 'buero_limpio',
   'comparando_precios', 'tiene_objeciones', 'referencia', 'whatsapp_incoming',
   'facebook_lead', 'google_lead', 'conversacion_activa', 'alto_engagement',
-  'vehiculo: sentra', 'vehiculo: versa', 'vehiculo: kicks', 'vehiculo: frontier',
-  'vehiculo: corolla', 'vehiculo: civic', 'vehiculo: cx-5', 'vehiculo: tiguan',
-  'vehiculo: tracker', 'vehiculo: sportage',
+  'servicio: whatsapp_bot', 'servicio: crm', 'servicio: web', 'servicio: ia',
+  'servicio: marketing', 'servicio: datos', 'servicio: soporte',
 ]
 
 function randomPick<T>(arr: T[]): T {
@@ -157,7 +163,6 @@ function randomEmail(name: string): string {
 export async function POST(req: NextRequest) {
   try {
     // ─── Production guard ───────────────────────────────────
-    // Block in production unless SEED_PIN is set
     if (process.env.NODE_ENV === 'production' && !process.env.SEED_PIN) {
       return NextResponse.json(
         { error: 'Seed endpoint is disabled in production' },
@@ -166,8 +171,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── PIN Protection only for destructive reset operations ──
-    // Standard seed (idempotent create-if-not-exists) works without PIN
-    // Destructive reset requires ?reset=true&pin=PIN
     const { searchParams } = new URL(req.url)
     const isReset = searchParams.get('reset') === 'true'
 
@@ -182,37 +185,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if data already exists (idempotent)
-    const existingWorkspace = await db.workspace.findFirst()
-    if (existingWorkspace) {
-      // Check if demo user exists
-      const existingDemoUser = await db.user.findUnique({
-        where: { email: 'demo@valiflow.com' },
-      })
-      if (existingDemoUser) {
-        return NextResponse.json({
-          success: false,
-          message: 'Demo data already exists.',
-          workspaceId: existingWorkspace.id,
-        })
-      }
-    }
+    // ─── 1. Find or Create JV User ──────────────────────────
+    console.log('[Seed] Starting demo data creation for ValiAutoFlow...')
 
-    console.log('[Seed] Starting demo data creation...')
+    const hashedPassword = hashPassword('valiflow2026')
 
-    // ─── 1. Create Demo User (with hashed password) ────────
-    const hashedPassword = await bcrypt.hash('demo1234', 12)
-
-    // Check if demo user already exists
-    let demoUser = await db.user.findUnique({
-      where: { email: 'demo@valiflow.com' },
+    let user = await db.user.findUnique({
+      where: { email: 'jvegahdz24@gmail.com' },
     })
 
-    if (!demoUser) {
-      demoUser = await db.user.create({
+    // Migrate legacy bcrypt hash → SHA-256 if needed
+    if (user && user.password && (user.password.startsWith('$2b$') || user.password.startsWith('$2a$'))) {
+      await db.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      })
+      console.log('[Seed] Migrated password from bcrypt → SHA-256')
+    }
+
+    if (!user) {
+      user = await db.user.create({
         data: {
-          name: 'Administrador Demo',
-          email: 'demo@valiflow.com',
+          name: 'JVega',
+          email: 'jvegahdz24@gmail.com',
           password: hashedPassword,
           role: 'owner',
           phone: '5512340000',
@@ -220,29 +215,24 @@ export async function POST(req: NextRequest) {
           locale: 'es-MX',
         },
       })
-      console.log(`[Seed] User created: ${demoUser.email}`)
+      console.log(`[Seed] User created: ${user.email}`)
     } else {
-      // Update password hash if needed
-      await db.user.update({
-        where: { id: demoUser.id },
-        data: { password: hashedPassword },
-      })
-      console.log(`[Seed] User already exists, password updated: ${demoUser.email}`)
+      console.log(`[Seed] User exists: ${user.email}`)
     }
 
-    // ─── 2. Create Demo Workspace ───────────────────────────
+    // ─── 2. Find or Create ValiAutoFlow Workspace ───────────
     let workspace = await db.workspace.findFirst({
-      where: { ownerId: demoUser.id },
+      where: { slug: 'valiflow-jvega' },
     })
 
     if (!workspace) {
       const defaultPlan = PLANS.pro
       workspace = await db.workspace.create({
         data: {
-          name: 'Mi Negocio',
-          slug: 'mi-negocio',
-          ownerId: demoUser.id,
-          industry: 'automotive',
+          name: 'ValiAutoFlow',
+          slug: 'valiflow-jvega',
+          ownerId: user.id,
+          industry: 'services',
           logo: null,
           plan: 'pro',
           maxContacts: defaultPlan.limits.maxContacts,
@@ -254,10 +244,19 @@ export async function POST(req: NextRequest) {
             timezone: 'America/Mexico_City',
             currency: 'MXN',
             defaultPersonality: 'JHON',
+            autoCreateDeals: true,
+            dealDefaultStage: 'Lead Nuevo',
+            aiModel: 'GLM-4.5-Flash',
+            aiProvider: 'groq',
+            whatsappAutoReply: true,
+            followUpEnabled: true,
+            evolutionApiEnabled: true,
+            dibLayerEnabled: true,
+            businessName: 'ValiAutoFlow',
           }),
           members: {
             create: {
-              userId: demoUser.id,
+              userId: user.id,
               role: 'owner',
             },
           },
@@ -268,7 +267,7 @@ export async function POST(req: NextRequest) {
               provider: 'stripe',
               currentPeriodStart: new Date(),
               currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-              amount: defaultPlan.price,
+              amount: 999,
               currency: 'MXN',
               interval: 'monthly',
             },
@@ -277,31 +276,31 @@ export async function POST(req: NextRequest) {
       })
       console.log(`[Seed] Workspace created: ${workspace.name}`)
     } else {
-      console.log(`[Seed] Workspace already exists: ${workspace.name}`)
+      console.log(`[Seed] Workspace exists: ${workspace.name}`)
     }
 
-    // Skip seeding demo data if workspace already has data
+    // Skip seeding if workspace already has data
     const existingContacts = await db.contact.count({
       where: { workspaceId: workspace.id },
     })
 
     if (existingContacts > 0) {
-      console.log('[Seed] Demo data already seeded, skipping...')
+      console.log('[Seed] Data already seeded, skipping...')
       return NextResponse.json({
         success: false,
-        message: 'Demo data already seeded.',
+        message: 'Data already seeded.',
         workspaceId: workspace.id,
       })
     }
 
-    // ─── 3. Create Demo Agents ──────────────────────────────
+    // ─── 3. Create Agents ──────────────────────────────────
     const agents = await Promise.all([
       db.agent.create({
         data: {
           workspaceId: workspace.id,
-          name: 'JHON — Calificador Principal',
+          name: 'JHON — Calificador',
           type: 'qualifier',
-          description: 'Agente principal de calificación de leads. Detecta intención de compra y califica prospectos.',
+          description: 'Agente principal de calificación. Detecta necesidades de automatización y califica prospectos.',
           model: 'groq',
           modelName: 'llama-3.3-70b-versatile',
           temperature: 0.7,
@@ -309,6 +308,7 @@ export async function POST(req: NextRequest) {
           personality: 'JHON',
           priority: 10,
           isActive: true,
+          systemPrompt: 'jhon-calificador',
           config: JSON.stringify({
             hooks: [],
             steering: {
@@ -326,7 +326,7 @@ export async function POST(req: NextRequest) {
       db.agent.create({
         data: {
           workspaceId: workspace.id,
-          name: 'SELLER Pro — Cierre de Ventas',
+          name: 'SELLER Pro — Cierre',
           type: 'sales',
           description: 'Agente especializado en cierre de ventas y manejo de objeciones avanzadas.',
           model: 'groq',
@@ -336,6 +336,7 @@ export async function POST(req: NextRequest) {
           personality: 'JHON',
           priority: 8,
           isActive: true,
+          systemPrompt: 'seller-pro',
           config: JSON.stringify({
             steering: {
               maxQuestionsPerTurn: 1,
@@ -349,7 +350,7 @@ export async function POST(req: NextRequest) {
       db.agent.create({
         data: {
           workspaceId: workspace.id,
-          name: 'FollowUp Bot — Recordatorios',
+          name: 'FollowUp Bot',
           type: 'followup',
           description: 'Agente de seguimiento automático que mantiene el contacto con prospectos.',
           model: 'groq',
@@ -359,6 +360,7 @@ export async function POST(req: NextRequest) {
           personality: 'friendly',
           priority: 5,
           isActive: true,
+          systemPrompt: 'followup-amigable',
           config: JSON.stringify({
             steering: {
               maxQuestionsPerTurn: 1,
@@ -370,21 +372,19 @@ export async function POST(req: NextRequest) {
     ])
     console.log(`[Seed] ${agents.length} agents created`)
 
-    // ─── 4. Create Demo Contacts ────────────────────────────
-    const contacts: Array<{ id: string; firstName: string; lastName: string; leadScore: number; vehicle: typeof VEHICLES[0] }> = []
+    // ─── 4. Create Contacts (services-oriented) ─────────────
+    const contacts: Array<{ id: string; firstName: string; lastName: string; leadScore: number; service: typeof SERVICES[0] }> = []
 
     for (let i = 0; i < 20; i++) {
       const nameData = MEXICAN_NAMES[i]
       const phone = PHONES_MOCK[i]
       const source = randomPick(SOURCES)
-      const vehicle = randomPick(VEHICLES)
+      const service = randomPick(SERVICES)
       const leadScore = randomBetween(10, 95)
 
       const tags: string[] = [source === 'whatsapp' ? 'whatsapp_incoming' : `${source}_lead`]
-      tags.push(`vehiculo: ${vehicle.model.toLowerCase().split(' ')[1]}`)
-      if (vehicle.category === 'suv') tags.push('interesa_suv')
-      else if (vehicle.category === 'sedan') tags.push('interesa_sedan')
-      else if (vehicle.category === 'pickup') tags.push('interesa_pickup')
+      tags.push(`interesa_${service.category}`)
+      tags.push(`servicio: ${service.name.toLowerCase().split(' ')[0]}`)
 
       if (leadScore > 60) {
         tags.push('tiene_interes_financiero', 'conversacion_activa')
@@ -409,12 +409,12 @@ export async function POST(req: NextRequest) {
           tags: JSON.stringify(tags),
           customFields: JSON.stringify({
             city: randomPick(MEXICAN_CITIES),
-            preferredVehicle: vehicle.model,
-            budget: vehicle.price + randomBetween(-50000, 100000),
-            tradeIn: randomBetween(0, 1) === 1,
-            creditScore: randomPick(['bueno', 'excelente', 'regular']),
+            preferredService: service.name,
+            budget: service.minPrice + randomBetween(-2000, 15000),
+            teamSize: randomPick(['1-5', '5-20', '20-50', '50+']),
+            currentTools: randomPick(['ninguno', 'Excel', 'WhatsApp manual', 'Otro CRM', 'Google Sheets']),
           }),
-          notes: `Interesado en ${vehicle.model}. Presupuesto ~$${(vehicle.price / 1000).toFixed(0)}k MXN. Canal: ${source}.`,
+          notes: `Interesado en ${service.name}. Presupuesto ~$${((service.minPrice + randomBetween(0, 10000)) / 1000).toFixed(0)}k MXN. Canal: ${source}.`,
           lastMessageAt: randomDate(3),
           createdAt: randomDate(30),
         },
@@ -425,7 +425,7 @@ export async function POST(req: NextRequest) {
         firstName: nameData.first,
         lastName: nameData.last,
         leadScore,
-        vehicle,
+        service,
       })
     }
     console.log(`[Seed] ${contacts.length} contacts created`)
@@ -434,8 +434,8 @@ export async function POST(req: NextRequest) {
     const pipeline = await db.pipeline.create({
       data: {
         workspaceId: workspace.id,
-        name: 'Pipeline de Ventas — AutoMax',
-        description: 'Pipeline principal de ventas automotrices',
+        name: 'Pipeline de Ventas — ValiAutoFlow',
+        description: 'Pipeline principal de servicios de automatización',
         order: 0,
         stages: {
           create: DEFAULT_PIPELINE_STAGES.map((stage, index) => ({
@@ -508,7 +508,7 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < 12; i++) {
       const contact = contacts[i]
-      const vehicle = contact.vehicle
+      const service = contact.service
 
       let stageIndex: number
       let dealStatus: string
@@ -531,7 +531,7 @@ export async function POST(req: NextRequest) {
       }
 
       const stage = stages[stageIndex]
-      const dealValue = vehicle.price + randomBetween(-30000, 80000)
+      const dealValue = service.minPrice + randomBetween(-2000, 30000)
 
       await db.deal.create({
         data: {
@@ -539,10 +539,10 @@ export async function POST(req: NextRequest) {
           pipelineId: pipeline.id,
           stageId: stage.id,
           contactId: contact.id,
-          title: `${contact.firstName} ${contact.lastName} — ${vehicle.model}`,
+          title: `${contact.firstName} ${contact.lastName} — ${service.name}`,
           value: dealValue,
           currency: 'MXN',
-          description: `Interés en ${vehicle.model} ${vehicle.category}. Contacto por ${contact.leadScore > 60 ? 'WhatsApp directo' : 'redes sociales'}.`,
+          description: `Interés en ${service.name}. Contacto por ${contact.leadScore > 60 ? 'WhatsApp directo' : 'redes sociales'}.`,
           source: randomPick(['whatsapp', 'facebook', 'google', 'manual']),
           status: dealStatus,
           wonAt: dealStatus === 'won' ? randomDate(15) : null,
@@ -560,7 +560,6 @@ export async function POST(req: NextRequest) {
     // ─── 8. Create Agent Logs ───────────────────────────────
     for (let i = 0; i < 20; i++) {
       const conversation = randomPick(conversations)
-      const contact = contacts.find((c) => c.id === conversation.contactId)
       const agent = randomPick(agents)
 
       await db.agentLog.create({
@@ -573,7 +572,7 @@ export async function POST(req: NextRequest) {
           tokensUsed: randomBetween(200, 1500),
           latencyMs: randomBetween(500, 3000),
           confidence: randomBetween(60, 99) / 100,
-          intent: randomPick(['greeting', 'question', 'buy_signal', 'objection', 'appointment', 'price_inquiry', 'vehicle_inquiry', 'financing']),
+          intent: randomPick(['greeting', 'question', 'buy_signal', 'objection', 'appointment', 'price_inquiry', 'service_inquiry', 'consultation']),
           action: randomPick(['question', 'educate', 'follow_up', 'close', 'handle_objection']),
           createdAt: randomDate(10),
         },
@@ -581,7 +580,7 @@ export async function POST(req: NextRequest) {
     }
     console.log(`[Seed] Agent logs created`)
 
-    // ─── 9. Create Automations ──────────────────────────────
+    // ─── 9. Create Automations (services-oriented) ──────────
     await Promise.all([
       db.automation.create({
         data: {
@@ -591,7 +590,7 @@ export async function POST(req: NextRequest) {
           triggerType: 'inactivity',
           triggerConfig: JSON.stringify({ hours: 24, stage: 'new' }),
           actions: JSON.stringify([
-            { type: 'send_message', channel: 'whatsapp', template: 'Hola {{name}}, ¿tuviste oportunidad de revisar la información que te compartimos?' },
+            { type: 'send_message', channel: 'whatsapp', template: 'Hola {{name}}, soy JHON de ValiAutoFlow. ¿Tuviste oportunidad de revisar la información sobre nuestros servicios de automatización?' },
           ]),
           isActive: true,
         },
@@ -599,7 +598,7 @@ export async function POST(req: NextRequest) {
       db.automation.create({
         data: {
           workspaceId: workspace.id,
-          name: 'Lead Score > 80 — Notificación',
+          name: 'Lead Score > 80 — Notificación Hot Lead',
           description: 'Notifica al equipo cuando un lead alcanza score mayor a 80',
           triggerType: 'event',
           triggerConfig: JSON.stringify({ event: 'lead_score_high', threshold: 80 }),
@@ -618,7 +617,7 @@ export async function POST(req: NextRequest) {
           triggerType: 'deal_stage_change',
           triggerConfig: JSON.stringify({ targetStage: 'Cerrado Ganado' }),
           actions: JSON.stringify([
-            { type: 'send_message', channel: 'whatsapp', delayHours: 168, template: 'Hola {{name}}, ¿cómo te va con tu nuevo auto? Esperamos que estés disfrutándolo. Recuerda que tu primer servicio es gratuito.' },
+            { type: 'send_message', channel: 'whatsapp', delayHours: 168, template: 'Hola {{name}}, ¿cómo va la implementación? Esperamos que todo funcione perfecto. Recuerda que tienes 30 días de soporte incluido.' },
           ]),
           isActive: true,
         },
@@ -636,15 +635,16 @@ export async function POST(req: NextRequest) {
           agentId: agent.id,
           contactId: contact.id,
           key: randomPick([
-            'preferred_vehicle',
+            'preferred_service',
             'budget_range',
             'payment_preference',
             'objection_history',
             'last_interaction_summary',
+            'business_sector',
           ]),
           value: JSON.stringify({
-            vehicle: contact.vehicle.model,
-            budget: `$${(contact.vehicle.price / 1000).toFixed(0)}k MXN`,
+            service: contact.service.name,
+            budget: `$${((contact.service.minPrice + randomBetween(0, 10000)) / 1000).toFixed(0)}k MXN`,
             city: randomPick(MEXICAN_CITIES),
             urgency: contact.leadScore > 60 ? 'alta' : 'baja',
           }),
@@ -662,14 +662,14 @@ export async function POST(req: NextRequest) {
           workspaceId: workspace.id,
           channel: 'whatsapp',
           webhookUrl: '/api/webhooks/whatsapp',
-          secret: 'demo-whatsapp-secret',
+          secret: 'valiflow-whatsapp-secret-2026',
           isActive: true,
         },
         {
           workspaceId: workspace.id,
           channel: 'telegram',
           webhookUrl: '/api/webhooks/telegram',
-          secret: 'demo-telegram-secret',
+          secret: 'valiflow-telegram-secret-2026',
           isActive: false,
         },
       ],
@@ -680,7 +680,7 @@ export async function POST(req: NextRequest) {
     const eventTypes = [
       'message_sent', 'message_received', 'ai_message_sent', 'deal_created',
       'deal_won', 'conversation_created', 'contact_created', 'agent_used',
-      'whatsapp_message_received',
+      'whatsapp_message_received', 'lead_qualified', 'automation_triggered',
     ]
 
     for (let i = 0; i < 50; i++) {
@@ -692,6 +692,7 @@ export async function POST(req: NextRequest) {
             channel: randomPick(['whatsapp', 'webchat']),
             agent: randomPick(['qualifier', 'sales', 'followup']),
             score: randomBetween(10, 95),
+            service: randomPick(['Automatización', 'CRM', 'Desarrollo Web', 'Consultoría IA', 'Marketing Digital']),
           }),
           createdAt: randomDate(30),
         },
@@ -702,7 +703,7 @@ export async function POST(req: NextRequest) {
     // ─── Done! ──────────────────────────────────────────────
     const summary = {
       workspace: workspace.name,
-      user: demoUser.email,
+      user: user.email,
       contacts: contacts.length,
       conversations: conversations.length,
       deals: dealCount,

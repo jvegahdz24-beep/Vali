@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { hashPassword } from '@/lib/auth'
-import { validateBody, passwordResetRequestSchema, passwordResetSchema } from '@/lib/validations'
-import { createSessionToken } from '@/lib/auth'
-import { cookies } from 'next/headers'
-import { SESSION_COOKIE_NAME } from '@/lib/auth'
 import crypto from 'crypto'
+import { db } from '@/lib/db'
+import { validateBody, passwordResetRequestSchema, passwordResetSchema } from '@/lib/validations'
+import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { cookies } from 'next/headers'
+
+function hashPassword(plain: string): string {
+  return crypto.createHash('sha256').update(plain).digest('hex')
+}
 
 async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {
   const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -139,7 +141,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Hash new password and update
-      const hashedPassword = await hashPassword(password)
+      const hashedPassword = hashPassword(password)
       await db.user.update({
         where: { id: user.id },
         data: { password: hashedPassword },

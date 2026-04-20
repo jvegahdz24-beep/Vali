@@ -1013,8 +1013,10 @@ export class RevenueEngine {
     dynamicContext?: string
     conversationHistory?: { role: string; content: string }[]
     conversationId?: string
+    /** DIB: Lead profile context for personalization */
+    leadProfileContext?: string
   }): Promise<RevenueEngineDecision> {
-    const { messages, contactData, workspaceContext, personalityName, customSystemPrompt, aiProvider, temperature: aiTemperature, dynamicContext, conversationHistory, conversationId } = params
+    const { messages, contactData, workspaceContext, personalityName, customSystemPrompt, aiProvider, temperature: aiTemperature, dynamicContext, conversationHistory, conversationId, leadProfileContext } = params
 
     // Step 1: Analyze lead
     const analysis = this.analyzeLead(messages, contactData)
@@ -1039,6 +1041,11 @@ export class RevenueEngine {
         response = this.handleObjection(analysis, analysis.objections[0])
       } else {
         // Step 5: Generate JHON response (LLM-powered)
+        // Inject DIB profile context into dynamic context for personalization
+        const enrichedDynamicContext = leadProfileContext
+          ? `${leadProfileContext}\n\n${dynamicContext || ''}`
+          : dynamicContext
+
         response = await this.generateResponse(analysis, decision, {
           personalityName: personalityName || 'JHON',
           workspaceContext,
@@ -1046,7 +1053,7 @@ export class RevenueEngine {
           lastMessage: lastUserMessage?.content,
           conversationHistory: conversationHistory || messages.slice(0, -1),
           temperature: aiTemperature,
-          dynamicContext,
+          dynamicContext: enrichedDynamicContext,
           customSystemPrompt,
           aiProvider,
         })

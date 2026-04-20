@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Fused Architecture Schema (v1.0)
-// Next.js 16 + Prisma + SQLite (dev) / PostgreSQL (prod)
+// ValiFlow Pro — Fused Architecture Schema (v2.0)
+// Next.js 16 + Prisma + PostgreSQL (Supabase)
+// Migrated from SQLite to Supabase PostgreSQL
 // ═══════════════════════════════════════════════════════════════
 
 generator client {
@@ -8,8 +9,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -113,6 +115,7 @@ model Workspace {
   analyticsEvents AnalyticsEvent[]
   subscription Subscription?
   deals Deal[]
+  leadProfiles LeadProfile[]
 
   @@index([ownerId])
   @@index([slug])
@@ -158,7 +161,9 @@ model Contact {
   conversations Conversation[]
   deals        Deal[]
   agentMemories AgentMemory[]
+  leadProfile  LeadProfile?
 
+  @@unique([workspaceId, phone], name: "contact_workspace_phone_key")
   @@index([workspaceId])
   @@index([phone])
   @@index([status])
@@ -565,6 +570,65 @@ model MediaFile {
   @@index([messageId])
   @@index([conversationId])
   @@index([source])
+}
+
+// ─────────────────────────────────────────────────────────────
+// DIB: LEAD PROFILE (Reactivation Intelligence Layer)
+// ─────────────────────────────────────────────────────────────
+
+model LeadProfile {
+  id          String   @id @default(cuid())
+  contactId   String   @unique
+  workspaceId String
+
+  // Archetype Detection
+  archetype       String   @default("desconocido") // practico, familiar, aspiracional, estrategico, consciente, desconocido
+  archetypeConfidence Float  @default(0)
+
+  // Temperature (real-time scoring)
+  temperature  String   @default("cold") // cold, warm, hot
+  score        Int      @default(0)       // 0-100
+
+  // Behavioral signals
+  totalMessages     Int      @default(0)
+  avgResponseTimeMs Int      @default(0)
+  lastActiveAt      DateTime?
+  firstSeenAt       DateTime @default(now())
+
+  // Reactivation tracking
+  reactivateCount    Int      @default(0)   // how many times DIB reactivated this lead
+  lastReactivateAt   DateTime?
+  lastAngleUsed      String?              // which psychological angle was last used
+  reactivationCycle  Int      @default(0)   // current cycle number (1-4)
+  isReactivable      Boolean  @default(true)
+
+  // Extracted data (from conversation parsing)
+  budget           String?               // detected budget range
+  preferredProduct String?               // product/service of interest
+  mainObjection    String?               // primary objection
+  decisionMaker    String?               // who decides (self, partner, boss)
+  timeline         String?               // when they want to buy (now, soon, later, none)
+  communicationStyle String @default("neutral") // direct, cautious, emotional, analytical, neutral
+
+  // Psychological profile (for reactivation engine)
+  painPoints        String  @default("[]") // JSON array of detected pain points
+  interests         String  @default("[]") // JSON array of detected interests
+  buyingMotivation  String?               // status, comfort, security, savings, excitement
+  priceSensitivity  String  @default("medium") // low, medium, high
+  urgencyLevel      String  @default("low")    // low, medium, high
+
+  // Metadata
+  metadata    String   @default("{}") // JSON
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([workspaceId])
+  @@index([temperature])
+  @@index([isReactivable])
 }
 
 // ─────────────────────────────────────────────────────────────

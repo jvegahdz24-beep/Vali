@@ -65,3 +65,24 @@ export {
   ClosingEngine,
   closingEngine,
 } from './closing-engine'
+
+// ─── DIB Layer: Lead Profiler ────────────────────────────────
+export {
+  LeadProfiler,
+  leadProfiler,
+} from './lead-profiler'
+
+export type {
+  LeadProfileData,
+} from './lead-profiler'
+
+// ─── DIB Layer: Reactivation Engine ──────────────────────────
+export {
+  ReactivationEngine,
+  reactivationEngine,
+} from './reactivation-engine'
+
+export type {
+  ReactivationAngle,
+  ReactivationResult,
+} from './reactivation-engine'

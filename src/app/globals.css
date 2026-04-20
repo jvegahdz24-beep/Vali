@@ -118,6 +118,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-color: #ffffff !important;
+    color: #111827 !important;
   }
 }
 

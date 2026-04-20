@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Sparkles,
   Wifi,
+  Shield,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -45,6 +47,8 @@ const navItems: NavItem[] = [
   { id: 'pipeline', label: 'Pipeline', icon: <Kanban className="h-5 w-5" /> },
   { id: 'contacts', label: 'Contactos', icon: <Users className="h-5 w-5" /> },
   { id: 'analytics', label: 'Analíticas', icon: <BarChart3 className="h-5 w-5" /> },
+  { id: 'valiguard', label: 'ValiGuard', icon: <Shield className="h-5 w-5" /> },
+  { id: 'admin', label: 'Admin', icon: <Building2 className="h-5 w-5" /> },
   { id: 'settings', label: 'Configuración', icon: <Settings className="h-5 w-5" /> },
 ]
 

@@ -48,7 +48,9 @@ const publicPagesExact = [
   '/reset-password',
 ]
 
-// ─── In-Memory Rate Limiter (middleware-safe) ──────────────────
+// ─── In-Memory Rate Limiter (Edge-compatible) ──────────────────
+// FIX: Removed setInterval (NOT supported in Edge Runtime).
+// Cleanup happens lazily during each rate limit check instead.
 
 interface RateLimitEntry {
   count: number
@@ -57,13 +59,16 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>()
 
-// Cleanup expired entries every 5 minutes to prevent memory leak
-setInterval(() => {
-  const now = Date.now()
+/**
+ * Lazy cleanup: remove expired entries BEFORE checking.
+ * Called on every rate limit check — cheap since expired entries
+ * are few and the check is O(n) on a small Map.
+ */
+function cleanupExpiredEntries(now: number): void {
   for (const [key, entry] of rateLimitStore) {
     if (now >= entry.resetAt) rateLimitStore.delete(key)
   }
-}, 300_000)
+}
 
 function checkRateLimit(
   key: string,
@@ -71,6 +76,10 @@ function checkRateLimit(
   windowMs: number
 ): { allowed: boolean; retryAfter: number | null } {
   const now = Date.now()
+
+  // Lazy cleanup instead of setInterval (Edge Runtime safe)
+  cleanupExpiredEntries(now)
+
   const entry = rateLimitStore.get(key)
 
   if (!entry || now >= entry.resetAt) {

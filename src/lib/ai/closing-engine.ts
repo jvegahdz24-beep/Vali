@@ -5,6 +5,7 @@
 
 import type { ClosingAssessment, DealClosability, ClosingTechnique, LeadAnalysis } from '@/lib/types'
 import { chatWithAI } from './providers'
+import type { LeadProfileData } from './lead-profiler'
 
 // ─── Closing Techniques ──────────────────────────────────────
 
@@ -190,6 +191,223 @@ export class ClosingEngine {
         urgencyCreated,
         followUpActive,
       },
+    }
+  }
+
+  /**
+   * Suggest closing technique WITH lead profile context (DIB integration).
+   * Uses archetype, communication style, price sensitivity, and objection
+   * history to select the optimal technique.
+   */
+  suggestTechniqueWithProfile(
+    assessment: ClosingAssessment,
+    profile?: LeadProfileData
+  ): string {
+    // If no profile, fall back to standard method
+    if (!profile) {
+      return this.suggestClosingTechnique(assessment)
+    }
+
+    const { closabilityScore, progress } = assessment
+
+    // ── Archetype-based technique selection ──
+    switch (profile.archetype) {
+      case 'practico':
+        // Data-driven buyers: summary close with numbers
+        if (progress.priceDiscussed && closabilityScore >= 50) return 'Cierre por Resumen'
+        return 'Cierre Alternativo'
+
+      case 'familiar':
+        // Family-oriented: testimonial and feel-felt-found
+        if (closabilityScore >= 60) return 'Cierre por Testimonial'
+        return 'Cierre Feel-Felt-Found'
+
+      case 'aspiracional':
+        // Status seekers: exclusivity and FOMO
+        if (closabilityScore >= 50) return 'Cierre FOMO (Fear of Missing Out)'
+        return 'Cierre por Urgencia'
+
+      case 'estrategico':
+        // Analytical: summary close with ROI data
+        if (closabilityScore >= 60) return 'Cierre por Resumen'
+        return 'Cierre Alternativo'
+
+      case 'consciente':
+        // Conscious buyers: value-based
+        if (closabilityScore >= 50) return 'Cierre por Resumen'
+        return 'Cierre Suave (Trial Close)'
+    }
+
+    // ── Communication style-based adjustments ──
+    if (profile.communicationStyle === 'cautious') {
+      // Cautious buyers need softer approaches
+      if (closabilityScore >= 50) return 'Cierre Feel-Felt-Found'
+      return 'Cierre Suave (Trial Close)'
+    }
+
+    if (profile.communicationStyle === 'direct') {
+      // Direct buyers can handle stronger closes
+      if (closabilityScore >= 50) return 'Cierre Asumtivo'
+      return 'Cierre Alternativo'
+    }
+
+    // ── Price sensitivity adjustments ──
+    if (profile.priceSensitivity === 'high' && !progress.priceDiscussed) {
+      // Price-sensitive leads need price discussion before closing
+      return 'Cierre Suave (Trial Close)'
+    }
+
+    // ── Main objection-based adjustments ──
+    if (profile.mainObjection === 'tiempo' && closabilityScore >= 50) {
+      return 'Cierre por Urgencia'
+    }
+    if (profile.mainObjection === 'confianza' && closabilityScore >= 40) {
+      return 'Cierre por Testimonial'
+    }
+    if (profile.mainObjection === 'precio' && closabilityScore >= 50) {
+      return 'Cierre Feel-Felt-Found'
+    }
+    if (profile.mainObjection === 'autoridad' && closabilityScore >= 60) {
+      return 'Cierre Asumtivo'
+    }
+
+    // ── Fallback: standard method ──
+    return this.suggestClosingTechnique(assessment)
+  }
+
+  /**
+   * Generate closing message WITH lead profile context (DIB integration).
+   * Injects archetype-aware tone and personalization into the LLM prompt.
+   */
+  async generateClosingMessageWithProfile(
+    assessment: ClosingAssessment,
+    technique: string,
+    context?: {
+      contactName?: string
+      vehicleModel?: string
+      vehicleColor?: string
+      downPayment?: number
+      monthlyPayment?: number
+      deadline?: string
+      remainingUnits?: number
+      personalityName?: string
+    },
+    profile?: LeadProfileData
+  ): Promise<string> {
+    const techniqueConfig = CLOSING_TECHNIQUES.find(
+      (t) => t.name === technique || t.id === technique
+    )
+
+    // Build profile-aware prompt additions
+    let profileSection = ''
+    if (profile) {
+      const parts: string[] = []
+      parts.push(`PERFIL DEL LEAD (DIB Intelligence):`)
+      parts.push(`- Arquetipo: ${profile.archetype}`)
+      parts.push(`- Estilo de comunicación: ${profile.communicationStyle}`)
+      parts.push(`- Sensibilidad al precio: ${profile.priceSensitivity}`)
+      if (profile.mainObjection) parts.push(`- Objección principal: ${profile.mainObjection}`)
+      if (profile.buyingMotivation) parts.push(`- Motivación de compra: ${profile.buyingMotivation}`)
+      if (profile.decisionMaker) parts.push(`- Decisor: ${profile.decisionMaker}`)
+
+      // Archetype-specific instructions
+      switch (profile.archetype) {
+        case 'practico':
+          parts.push('INSTRUCCIÓN: Usa datos concretos, números, comparativas. Evita emociones.')
+          break
+        case 'familiar':
+          parts.push('INSTRUCCIÓN: Menciona beneficios familiares, seguridad. Tono cálido y cercano.')
+          break
+        case 'aspiracional':
+          parts.push('INSTRUCCIÓN: Habla de exclusividad, experiencia, estatus. Lenguaje aspiracional.')
+          break
+        case 'estrategico':
+          parts.push('INSTRUCCIÓN: Preséntale ROI, retorno, ventajas. Tono analítico con datos.')
+          break
+        case 'consciente':
+          parts.push('INSTRUCCIÓN: Menciona sostenibilidad, eficiencia. Tono informado y accesible.')
+          break
+      }
+
+      // Communication style instructions
+      if (profile.communicationStyle === 'cautious') {
+        parts.push('INSTRUCCIÓN DE TONO: Sé suave, no presiones. Dale espacio para pensar.')
+      } else if (profile.communicationStyle === 'direct') {
+        parts.push('INSTRUCCIÓN DE TONO: Sé directo y concreto. Ve al grano.')
+      } else if (profile.communicationStyle === 'emotional') {
+        parts.push('INSTRUCCIÓN DE TONO: Conecta emocionalmente. Usa entusiasmo moderado.')
+      }
+
+      profileSection = '\n\n' + parts.join('\n')
+    }
+
+    const contextInfo = context
+      ? `Contexto del contacto:
+- Nombre: ${context.contactName || 'Prospecto'}
+- Vehículo: ${context.vehicleModel || 'No especificado'}
+${context.vehicleColor ? `- Color: ${context.vehicleColor}` : ''}
+${context.downPayment ? `- Enganche: $${context.downPayment.toLocaleString('es-MX')} MXN` : ''}
+${context.monthlyPayment ? `- Mensualidad: $${context.monthlyPayment.toLocaleString('es-MX')} MXN` : ''}
+${context.deadline ? `- Deadline: ${context.deadline}` : ''}
+${context.remainingUnits ? `- Unidades restantes: ${context.remainingUnits}` : ''}`
+      : 'Sin contexto adicional.'
+
+    const systemPrompt = `Eres un experto cerrador de ventas en México.
+Tu objetivo es generar UN ÚNICO mensaje de cierre usando la técnica "${technique}".
+
+${techniqueConfig ? `Descripción de la técnica: ${techniqueConfig.description}` : ''}
+${techniqueConfig ? `Plantilla base: ${techniqueConfig.messageTemplate}` : ''}
+
+Evaluación del deal:
+- Score de cierre: ${assessment.closabilityScore}/100
+- Calificación completada: ${assessment.progress.qualificationDone ? 'Sí' : 'No'}
+- Precio discutido: ${assessment.progress.priceDiscussed ? 'Sí' : 'No'}
+- Objeciones manejadas: ${assessment.progress.objectionHandled ? 'Sí' : 'No'}
+- Urgencia creada: ${assessment.progress.urgencyCreated ? 'Sí' : 'No'}
+
+${contextInfo}
+${profileSection}
+
+REGLAS:
+1. Habla en español mexicano natural
+2. Sé directo pero empático
+3. Siempre incluye un call-to-action concreto
+4. No uses más de 3 oraciones
+5. Adapta la plantilla al contexto proporcionado
+6. NO uses etiquetas como [INSIGHT] o [DIRECCIÓN] — solo el mensaje directo`
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      {
+        role: 'user' as const,
+        content: `Genera el mensaje de cierre usando la técnica "${technique}" con score ${assessment.closabilityScore}.`,
+      },
+    ]
+
+    try {
+      const result = await chatWithAI(messages, 'groq', undefined, {
+        temperature: 0.7,
+        maxTokens: 512,
+      })
+
+      return result.content.trim()
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error)
+      console.error('[ClosingEngine] LLM generation failed:', errMsg)
+
+      // Fallback: use template
+      if (techniqueConfig) {
+        return techniqueConfig.messageTemplate
+          .replace(/\{\{name\}\}/g, context?.contactName || 'amigo')
+          .replace(/\{\{model\}\}/g, context?.vehicleModel || 'vehículo')
+          .replace(/\{\{color\}\}/g, context?.vehicleColor || 'color')
+          .replace(/\{\{down_payment\}\}/g, (context?.downPayment || 50000).toString())
+          .replace(/\{\{monthly\}\}/g, (context?.monthlyPayment || 6000).toString())
+          .replace(/\{\{deadline\}\}/g, context?.deadline || 'este viernes')
+          .replace(/\{\{units\}\}/g, (context?.remainingUnits || 3).toString())
+      }
+
+      return '¿Te gustaría agendar una cita para ver el vehículo? Podemos encontrar la mejor opción de financiamiento para ti.'
     }
   }
 

@@ -4,10 +4,14 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
-import bcrypt from 'bcryptjs'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
 import { validateBody, registerSchema } from '@/lib/validations'
+
+function hashPassword(plain: string): string {
+  return crypto.createHash('sha256').update(plain).digest('hex')
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Hash password ──────────────────────────────────────
-    const hashedPassword = await bcrypt.hash(password, 12)
+    const hashedPassword = hashPassword(password)
 
     // ─── Create User + Workspace + Membership ──────────────
     const user = await db.user.create({

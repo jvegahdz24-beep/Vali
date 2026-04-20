@@ -13,6 +13,7 @@ import { enqueueMessage } from '@/lib/ai/conversation-middleware'
 import { processMessageCore } from '@/lib/ai/message-processor'
 import { DbAuthState } from './db-auth-state'
 import { detectMedia, downloadAndSaveMedia } from './media-handler'
+import { isDuplicateMessage } from './shared-dedup'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -93,6 +94,10 @@ class WhatsAppManager {
   private _reconnectAttempts = 0
   private _maxReconnectAttempts = 10
 
+  // FIX P5: Per-phone processing lock to prevent concurrent processing
+  // Dedup is now handled by shared-dedup.ts (used by both connection + webhook)
+  private _processingLocks = new Map<string, boolean>() // phone -> isProcessing
+
   // Event listeners (in-memory, polled by frontend)
   private statusListeners: StatusEventCallback[] = []
   private qrListeners: QREventCallback[] = []
@@ -100,6 +105,21 @@ class WhatsAppManager {
 
   constructor() {
     ensureAuthDir()
+  }
+
+  // ─── Processing Lock (FIX P5) ────────────────────────────
+
+  private async acquireProcessingLock(phone: string): Promise<boolean> {
+    if (this._processingLocks.get(phone)) {
+      console.log(`[WhatsApp] Processing lock held for ${phone}, skipping`)
+      return false
+    }
+    this._processingLocks.set(phone, true)
+    return true
+  }
+
+  private releaseProcessingLock(phone: string) {
+    this._processingLocks.delete(phone)
   }
 
   // ─── Event Subscription ─────────────────────────────────────
@@ -328,6 +348,10 @@ class WhatsAppManager {
           if (remoteJid.includes('@broadcast')) return
 
           if (m.type !== 'notify') return
+
+          // FIX P5: Dedup check — shared dedup (connection + webhook)
+          const messageId = msg.key.id
+          if (messageId && isDuplicateMessage(messageId)) return
 
           const phone = remoteJid.split('@')[0]
           const pushName = msg.pushName || undefined
@@ -614,6 +638,10 @@ class WhatsAppManager {
       isMediaOnly?: boolean
     }
   ): Promise<void> {
+    // FIX P5: Acquire per-phone processing lock to prevent race conditions
+    const acquired = await this.acquireProcessingLock(phone)
+    if (!acquired) return
+
     const pipelineStart = Date.now()
 
     try {
@@ -660,26 +688,33 @@ class WhatsAppManager {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error)
       console.error(`[WhatsApp] Pipeline failed for ${phone} after ${Date.now() - pipelineStart}ms:`, errMsg)
+    } finally {
+      // FIX P5: Always release the processing lock
+      this.releaseProcessingLock(phone)
     }
   }
 }
 
 // ─── Singleton Instantiation ──────────────────────────────────
 // Persist across hot-reloads using globalThis. Only reuse the
-// instance if it has an active WhatsApp connection (which would
-// be lost if we created a new one). Otherwise create fresh.
+// instance if it has an ACTIVE socket (not just a stale _connected flag).
+// FIX P2: Use isSocketAlive() to detect ghost connections from hot-reload.
 
 const globalForWhatsApp = globalThis as unknown as {
   whatsAppManager?: WhatsAppManager
 }
 
-// If there's an existing connected instance, keep it to preserve
-// the live WhatsApp socket. Otherwise create a new instance.
 let whatsAppManager: WhatsAppManager
 
-if (globalForWhatsApp.whatsAppManager?.isConnected()) {
+if (globalForWhatsApp.whatsAppManager?.isSocketAlive()) {
+  // Reuse existing instance only if the underlying WebSocket is truly OPEN
   whatsAppManager = globalForWhatsApp.whatsAppManager
+  console.log('[WhatsApp] Reusing live instance from hot-reload')
 } else {
+  // Stale or dead instance — create fresh
+  if (globalForWhatsApp.whatsAppManager) {
+    console.log('[WhatsApp] Discarding stale instance (socket dead or not connected)')
+  }
   whatsAppManager = new WhatsAppManager()
 }
 

@@ -54,6 +54,8 @@ const viewTitles: Record<ViewType, string> = {
   automations: 'Automatizaciones',
   team: 'Equipo',
   developer: 'Panel de Desarrollador',
+  valiguard: 'ValiGuard',
+  admin: 'Admin',
   settings: 'Configuración',
 }
 
@@ -189,7 +191,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
   const userImage = user?.image
 
   return (
-    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6 shrink-0">
+    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6 shrink-0" style={{ backgroundColor: '#ffffff' }}>
       {/* Left side */}
       <div className="flex items-center gap-3">
         <Button

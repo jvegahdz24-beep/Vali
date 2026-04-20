@@ -14,11 +14,13 @@ import { AnalyticsView } from '@/components/dashboard/analytics-view'
 import { AutomationsView } from '@/components/dashboard/automations-view'
 import { DeveloperView } from '@/components/dashboard/developer-view'
 import { SettingsView } from '@/components/dashboard/settings-view'
+import { ValiGuardView } from '@/components/dashboard/valiguard-view'
+import { AdminView } from '@/components/dashboard/admin-view'
 import { OnboardingWizard } from '@/components/dashboard/onboarding-wizard'
 import { Loader2, Database, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings'
+export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin'
 
 // Helper: fetch with timeout
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
@@ -201,6 +203,8 @@ export default function Home() {
       {activeView === 'analytics' && <AnalyticsView workspaceId={workspaceId} />}
       {activeView === 'automations' && <AutomationsView workspaceId={workspaceId} />}
       {activeView === 'developer' && <DeveloperView workspaceId={workspaceId} />}
+      {activeView === 'valiguard' && <ValiGuardView workspaceId={workspaceId} />}
+      {activeView === 'admin' && <AdminView workspaceId={workspaceId} />}
       {activeView === 'settings' && <SettingsView workspaceId={workspaceId} />}
 
       {/* Onboarding Wizard Overlay */}

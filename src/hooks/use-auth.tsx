@@ -82,16 +82,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      // FIX: Add AbortController with timeout (15s) to prevent infinite hang
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15_000)
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        signal: controller.signal,
       })
 
-      const data = await res.json()
+      clearTimeout(timeoutId)
+
+      // FIX: Safely parse JSON — if server returns non-JSON (e.g. HTML error page),
+      // catch the parse error and return a meaningful message
+      let data: Record<string, unknown>
+      try {
+        data = await res.json()
+      } catch {
+        return { success: false, error: `Error del servidor (HTTP ${res.status}). Reinicia la aplicación.` }
+      }
 
       if (!res.ok) {
-        return { success: false, error: data.error || 'Error al iniciar sesión' }
+        return { success: false, error: (data.error as string) || 'Error al iniciar sesión' }
       }
 
       if (data.success) {
@@ -101,8 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       return { success: false, error: 'Error desconocido' }
-    } catch {
-      return { success: false, error: 'Error de conexión. Intenta de nuevo.' }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return { success: false, error: 'La solicitud tardó demasiado. Verifica tu conexión e intenta de nuevo.' }
+      }
+      return { success: false, error: 'Error de conexión. Verifica que el servidor esté ejecutándose.' }
     }
   }, [fetchUser])
 

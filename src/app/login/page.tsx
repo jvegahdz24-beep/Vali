@@ -222,12 +222,12 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {/* Entrar como Demo */}
+            {/* Entrada rápida */}
             <button
               type="button"
               onClick={() => {
-                setEmail('demo@valiflow.com')
-                setPassword('demo1234')
+                setEmail('jvegahdz24@gmail.com')
+                setPassword('valiflow2026')
                 setTimeout(() => {
                   const form = document.querySelector('form') as HTMLFormElement
                   if (form) form.requestSubmit()

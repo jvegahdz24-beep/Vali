@@ -21,6 +21,7 @@ import { db } from '@/lib/db'
 import { RevenueEngine } from '@/lib/ai'
 import { preProcess, postProcess, injectContext } from '@/lib/ai/conversation-middleware'
 import { autoCreateOrUpdateDeal } from '@/lib/crm/auto-deal'
+import { leadProfiler } from '@/lib/ai/lead-profiler'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -126,37 +127,41 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
   console.log(`[Core:2] ✅ Workspace: ${workspace.name}`)
 
-  // ── 2. Find or create contact ──
-  // FIX P0: Search ALL contacts by phone (including archived) to prevent duplicates.
-  // Previously, filtering `status: { not: 'archived' }` would create a new contact
-  // when an archived one already existed for the same phone number.
+  // ── 2. Find or create contact (FIX P0: atomic upsert) ──
+  // Uses DB-level unique constraint on (workspaceId, phone) to prevent
+  // race-condition duplicates. Two concurrent requests for the same phone
+  // cannot both create contacts — one will upsert, the other will update.
   let contact
   if (forcedContactId) {
     contact = await db.contact.findUnique({ where: { id: forcedContactId } })
-  } else {
-    contact = await db.contact.findFirst({
-      where: { workspaceId: workspace.id, phone },
+  } else if (phone) {
+    contact = await db.contact.upsert({
+      where: {
+        contact_workspace_phone_key: { workspaceId: workspace.id, phone },
+      },
+      update: {
+        lastMessageAt: new Date(),
+        // Re-activate archived contacts on new message
+        status: 'active',
+        // Update name if we have a better one (pushName from WhatsApp)
+        ...(pushName && pushName.length >= 2 && pushName !== 'Contacto WhatsApp'
+          ? { firstName: pushName }
+          : {}),
+      },
+      create: {
+        workspaceId: workspace.id,
+        firstName: pushName || 'Contacto WhatsApp',
+        phone,
+        source: channel,
+        tags: JSON.stringify(['whatsapp_incoming']),
+      },
     })
-    if (!contact) {
-      contact = await db.contact.create({
-        data: {
-          workspaceId: workspace.id,
-          firstName: pushName || 'Contacto WhatsApp',
-          phone,
-          source: channel,
-          tags: JSON.stringify(['whatsapp_incoming']),
-        },
-      })
-    } else {
-      // Re-activate archived contacts and update timestamp
-      await db.contact.update({
-        where: { id: contact.id },
-        data: {
-          lastMessageAt: new Date(),
-          ...(contact.status === 'archived' ? { status: 'active' } : {}),
-        },
-      })
-    }
+  } else {
+    // No phone number — fallback to findFirst (shouldn't happen for WhatsApp)
+    contact = await db.contact.findFirst({
+      where: { workspaceId: workspace.id },
+      orderBy: { createdAt: 'desc' },
+    })
   }
 
   // ── 3. Find or create conversation ──
@@ -246,6 +251,41 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   // Middleware: inject context block after system prompt
   const enrichedMessages = injectContext(messages, middlewareResult.contextBlock)
 
+  // ── 7b. DIB: Silent Lead Profiling (non-blocking) ──
+  let leadProfileContext: string | undefined
+  if (contact) {
+    try {
+      // Get messages with timestamps for avg response time calculation
+      const messagesWithDates = await db.message.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+        select: { content: true, senderType: true, createdAt: true },
+      })
+
+      const profiledMessages = messagesWithDates.map((m) => ({
+        role: m.senderType === 'contact' ? 'user' : 'assistant',
+        content: m.content,
+        createdAt: m.createdAt,
+      }))
+
+      const profile = await leadProfiler.profileContact({
+        contactId: contact.id,
+        workspaceId: workspace.id,
+        messageText: text,
+        allMessages: profiledMessages,
+        currentScore: contact.leadScore,
+      })
+
+      if (profile) {
+        leadProfileContext = leadProfiler.buildProfileContext(profile)
+        console.log(`[Core:DIB] Profile built: archetype=${profile.archetype} temp=${profile.temperature}`)
+      }
+    } catch (profileErr) {
+      console.warn('[Core:DIB] Lead profiling failed (non-critical):', profileErr instanceof Error ? profileErr.message : profileErr)
+    }
+  }
+
   // ── 8. Revenue Engine (AI pipeline) ──
   console.log(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
   console.log(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
@@ -318,6 +358,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     dynamicContext,
     conversationHistory: enrichedMessages.slice(0, -1),
     conversationId: conversation.id,
+    leadProfileContext, // DIB: pass profile context for personalization
   })
 
   // ── 9. Extract + post-process AI response ──

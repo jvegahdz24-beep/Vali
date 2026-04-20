@@ -123,11 +123,27 @@ interface InboxProps {
 }
 
 const quickReplies = [
-  '¿Tiene financiamiento disponible?',
-  'Quiero agendar una prueba de manejo',
-  '¿Cuál es el enganche mínimo?',
-  'Necesito una cotización personalizada',
+  'Agendar cita',
+  'Enviar precios',
+  'Seguimiento 24h',
+  'Gracias por contactarnos',
 ]
+
+// System event messages shown in chat flow
+const systemEvents = [
+  { icon: '⚡', text: 'Lead nuevo detectado' },
+  { icon: '🧠', text: 'Arquetipo: Comprador Urgente' },
+  { icon: '📅', text: 'Cita agendada para mañana 10:00' },
+  { icon: '📊', text: 'Score actualizado: 85 → 92' },
+  { icon: '🔔', text: 'Seguimiento automático programado' },
+]
+
+function getScoreTextColor(score: number): string {
+  if (score >= 80) return 'text-emerald-600'
+  if (score >= 60) return 'text-yellow-600'
+  if (score >= 40) return 'text-orange-600'
+  return 'text-red-600'
+}
 
 const commonEmojis = [
   '👍', '👏', '😊', '🙏', '🎉', '❤️', '🔥', '💯',
@@ -907,6 +923,14 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                       {truncate(conv.lastMessagePreview || 'Sin mensajes', 45)}
                     </p>
                   </div>
+                  {/* Reactivation dot for cold leads */}
+                  {(() => {
+                    const daysSince = Math.floor((Date.now() - new Date(conv.lastMessageAt).getTime()) / 86400000)
+                    const isCold = daysSince > 3
+                    return isCold ? (
+                      <span className="mt-2 h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" title="Lead frío · Reactivar" />
+                    ) : null
+                  })()}
                   {conv.unreadCount > 0 && (
                     <span className="mt-1 h-5 min-w-5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold px-1.5">
                       {conv.unreadCount}
@@ -1121,6 +1145,21 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                 </div>
               ) : (
                 <div className="max-w-2xl mx-auto space-y-3">
+                  {/* System Event Messages */}
+                  {messages.length > 0 && (
+                    <div className="flex justify-center">
+                      <div className="bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-3 py-1 text-xs text-center max-w-fit">
+                        ⚡ Lead nuevo detectado
+                      </div>
+                    </div>
+                  )}
+                  {messages.length > 3 && (
+                    <div className="flex justify-center">
+                      <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-full px-3 py-1 text-xs text-center max-w-fit">
+                        🧠 Arquetipo detectado: Comprador Urgente
+                      </div>
+                    </div>
+                  )}
                   {messages.map((msg) => (
                     <div
                       key={msg.id}
@@ -1225,7 +1264,7 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                       <button
                         key={reply}
                         onClick={() => setMessageInput(reply)}
-                        className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                        className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
                       >
                         {reply}
                       </button>
