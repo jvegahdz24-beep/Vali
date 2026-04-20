@@ -4,17 +4,28 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
 import { validateBody, registerSchema } from '@/lib/validations'
+import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 function hashPassword(plain: string): string {
-  return crypto.createHash('sha256').update(plain).digest('hex')
+  return bcrypt.hashSync(plain, 10)
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 3 registrations per minute per IP
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rl = rateLimit(`register:${clientIp}`, RATE_LIMITS.register.limit, RATE_LIMITS.register.windowMs)
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Espera un momento.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+      )
+    }
+
     const body = await req.json()
 
     const validation = validateBody(registerSchema, body)
@@ -61,7 +72,7 @@ export async function POST(req: NextRequest) {
         name: `${name.trim()} Workspace`,
         slug: uniqueSlug,
         ownerId: user.id,
-        industry: 'automotive',
+        industry: 'services',
         plan: 'free',
         maxContacts: 100,
         maxAgents: 1,

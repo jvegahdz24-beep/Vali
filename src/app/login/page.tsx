@@ -11,7 +11,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  Car,
+  Bot,
   AlertCircle,
   CheckCircle,
 } from 'lucide-react'
@@ -79,7 +79,7 @@ export default function LoginPage() {
         {/* Logo / Branding */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
-            <Car className="h-8 w-8 text-white" />
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiAutoFlow</h1>
           <p className="text-sm text-gray-500 mt-1">CRM Inteligente con IA</p>

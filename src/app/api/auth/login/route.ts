@@ -5,24 +5,25 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { validateBody, loginSchema } from '@/lib/validations'
 
-// Synchronous SHA-256 using Node.js crypto (fast, no async overhead, no bcrypt OOM)
-function sha256hex(str: string): string {
-  return crypto.createHash('sha256').update(str).digest('hex')
-}
-
-// Compare password: SHA-256 only (bcrypt removed for memory safety)
+// Compare password using bcrypt (supports both legacy SHA-256 and new bcrypt hashes)
 function verifyPassword(password: string, storedHash: string): boolean {
-  const passwordHash = sha256hex(password)
-  return passwordHash === storedHash
+  // bcrypt hashes start with $2a$, $2b$, or $2y$
+  if (storedHash.startsWith('$2')) {
+    return bcrypt.compareSync(password, storedHash)
+  }
+  // Legacy SHA-256 fallback (for accounts created before migration)
+  const legacyHash = crypto.createHash('sha256').update(password).digest('hex')
+  return legacyHash === storedHash
 }
 
-// Demo credentials (hardcoded for quick access)
-const DEMO_EMAIL = 'jvegahdz24@gmail.com'
-const DEMO_PASSWORD_SHA256 = sha256hex('valiflow2026')
+// Demo credentials (only available in non-production environments)
+const DEMO_EMAIL = process.env.NODE_ENV !== 'production' ? 'jvegahdz24@gmail.com' : ''
+const DEMO_PASSWORD = process.env.NODE_ENV !== 'production' ? 'valiflow2026' : ''
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,8 +52,8 @@ export async function POST(req: NextRequest) {
     // Compare password (SHA-256)
     const isPasswordValid = verifyPassword(password, user.password)
 
-    // Also accept demo credentials directly (backup in case DB hash is stale)
-    const isDemoFallback = normalizedEmail === DEMO_EMAIL && sha256hex(password) === DEMO_PASSWORD_SHA256
+    // Also accept demo credentials in non-production environments (backup in case DB hash is stale)
+    const isDemoFallback = DEMO_EMAIL && normalizedEmail === DEMO_EMAIL && password === DEMO_PASSWORD
 
     if (!isPasswordValid && !isDemoFallback) {
       return NextResponse.json(

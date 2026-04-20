@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { validateBody, passwordResetRequestSchema, passwordResetSchema } from '@/lib/validations'
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { cookies } from 'next/headers'
+import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 function hashPassword(plain: string): string {
-  return crypto.createHash('sha256').update(plain).digest('hex')
+  return bcrypt.hashSync(plain, 10)
 }
 
 async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {
@@ -41,7 +43,7 @@ async function sendPasswordResetEmail(email: string, resetToken: string, userNam
               </div>
               <p style="font-size: 14px; color: #6b7280;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
               <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
-                <p style="font-size: 12px; color: #9ca3af;">ValiAutoFlow — WhatsApp + IA para la industria automotriz</p>
+                <p style="font-size: 12px; color: #9ca3af;">ValiAutoFlow — Automatización inteligente con WhatsApp + IA para Pymes</p>
               </div>
             </div>
           `,
@@ -65,6 +67,16 @@ async function sendPasswordResetEmail(email: string, resetToken: string, userNam
 // POST /api/auth/reset-password — Request password reset
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 3 password reset requests per minute per IP
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rl = rateLimit(`reset-pw:${clientIp}`, RATE_LIMITS.auth.limit, RATE_LIMITS.auth.windowMs)
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Espera un momento.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+      )
+    }
+
     const body = await req.json()
 
     // Check if this is a reset request (has email) or actual reset (has token)

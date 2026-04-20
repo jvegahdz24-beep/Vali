@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const body = await req.json()
-    const { name, slug, industry = 'automotive', logo } = body
+    const { name, slug, industry = 'services', logo } = body
 
     if (!name) {
       return Response.json(

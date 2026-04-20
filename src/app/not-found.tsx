@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Car, SearchX } from 'lucide-react'
+import { Bot, SearchX } from 'lucide-react'
 
 export default function NotFound() {
   return (
@@ -11,7 +11,7 @@ export default function NotFound() {
             <SearchX className="h-10 w-10 text-slate-400" />
           </div>
           <div className="w-14 h-14 rounded-xl bg-emerald-600 flex items-center justify-center mb-3">
-            <Car className="h-8 w-8 text-white" />
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
             ValiAutoFlow

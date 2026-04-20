@@ -499,8 +499,8 @@ export default function LandingPage() {
               <span className="text-sm font-bold">ValiAutoFlow</span>
             </div>
             <div className="flex items-center gap-6">
-              <a href="/signup" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Privacidad</a>
-              <a href="/signup" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Términos</a>
+              <a href="/privacy" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Privacidad</a>
+              <a href="/terms" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Términos</a>
               <a href="mailto:soporte@valiflow.com" className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Contacto</a>
             </div>
             <p className="text-xs text-zinc-400">

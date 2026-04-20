@@ -21,12 +21,18 @@ export const metadata: Metadata = {
   keywords: ["CRM", "WhatsApp", "IA", "automatización", "SaaS", "Pymes", "México", "LATAM", "chatbot"],
   authors: [{ name: "ValiAutoFlow" }],
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>",
+    icon: [
+      { url: "/favicon.png", sizes: "1024x1024", type: "image/png" },
+    ],
+    apple: [
+      { url: "/favicon.png", sizes: "1024x1024", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "ValiAutoFlow — CRM Inteligente con IA",
     description: "Automatiza flujos de negocio con WhatsApp + IA para Pymes en México y LATAM.",
     type: "website",
+    images: [{ url: "/og-image.png", width: 1344, height: 768, alt: "ValiAutoFlow — CRM Inteligente con IA" }],
   },
   twitter: {
     card: "summary_large_image",

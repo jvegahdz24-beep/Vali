@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, Eye, EyeOff, Car, AlertCircle, CheckCircle } from 'lucide-react'
+import { Loader2, Eye, EyeOff, Bot, AlertCircle, CheckCircle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -156,7 +156,7 @@ export default function SignupPage() {
         {/* Logo / Branding */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
-            <Car className="h-8 w-8 text-white" />
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ValiAutoFlow</h1>
           <p className="text-sm text-gray-500 mt-1">CRM Inteligente con IA</p>

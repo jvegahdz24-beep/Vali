@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Car, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { Bot, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 
 export default function ResetPasswordPage() {
   const searchParams = useSearchParams()
@@ -78,7 +78,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-600/25">
-            <Car className="h-8 w-8 text-white" />
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">ValiAutoFlow</h1>
         </div>

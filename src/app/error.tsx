@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, Car } from 'lucide-react'
+import { AlertTriangle, Bot } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ErrorPage({
@@ -24,7 +24,7 @@ export default function ErrorPage({
             <AlertTriangle className="h-10 w-10 text-red-500" />
           </div>
           <div className="w-14 h-14 rounded-xl bg-emerald-600 flex items-center justify-center mb-3">
-            <Car className="h-8 w-8 text-white" />
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
             ValiAutoFlow
