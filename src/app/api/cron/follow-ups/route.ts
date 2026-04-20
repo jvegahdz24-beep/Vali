@@ -8,7 +8,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { whatsAppManager } from '@/lib/whatsapp/connection'
-import { runReactivationCycle } from '@/lib/ai/reactivation-engine'
+import { reactivationEngine } from '@/lib/ai/reactivation-engine'
+
+// Wrapper function for cron compatibility
+async function runReactivationCycle(workspaceId: string): Promise<{
+  processed: number
+  results: Array<{ whatsappSent: boolean }>
+  errors: string[]
+}> {
+  try {
+    const results = await reactivationEngine.findAndReactivate(workspaceId)
+    return {
+      processed: results.length,
+      results: results.map(r => ({ whatsappSent: false, contactId: r.contactId })),
+      errors: [],
+    }
+  } catch (err) {
+    return {
+      processed: 0,
+      results: [],
+      errors: [err instanceof Error ? err.message : 'Unknown error'],
+    }
+  }
+}
 
 // ─── Cron Security ────────────────────────────────────────────
 // In production, validate via CRON_SECRET header or bearer token
