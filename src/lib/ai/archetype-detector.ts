@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Customer Archetype Detection
+// ValiFlow Pro — Customer Archetype Detection
 // Detects customer profiles silently from conversation
 // ═══════════════════════════════════════════════════════════════
 
@@ -21,33 +21,33 @@ const ARCHETYPE_PATTERNS: Record<string, {
   tone: string
 }> = {
   practico: {
-    keywords: ['gasto', 'gasolina', 'económico', 'economico', 'barato', 'precio', 'cuánto gasta', 'mantenimiento', 'rendimiento', 'km/l', 'litro', 'combustible', 'ahorro', 'costo por', 'mensualidad', 'comparación', 'comparacion'],
-    models: ['Grand i10', 'HB20'],
+    keywords: ['gasto', 'inversión', 'económico', 'economico', 'barato', 'precio', 'cuánto gasta', 'mantenimiento', 'rendimiento', 'costo', 'ahorro', 'costo por', 'mensualidad', 'comparación', 'comparacion'],
+    models: ['Plan Básico', 'Plan Estándar'],
     trigger: 'La mayoría se enfoca en precio, pero el verdadero ahorro está en el mantenimiento',
     tone: 'Datos concretos, sin rodeos. Enfocado en números y comparativas.',
   },
   familiar: {
     keywords: ['familia', 'hijos', 'esposa', 'esposo', 'mujer', 'niños', 'bebé', 'bebe', 'niña', 'seguridad', 'espacio', 'maletas', 'sillas', 'viaje', 'carretera', 'vacaciones', 'cómodo', 'comodo', 'amplio', 'cinco personas', '5 personas'],
-    models: ['Creta', 'Creta Grand'],
+    models: ['Plan Familiar', 'Plan Premium'],
     trigger: 'Cuando viajas con más personas, el espacio y la seguridad cambian todo',
     tone: 'Cálido, enfocado en experiencia familiar y tranquilidad.',
   },
   aspiracional: {
     keywords: ['diseño', 'bonito', 'bonita', 'elegante', 'potente', 'deportivo', 'lujo', 'premium', 'nuevo', 'último modelo', 'diferente', 'llama atención', 'tecnología', 'pantalla', 'camara', 'cámara', 'color', 'estilo'],
-    models: ['Elantra', 'Tucson N Line'],
-    trigger: 'Hay modelos que no solo manejas... se disfrutan',
+    models: ['Plan Elite', 'Plan VIP'],
+    trigger: 'Hay opciones que no solo se usan... se disfrutan',
     tone: 'Experiencial, emocional, con personalidad.',
   },
   estrategico: {
     keywords: ['uber', 'diDi', 'cabify', 'plataforma', 'renta', 'invertir', 'retorno', 'negocio', 'flota', 'empresa', 'comercial', 'depreciación', 'seguro', 'gasto fiscal', 'deducible', 'comprobante', 'factura'],
-    models: ['Grand i10', 'HB20'],
+    models: ['Plan Empresarial', 'Plan Corporate'],
     trigger: 'Lo importante no es cuánto cuesta... sino cuánto te regresa',
     tone: 'Analítico, datos, sin emoción. Enfocado en ROI.',
   },
   consciente: {
-    keywords: ['híbrido', 'hibrido', 'eléctrico', 'electrico', 'contaminación', 'contaminacion', 'emisiones', 'eco', 'sustentable', 'medio ambiente', 'batería', 'bateria', 'carga', 'eficiente', 'green', 'verde'],
-    models: ['Elantra Híbrido', 'Tucson Híbrida'],
-    trigger: 'Los híbridos están en otro nivel tanto en consumo como en experiencia',
+    keywords: ['sustentable', 'contaminación', 'contaminacion', 'emisiones', 'eco', 'medio ambiente', 'eficiente', 'green', 'verde', 'reciclaje', 'responsabilidad'],
+    models: ['Plan Verde', 'Plan Sustentable'],
+    trigger: 'Las opciones sustentables están en otro nivel tanto en costo como en experiencia',
     tone: 'Informado, técnico pero accesible.',
   },
 }

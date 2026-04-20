@@ -81,3 +81,34 @@ Stage Summary:
 - Supabase PostgreSQL connected (aws-1-us-east-2)
 - Google OAuth configured but not yet tested (user needs to try)
 - Server running via dev.sh with auto-restart
+
+---
+Task ID: 2
+Agent: Super Z (Main) + Subagents
+Task: Clean automotive content and seed full 256 records
+
+Work Log:
+- Comprehensive audit of 150+ automotive references across 20+ files
+- Cleaned 4 system prompts in constants.ts (JHON, Professional, Friendly, Aggressive) — all now industry-agnostic
+- Cleaned conversation-state.ts: vehiculo→producto field, removed 40+ car model patterns, removed automotriz/agencia references
+- Cleaned agent-router.ts: replaced car models with generic product/service keywords, removed automotive venues
+- Cleaned AI engines (follow-up, revenue, closing, personalities, archetype-detector, lead-profiler, reactivation): ~150+ replacements
+- Cleaned automation-templates.ts: [AGENCIA]→[EMPRESA], [VEHICULO]→[PRODUCTO], 17 template edits
+- Cleaned UI components: onboarding-wizard, settings-view, admin-view, chat-demo, landing page
+- Changed mock company names from auto dealerships to SaaS companies
+- Added more industry options (Technology, Health, Education)
+- Changed default industry from automotive to services
+- Updated workspace: "AutoMax Guadalajara" → "ValiAutoFlow" (industry: services)
+- Seeded full demo data: 239 records (21 contacts, 16 conversations, 76 messages, 3 agents, 13 deals, 51 events, etc.)
+- Fixed syntax error in personalities.ts (double comma)
+- Build: 100% SUCCESS
+- Server restarted, all APIs verified working
+- WhatsApp auto-reconnected
+
+Stage Summary:
+- All automotive hard-coded content removed from AI prompts, routing, templates, and UI
+- System is now fully industry-agnostic (works for any business sector)
+- "Automotriz" remains as one selectable industry option in settings (not default)
+- 239 records seeded across 18 tables
+- WhatsApp connected, AI agent responding
+- Dashboard loads with real data (21 contacts, 16 conversations, 3 agents, 13 deals)

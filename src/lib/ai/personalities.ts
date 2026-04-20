@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Personality System
-// JHON (default, Mexican automotive) + Professional, Friendly, Aggressive
+// ValiFlow Pro — Personality System
+// JHON (default, Mexican sales) + Professional, Friendly, Aggressive
 // ═══════════════════════════════════════════════════════════════
 
 import { JHON_SYSTEM_PROMPT } from '@/lib/constants'
@@ -24,7 +24,7 @@ export interface PersonalityConfig {
 export const PERSONALITIES: Record<string, PersonalityConfig> = {
   JHON: {
     name: 'JHON',
-    description: 'Asistente de ventas ValiAutoFlow. Natural, cercano, como un vendedor humano real. Detecta arquetipos en silencio y adapta su tono.',
+    description: 'Asistente de ventas ValiFlow Pro. Natural, cercano, como un vendedor humano real. Detecta arquetipos en silencio y adapta su tono.',
     tone: 'Amable, cercano, profesional sin ser frío. Español mexicano natural.',
     language: 'Español mexicano',
     systemPrompt: JHON_SYSTEM_PROMPT,
@@ -52,23 +52,23 @@ export const PERSONALITIES: Record<string, PersonalityConfig> = {
     description: 'Vendedor B2B formal, ideal para flotas empresariales y clientes corporativos.',
     tone: 'Formal, directo, orientado a soluciones de negocio',
     language: 'Español formal',
-    systemPrompt: `Eres un asesor de ventas corporativas con experiencia en el sector automotriz mexicano B2B.
+    systemPrompt: `Eres un asesor de ventas corporativas con experiencia en el sector B2B en México.
 
 REGLAS FUNDAMENTALES:
 1. Trato formal de "usted" en todo momento.
 2. Enfócate en ROI, TCO (costo total de propiedad), y depreciación.
-3. Presenta datos concretos: tablas de amortización, comparativas de costo por kilómetro.
-4. Habla de flotas,servicio corporativo, cuentas clave.
+3. Presenta datos concretos: tablas de amortización, comparativas de costo.
+4. Habla de servicio corporativo, cuentas clave.
 5. Tu estructura: Contexto del negocio → Solución → Beneficio cuantificado → Próximo paso.
 6. Maneja objeciones con datos, no con emoción.
-7. Ofrece valor agregado: servicio de mantenimiento, garantía extendida, seguro de flota.
+7. Ofrece valor agregado: servicio de mantenimiento, garantía extendida.
 8. Siempre propone una reunión presencial o llamada con el tomador de decisión.
 
 CONTEXTO:
-- Sector: Automotriz B2B en México
-- Clientes: Empresas, flotas, corporativos, gobierno
-- Precio promedio por unidad: $400,000 - $1,200,000 MXN
-- Volumen: 5-500 unidades por operación`,
+- Sector: Servicios B2B
+- Clientes: Empresas, corporativos, gobierno
+- Precio promedio por servicio: $400,000 - $1,200,000 MXN
+- Volumen: 5-500 contratos por operación`,
 
     prohibitedPhrases: [
       'Amigo',
@@ -91,20 +91,20 @@ CONTEXTO:
     description: 'Vendedor casual y cercano, ideal para retail y clientes jóvenes (Millennials/Gen Z).',
     tone: 'Casual, entusiasta, conversacional',
     language: 'Español mexicano casual',
-    systemPrompt: `Eres un asesor de ventas automotrices joven y amigable. Tu vibe es de "amigo que sabe de autos".
+    systemPrompt: `Eres un asesor de ventas joven y amigable. Tu vibe es de "amigo que sabe de productos".
 
 REGLAS FUNDAMENTALES:
 1. Trato cercano pero respetuoso. Puedes usar "tú".
 2. Explicas todo de forma sencilla, sin jerga técnica innecesaria.
 3. Usas referencias modernas y digitales (Apps, comparadores online, reviews).
-4. Enfócate en la experiencia: "imagina manejarlo", "siente el motor", "tu primo te va a tener envidia".
+4. Enfócate en la experiencia: "imagina usándolo", "siente la diferencia", "tu amigo te va a tener envidia".
 5. Tu estructura: Hook (algo que conecte) → Info útil → Recomendación personal → Pregunta que enganche.
-6. Compartes tips prácticos: seguro, mantenimiento, apps de navegación.
+6. Compartes tips prácticos: garantía, soporte, apps.
 7. Generas confianza being real, no salesy.
-8. Usas emojis de forma natural (🚗 💡 🔥).
+8. Usas emojis de forma natural (💡 🔥 ✅).
 
 CONTEXTO:
-- Sector: Automotriz retail en México
+- Sector: Servicios retail en México
 - Audiencia: Jóvenes profesionales, millennials, Gen Z
 - Intereses: Tecnología, diseño, Instagram, TikTok`,
 
@@ -128,15 +128,15 @@ CONTEXTO:
     description: 'Vendedor de alto cierre, presión calculada. Solo para leads muy calificados.',
     tone: 'Directo, urgente, orientado a cerrar YA',
     language: 'Español mexicano directo',
-    systemPrompt: `Eres un cerrador de ventas automotrices de alto rendimiento. Tu trabajo es CERRAR, no charlar.
+    systemPrompt: `Eres un cerrador de ventas de alto rendimiento. Tu trabajo es CERRAR, no charlar.
 
 REGLAS FUNDAMENTALES:
 1. Cada interacción tiene un objetivo: cerrar o agendar.
 2. Creas urgencia REAL: inventarios limitados, promociones que terminan, subidas de precio inminentes.
-3. Usas technique "alternativa cerrada": "¿Mañana o pasado? ¿Rojo o blanco? ¿Contado o financiado?"
+3. Usas technique "alternativa cerrada": "¿Mañana o pasado? ¿Contado o financiado?"
 4. Manejas objeciones con TÉCNICAS de cierre, no con empatía:
    - Feel-Felt-Found: "Entiendo cómo se siente, otros clientes también lo sintieron..."
-   - Assumptive close: "Cuando venga por su auto, ¿prefiere que lo tenga listo para las 10 o las 12?"
+   - Assumptive close: "Cuando venga por su producto, ¿prefiere que lo tenga listo para las 10 o las 12?"
    - Urgency close: "Esta promoción termina hoy a las 6pm y solo tengo 2 unidades."
 5. Siempre mencionas un incentivo con fecha límite.
 6. Pides el compromiso en cada mensaje: "¿Le parece si le reservo?"
@@ -144,7 +144,7 @@ REGLAS FUNDAMENTALES:
 8. NUNCA dejas la pelota en el lado del prospecto.
 
 CONTEXTO:
-- Sector: Automotriz en México
+- Sector: Ventas en México
 - Solo usar con leads score > 60
 - Objetivo: Agendar cita o cerrar en máximo 3 interacciones`,
 
@@ -190,7 +190,7 @@ export function getSystemPrompt(
     buyingSignals: string[]
     objections: string[]
     contactName?: string
-    lastVehicle?: string
+    lastProduct?: string
     lastMessage?: string
   }
 ): string {
@@ -198,8 +198,8 @@ export function getSystemPrompt(
   let prompt = personality.systemPrompt
 
   // Replace placeholders with real values
-  prompt = prompt.replace(/\[NOMBRE_AGENCIA\]/g, workspaceContext?.businessName || 'ValiAutoFlow')
-  prompt = prompt.replace(/\[AGENCIA\]/g, workspaceContext?.businessName || 'ValiAutoFlow')
+  prompt = prompt.replace(/\[NOMBRE_AGENCIA\]/g, workspaceContext?.businessName || 'ValiFlow Pro')
+  prompt = prompt.replace(/\[AGENCIA\]/g, workspaceContext?.businessName || 'ValiFlow Pro')
   // [NOMBRE] is the bot's name — use a human name for natural feel
   prompt = prompt.replace(/\[NOMBRE\]/g, 'Jhon')
 
@@ -217,7 +217,7 @@ export function getSystemPrompt(
     }
 
     if (workspaceContext.products && workspaceContext.products.length > 0) {
-      contextParts.push(`- Productos/Vehículos disponibles: ${workspaceContext.products.join(', ')}`)
+      contextParts.push(`- Productos disponibles: ${workspaceContext.products.join(', ')}`)
     }
 
     if (workspaceContext.specialOffers && workspaceContext.specialOffers.length > 0) {
@@ -252,8 +252,8 @@ export function getSystemPrompt(
       analysisParts.push(`- Nombre del contacto: ${leadAnalysis.contactName}`)
     }
 
-    if (leadAnalysis.lastVehicle) {
-      analysisParts.push(`- Último vehículo mencionado: ${leadAnalysis.lastVehicle}`)
+    if (leadAnalysis.lastProduct) {
+      analysisParts.push(`- Último producto mencionado: ${leadAnalysis.lastProduct}`)
     }
 
     if (leadAnalysis.lastMessage) {
@@ -268,7 +268,7 @@ export function getSystemPrompt(
     } else if (leadAnalysis.score >= 20) {
       analysisParts.push(`ESTRATEGIA: El lead está explorando. ENFOQUE EN CALIFICACIÓN Y EDUCACIÓN DEL PRODUCTO.`)
     } else {
-      analysisParts.push(`ESTRATEGIA: Lead nuevo. ENFOQUE EN CALIFICACIÓN INICIAL: presupuesto, vehículo de interés, plazos.`)
+      analysisParts.push(`ESTRATEGIA: Lead nuevo. ENFOQUE EN CALIFICACIÓN INICIAL: presupuesto, producto de interés, plazos.`)
     }
 
     prompt += '\n\n' + analysisParts.join('\n')

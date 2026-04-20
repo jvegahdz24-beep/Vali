@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Closing Engine
+// ValiFlow Pro — Closing Engine
 // Assesses deal closability, suggests techniques, generates closing messages
 // ═══════════════════════════════════════════════════════════════
 
@@ -16,7 +16,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Ofrece dos opciones, ambas llevan al cierre.',
     condition: 'Lead ha mostrado interés y pide información de modelo/precio',
     messageTemplate:
-      'Perfecto, {{name}}. ¿Prefieres el {{model_a}} con enganche del 10% o el {{model_b}} con 24 MSI? Ambos están disponibles.',
+      'Perfecto, {{name}}. ¿Prefieres el {{model_a}} con pago inicial del 10% o el {{model_b}} con 24 MSI? Ambos están disponibles.',
   },
   {
     id: 'urgency_close',
@@ -24,7 +24,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Crea urgencia con deadline real.',
     condition: 'Lead tiene score > 60 y hay señales de compra',
     messageTemplate:
-      '{{name}}, esta promoción termina el {{deadline}}. Solo nos quedan {{units}} unidades. Si apartas hoy con ${{down_payment}}, te garantizo el precio y la promo.',
+      '{{name}}, esta promoción termina el {{deadline}}. Solo nos quedan {{units}} productos. Si apartas hoy con ${{down_payment}}, te garantizo el precio y la promo.',
   },
   {
     id: 'assumptive_close',
@@ -32,7 +32,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Asumes que el prospecto ya decidió y preguntas por los detalles.',
     condition: 'Lead pregunta por documentos, requisitos o financiamiento',
     messageTemplate:
-      'Excelente, {{name}}. Cuando vengas por tu {{model}}, ¿prefieres que lo tengamos listo para las 10am o las 12pm? Solo necesitas: INE, comprobante de domicilio y comprobante de ingresos.',
+      'Excelente, {{name}}. Cuando vengas por tu {{model}}, ¿prefieres que lo tengamos listo para las 10am o las 12pm? Solo necesitas: INE y comprobante de domicilio.',
   },
   {
     id: 'summary_close',
@@ -40,7 +40,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Resumes todos los beneficios acordados y cierras.',
     condition: 'Lead ha pasado por negociación y tiene objeciones resueltas',
     messageTemplate:
-      '{{name}}, resumiendo: el {{model}} a {{color}}, con enganche de ${{down_payment}}, 48 MSI de ${{monthly}}. Incluye seguro por 1 año y 3 servicios de mantenimiento. ¿Confirmamos?',
+      '{{name}}, resumiendo: el {{model}} a {{color}}, con pago inicial de ${{down_payment}}, 48 MSI de ${{monthly}}. Incluye garantía por 1 año y 3 servicios de soporte. ¿Confirmamos?',
   },
   {
     id: 'testimonial_close',
@@ -48,7 +48,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Usa testimonios de clientes satisfechos.',
     condition: 'Lead muestra dudas o pide referencias',
     messageTemplate:
-      '{{name}}, te entiendo perfectamente. A {{referral_name}} le pasó igual: dudaba hasta que vino a probarlo. Hoy está feliz con su {{model}}. ¿Agendamos tu prueba de manejo?',
+      '{{name}}, te entiendo perfectamente. A {{referral_name}} le pasó igual: dudaba hasta que vino a probarlo. Hoy está feliz con su {{model}}. ¿Agendamos tu demostración?',
   },
   {
     id: 'feel_felt_found_close',
@@ -56,7 +56,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Valida la objeción con experiencia de otros clientes.',
     condition: 'Lead tiene objeción activa de precio o tiempo',
     messageTemplate:
-      '{{name}}, entiendo cómo te sientes. A muchos clientes también les pareció al inicio. Pero cuando vieron el costo total incluyendo seguro y garantía vs otras opciones, se dieron cuenta que era la mejor inversión. ¿Te muestro la comparativa?',
+      '{{name}}, entiendo cómo te sientes. A muchos clientes también les pareció al inicio. Pero cuando vieron el costo total incluyendo garantía vs otras opciones, se dieron cuenta que era la mejor inversión. ¿Te muestro la comparativa?',
   },
   {
     id: 'soft_close',
@@ -64,7 +64,7 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
     description: 'Preguntas para medir temperatura sin comprometer.',
     condition: 'Lead está en exploración, score 30-50',
     messageTemplate:
-      '{{name}}, si todo te parece bien y el financiamiento te sale cómodo, ¿serías este mes? Solo para ir preparando.',
+      '{{name}}, si todo te parece bien y el plan de pago te sale cómodo, ¿serías este mes? Solo para ir preparando.',
   },
   {
     id: 'fear_of_missing_out',
@@ -79,13 +79,13 @@ const CLOSING_TECHNIQUES: ClosingTechnique[] = [
 // ─── Progress Check Keywords ─────────────────────────────────
 
 const QUALIFICATION_KEYWORDS = [
-  'presupuesto', 'cuanto', 'precio', 'enganche', 'cuota', 'mensualidad',
-  'que buscas', 'que necesitas', 'para que', 'quien lo va a manejar',
+  'presupuesto', 'cuanto', 'precio', 'pago inicial', 'cuota', 'mensualidad',
+  'que buscas', 'que necesitas', 'para que', 'quien lo va a usar',
   'trabajo', 'ingresos', 'buro', 'credito',
 ]
 
 const PRICE_DISCUSSED_KEYWORDS = [
-  'precio', 'costo', 'cuota', 'mensualidad', 'enganche', 'msi',
+  'precio', 'costo', 'cuota', 'mensualidad', 'pago inicial', 'msi',
   'meses sin intereses', 'total', 'a contado', 'financiado',
   'cat', 'tasa', 'comision',
 ]
@@ -98,7 +98,7 @@ const OBJECTION_HANDLED_KEYWORDS = [
 
 const URGENCY_KEYWORDS = [
   'oferta', 'promocion', 'semana', 'hoy', 'termina', 'ultima',
-  'unidades', 'agotando', 'descuento', 'apartar', 'reservar',
+  'disponibilidad', 'agotando', 'descuento', 'apartar', 'reservar',
   'sube', 'sube el precio',
 ]
 
@@ -127,7 +127,7 @@ export class ClosingEngine {
       createdAt?: Date
       lastActivityAt?: Date
       appointmentScheduled?: boolean
-      testDriveCompleted?: boolean
+      demoCompleted?: boolean
       proposalSent?: boolean
     },
     messages: { role: string; content: string }[]
@@ -161,7 +161,7 @@ export class ClosingEngine {
 
     // Deal data bonuses
     if (dealData.appointmentScheduled) closabilityScore += 8
-    if (dealData.testDriveCompleted) closabilityScore += 15
+    if (dealData.demoCompleted) closabilityScore += 15
     if (dealData.proposalSent) closabilityScore += 5
 
     closabilityScore = Math.min(Math.round(closabilityScore), 100)
@@ -284,9 +284,9 @@ export class ClosingEngine {
     technique: string,
     context?: {
       contactName?: string
-      vehicleModel?: string
-      vehicleColor?: string
-      downPayment?: number
+      productModel?: string
+      productColor?: string
+      initialPayment?: number
       monthlyPayment?: number
       deadline?: string
       remainingUnits?: number
@@ -344,12 +344,12 @@ export class ClosingEngine {
     const contextInfo = context
       ? `Contexto del contacto:
 - Nombre: ${context.contactName || 'Prospecto'}
-- Vehículo: ${context.vehicleModel || 'No especificado'}
-${context.vehicleColor ? `- Color: ${context.vehicleColor}` : ''}
-${context.downPayment ? `- Enganche: $${context.downPayment.toLocaleString('es-MX')} MXN` : ''}
+- Producto: ${context.productModel || 'No especificado'}
+${context.productColor ? `- Color: ${context.productColor}` : ''}
+${context.initialPayment ? `- Pago inicial: $${context.initialPayment.toLocaleString('es-MX')} MXN` : ''}
 ${context.monthlyPayment ? `- Mensualidad: $${context.monthlyPayment.toLocaleString('es-MX')} MXN` : ''}
 ${context.deadline ? `- Deadline: ${context.deadline}` : ''}
-${context.remainingUnits ? `- Unidades restantes: ${context.remainingUnits}` : ''}`
+${context.remainingUnits ? `- Disponibilidad restante: ${context.remainingUnits}` : ''}`
       : 'Sin contexto adicional.'
 
     const systemPrompt = `Eres un experto cerrador de ventas en México.
@@ -399,15 +399,15 @@ REGLAS:
       if (techniqueConfig) {
         return techniqueConfig.messageTemplate
           .replace(/\{\{name\}\}/g, context?.contactName || 'amigo')
-          .replace(/\{\{model\}\}/g, context?.vehicleModel || 'vehículo')
-          .replace(/\{\{color\}\}/g, context?.vehicleColor || 'color')
-          .replace(/\{\{down_payment\}\}/g, (context?.downPayment || 50000).toString())
+          .replace(/\{\{model\}\}/g, context?.productModel || 'producto')
+          .replace(/\{\{color\}\}/g, context?.productColor || 'color')
+          .replace(/\{\{down_payment\}\}/g, (context?.initialPayment || 50000).toString())
           .replace(/\{\{monthly\}\}/g, (context?.monthlyPayment || 6000).toString())
           .replace(/\{\{deadline\}\}/g, context?.deadline || 'este viernes')
           .replace(/\{\{units\}\}/g, (context?.remainingUnits || 3).toString())
       }
 
-      return '¿Te gustaría agendar una cita para ver el vehículo? Podemos encontrar la mejor opción de financiamiento para ti.'
+      return '¿Te gustaría agendar una cita para conocer el producto? Podemos encontrar la mejor opción de financiamiento para ti.'
     }
   }
 
@@ -462,7 +462,7 @@ REGLAS:
       createdAt?: Date
       lastActivityAt?: Date
       appointmentScheduled?: boolean
-      testDriveCompleted?: boolean
+      demoCompleted?: boolean
       proposalSent?: boolean
     },
     messages: { role: string; content: string }[]
@@ -491,12 +491,12 @@ REGLAS:
       stagesCompleted.push('Urgencia')
     }
     if (dealData.appointmentScheduled) {
-      strengths.push('Cita agendada en agencia')
+      strengths.push('Cita agendada en la empresa')
       stagesCompleted.push('Cita agendada')
     }
-    if (dealData.testDriveCompleted) {
-      strengths.push('Prueba de manejo completada — alto indicador de cierre')
-      stagesCompleted.push('Prueba de manejo')
+    if (dealData.demoCompleted) {
+      strengths.push('Demostración completada — alto indicador de cierre')
+      stagesCompleted.push('Demostración')
     }
     if (dealData.proposalSent) {
       strengths.push('Propuesta formal enviada')
@@ -524,12 +524,12 @@ REGLAS:
       risks.push('Sin cita agendada — no hay compromiso presencial')
       stagesRemaining.push('Agendar cita')
     }
-    if (!dealData.testDriveCompleted && dealData.score && dealData.score > 50) {
-      stagesRemaining.push('Prueba de manejo')
+    if (!dealData.demoCompleted && dealData.score && dealData.score > 50) {
+      stagesRemaining.push('Demostración')
     }
 
     // Calculate progress percentage
-    const totalStages = 7 // qualification, price, objection, urgency, appointment, test drive, proposal
+    const totalStages = 7 // qualification, price, objection, urgency, appointment, demo, proposal
     const progressPercentage = Math.round((stagesCompleted.length / totalStages) * 100)
 
     // Get the appropriate technique for a message
@@ -557,9 +557,9 @@ REGLAS:
     technique: string,
     context?: {
       contactName?: string
-      vehicleModel?: string
-      vehicleColor?: string
-      downPayment?: number
+      productModel?: string
+      productColor?: string
+      initialPayment?: number
       monthlyPayment?: number
       deadline?: string
       remainingUnits?: number
@@ -573,15 +573,15 @@ REGLAS:
     const contextInfo = context
       ? `Contexto del contacto:
 - Nombre: ${context.contactName || 'Prospecto'}
-- Vehículo: ${context.vehicleModel || 'No especificado'}
-${context.vehicleColor ? `- Color: ${context.vehicleColor}` : ''}
-${context.downPayment ? `- Enganche: $${context.downPayment.toLocaleString('es-MX')} MXN` : ''}
+- Producto: ${context.productModel || 'No especificado'}
+${context.productColor ? `- Color: ${context.productColor}` : ''}
+${context.initialPayment ? `- Pago inicial: $${context.initialPayment.toLocaleString('es-MX')} MXN` : ''}
 ${context.monthlyPayment ? `- Mensualidad: $${context.monthlyPayment.toLocaleString('es-MX')} MXN` : ''}
 ${context.deadline ? `- Deadline: ${context.deadline}` : ''}
-${context.remainingUnits ? `- Unidades restantes: ${context.remainingUnits}` : ''}`
+${context.remainingUnits ? `- Disponibilidad restante: ${context.remainingUnits}` : ''}`
       : 'Sin contexto adicional.'
 
-    const systemPrompt = `Eres un experto cerrador de ventas automotrices en México.
+    const systemPrompt = `Eres un experto cerrador de ventas en México.
 Tu objetivo es generar UN ÚNICO mensaje de cierre usando la técnica "${technique}".
 
 ${techniqueConfig ? `Descripción de la técnica: ${techniqueConfig.description}` : ''}
@@ -627,15 +627,15 @@ REGLAS:
       if (techniqueConfig) {
         return techniqueConfig.messageTemplate
           .replace(/\{\{name\}\}/g, context?.contactName || 'amigo')
-          .replace(/\{\{model\}\}/g, context?.vehicleModel || 'vehículo')
-          .replace(/\{\{color\}\}/g, context?.vehicleColor || 'color')
-          .replace(/\{\{down_payment\}\}/g, (context?.downPayment || 50000).toString())
+          .replace(/\{\{model\}\}/g, context?.productModel || 'producto')
+          .replace(/\{\{color\}\}/g, context?.productColor || 'color')
+          .replace(/\{\{down_payment\}\}/g, (context?.initialPayment || 50000).toString())
           .replace(/\{\{monthly\}\}/g, (context?.monthlyPayment || 6000).toString())
           .replace(/\{\{deadline\}\}/g, context?.deadline || 'este viernes')
           .replace(/\{\{units\}\}/g, (context?.remainingUnits || 3).toString())
       }
 
-      return '¿Te gustaría agendar una cita para ver el vehículo? Podemos encontrar la mejor opción de financiamiento para ti.'
+      return '¿Te gustaría agendar una cita para conocer el producto? Podemos encontrar la mejor opción de financiamiento para ti.'
     }
   }
 
@@ -653,7 +653,7 @@ REGLAS:
         objectionHandled?: boolean
         urgencyCreated?: boolean
         appointmentScheduled?: boolean
-        testDriveCompleted?: boolean
+        demoCompleted?: boolean
         proposalSent?: boolean
       }
     }
@@ -699,9 +699,9 @@ REGLAS:
     if (assessment.progress.qualificationDone) nextMilestone = 'Discutir precio/financiamiento'
     if (assessment.progress.priceDiscussed) nextMilestone = 'Manejar objeciones'
     if (assessment.progress.objectionHandled) nextMilestone = 'Crear urgencia'
-    if (assessment.progress.urgencyCreated) nextMilestone = 'Agendar cita en agencia'
-    if (milestones?.appointmentScheduled) nextMilestone = 'Prueba de manejo'
-    if (milestones?.testDriveCompleted) nextMilestone = 'Enviar propuesta y cerrar'
+    if (assessment.progress.urgencyCreated) nextMilestone = 'Agendar cita en la empresa'
+    if (milestones?.appointmentScheduled) nextMilestone = 'Demostración'
+    if (milestones?.demoCompleted) nextMilestone = 'Enviar propuesta y cerrar'
 
     return {
       currentScore: assessment.closabilityScore,

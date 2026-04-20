@@ -14,7 +14,7 @@ export interface ConversationState {
   leads_semanales: number | null
   presupuesto_ads: number | null
   dolor: string | null         // frustration/pain point principal
-  vehiculo: string | null      // modelo específico mencionado
+  producto: string | null      // producto/servicio específico mencionado
   presupuesto: string | null   // rango de presupuesto
   etapa: ConversationStage
   datos_confirmados: string[]  // campos ya confirmados/respondidos
@@ -70,7 +70,7 @@ export function createEmptyState(): ConversationState {
     leads_semanales: null,
     presupuesto_ads: null,
     dolor: null,
-    vehiculo: null,
+    producto: null,
     presupuesto: null,
     etapa: 'desconocido',
     datos_confirmados: [],
@@ -102,11 +102,9 @@ const PATTERNS = {
   ],
 
   tipo_negocio: [
-    /\b(?:tengo|dirijo|manejo|soy dueño de|oper[oó]|vendo|trabajo en)\s+(?:una|un|mi)\s+(agencia|concesionaria|departamento|negocio|tienda|taller|clinica|consultorio|restaurante|hotel|inmobiliaria|despacho|oficina|auto[tl]o|consultor[ií]a)\b/i,
-    /\b(?:somos|es)\s+(?:una|un)\s+(agencia|concesionaria|negocio|empresa|compañía)\b/i,
+    /\b(?:tengo|dirijo|manejo|soy dueño de|oper[oó]|vendo|trabajo en)\s+(?:una|un|mi)\s+(departamento|negocio|tienda|taller|clinica|consultorio|restaurante|hotel|inmobiliaria|despacho|oficina|consultor[ií]a)\b/i,
+    /\b(?:somos|es)\s+(?:una|un)\s+(negocio|empresa|compañía)\b/i,
     /\b(asesor|agente|vendedor|broker|distribuidor)\b/i,
-    /\bautomotriz\b/i,
-    /\b(uto|max|car|dealer|auto)\w*\b/i,
   ],
 
   interes: [
@@ -139,9 +137,9 @@ const PATTERNS = {
     /\b(?:cuesta|es dificil|es difícil|es complicado)\s+(?:trabajo|dar|mantener)\s+(?:seguimiento|abasto)\b/i,
   ],
 
-  vehiculo: [
-    /\b(sentra|versa|kicks|tsuru|marcha|frontier|np300|pathfinder|altima|maxima|murano|rogue|corolla|camry|rav4|hilux|yaris|civic|cr-v|hr-v|accord|cx-5|cx-3|jetta|golf|tiguan|taos|aveo|tracker|mustang|ranger|tucson|creta|accent|sorento|sportage)\b/i,
-    /\b(suv|sedan|hatchback|pickup|camioneta|deportivo|coupe)\b/i,
+  producto: [
+    /\b(plan|paquete|servicio|producto|soluci[oó]n|opción|suscripci[oó]n|membres[ií]a)\b/i,
+    /\b(b[aá]sico|est[aá]ndar|premium|vip|enterprise|pro|elite)\b/i,
   ],
 
   presupuesto: [
@@ -244,14 +242,14 @@ export function extractAndUpdate(state: ConversationState, text: string): void {
     }
   }
 
-  // 7. Vehículo
-  for (const pattern of PATTERNS.vehiculo) {
+  // 7. Producto
+  for (const pattern of PATTERNS.producto) {
     const match = normalized.match(pattern) || text.match(pattern)
     if (match) {
-      const vehiculo = match[1] || match[0]
-      if (vehiculo.length >= 3) {
-        state.vehiculo = vehiculo.toLowerCase()
-        confirmarDato(state, 'vehiculo')
+      const producto = match[1] || match[0]
+      if (producto.length >= 3) {
+        state.producto = producto.toLowerCase()
+        confirmarDato(state, 'producto')
         break
       }
     }
@@ -290,7 +288,7 @@ const STAGE_KEYWORDS: Record<ConversationStage, string[]> = {
   ],
   diagnostico: [
     'tengo', 'trabajo', 'manejo', 'operamos', 'nos dedicamos',
-    'mi negocio', 'agencia', 'cuántos', 'volumen', 'leads',
+    'mi negocio', 'empresa', 'cuántos', 'volumen', 'leads',
     'clientes', 'prospectos', 'msj', 'mensajes',
   ],
   dolor: [
@@ -361,7 +359,7 @@ const CAMPO_A_PREGUNTAS: Record<string, string[]> = {
   ],
   tipo_negocio: [
     'a qué te dedicas', 'qué vendes', 'qué tipo de negocio', 'tu negocio',
-    'en qué trabajas', 'tu agencia', 'tu empresa',
+    'en qué trabajas', 'tu empresa',
   ],
   interes: [
     'qué servicio te interesa', 'qué producto te interesa', 'qué buscas',
@@ -471,8 +469,8 @@ export function buildContextBlock(state: ConversationState): string {
   if (state.dolor) {
     parts.push(`• Dolor/frustración principal: ${state.dolor}`)
   }
-  if (state.vehiculo) {
-    parts.push(`• Vehículo mencionado: ${state.vehiculo}`)
+  if (state.producto) {
+    parts.push(`• Producto mencionado: ${state.producto}`)
   }
   if (state.presupuesto) {
     parts.push(`• Presupuesto: ${state.presupuesto}`)

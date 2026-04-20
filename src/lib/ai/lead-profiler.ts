@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Lead Profiler (DIB Layer)
+// ValiFlow Pro — Lead Profiler (DIB Layer)
 // Silent profiling: runs on every message, builds rich contact profile
 // No LLM calls — 100% keyword + heuristic based for speed
 // ═══════════════════════════════════════════════════════════════
@@ -222,7 +222,7 @@ function detectPriceSensitivity(text: string): string {
   let score = 0
 
   // High sensitivity indicators
-  const highKeywords = ['caro', 'barato', 'precio', 'cuanto cuesta', 'presupuesto', 'no me alcanza', 'mas economico', 'descuento', 'oferta', 'promocion', 'msi', 'meses sin intereses', 'enganche']
+  const highKeywords = ['caro', 'barato', 'precio', 'cuanto cuesta', 'presupuesto', 'no me alcanza', 'mas economico', 'descuento', 'oferta', 'promocion', 'msi', 'meses sin intereses', 'pago inicial']
   for (const kw of highKeywords) {
     if (normalized.includes(normalize(kw))) score++
   }
@@ -511,7 +511,7 @@ export class LeadProfiler {
     const productKeywords = [
       'servicio', 'paquete', 'plan', 'consultoria', 'asesoria', 'capacitacion',
       'automatizacion', 'software', 'sistema', 'plataforma', 'app', 'pagina', 'tienda',
-      'auto', 'carro', 'vehiculo', 'suv', 'sedan', 'camioneta', 'pickup',
+      'producto', 'servicio', 'plan', 'paquete', 'solucion', 'opcion',
       'casa', 'departamento', 'terreno', 'local', 'oficina',
       'seguro', 'poliza', 'inversion', 'credito',
     ]

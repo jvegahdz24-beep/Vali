@@ -59,10 +59,10 @@ interface ChatDemoProps {
 }
 
 const SUGGESTED_PROMPTS = [
-  'Hola, busco información sobre un auto nuevo',
-  '¿Cuánto cuesta un SUV con financiamiento?',
-  'Tengo un Jetta 2019 para dar de enganche',
-  '¿Tienen el Honda CR-V en blanco?',
+  'Hola, busco información sobre sus servicios',
+  '¿Cuánto cuesta el plan con financiamiento?',
+  'Tengo un presupuesto definido, ¿qué opciones tienen?',
+  '¿Tienen disponibilidad inmediata?',
 ]
 
 function getActionLabel(action?: string): string {
@@ -87,7 +87,7 @@ function getIntentLabel(intent?: string): string {
     objection: 'Objeción',
     appointment: 'Cita',
     price_inquiry: 'Consulta precio',
-    vehicle_inquiry: 'Consulta vehículo',
+    vehicle_inquiry: 'Consulta producto',
     financing: 'Financiamiento',
   }
   return labels[intent || ''] || intent || '—'

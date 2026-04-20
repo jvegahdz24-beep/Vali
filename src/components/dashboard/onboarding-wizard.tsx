@@ -29,10 +29,11 @@ interface OnboardingWizardProps {
 }
 
 const industries = [
-  { id: 'automotive', label: 'Automotriz', icon: '🚗' },
+  { id: 'services', label: 'Servicios Generales', icon: '💼' },
   { id: 'real-estate', label: 'Bienes Raíces', icon: '🏠' },
   { id: 'retail', label: 'Retail', icon: '🛍️' },
-  { id: 'professional', label: 'Servicios Profesionales', icon: '💼' },
+  { id: 'professional', label: 'Servicios Profesionales', icon: '⚖️' },
+  { id: 'automotive', label: 'Automotriz', icon: '🚗' },
   { id: 'health', label: 'Salud', icon: '🏥' },
   { id: 'restaurants', label: 'Restaurantes', icon: '🍽️' },
   { id: 'education', label: 'Educación', icon: '📚' },
@@ -42,11 +43,11 @@ const industries = [
 const personalities = [
   {
     id: 'JHON',
-    emoji: '🚗',
+    emoji: '💼',
     name: 'JHON',
-    subtitle: 'Vendedor automotriz mexicano',
+    subtitle: 'Asesor comercial inteligente',
     description: 'Cercano, natural, usa lenguaje mexicano. Detecta arquetipos y adapta su tono.',
-    sampleResponse: '¡Buenas tardes! 👋 Soy JHON del equipo de tu agencia. Aquí para ayudarte con lo que necesites. ¿Con quién tengo el gusto?',
+    sampleResponse: '¡Buenas tardes! 👋 Soy JHON del equipo comercial. Aquí para ayudarte con lo que necesites. ¿Con quién tengo el gusto?',
   },
   {
     id: 'Professional',
@@ -54,7 +55,7 @@ const personalities = [
     name: 'Profesional',
     subtitle: 'Corporativo y formal',
     description: 'Formal B2B, datos concretos de ROI y TCO. Ideal para flotas e institucionales.',
-    sampleResponse: 'Buenos días. Soy el asesor comercial de la agencia. ¿En qué le puedo apoyar hoy?',
+    sampleResponse: 'Buenos días. Soy el asesor comercial de la empresa. ¿En qué le puedo apoyar hoy?',
   },
   {
     id: 'Friendly',
@@ -62,7 +63,7 @@ const personalities = [
     name: 'Amigable',
     subtitle: 'Casual y cercano',
     description: 'Divertido, cálido, con emojis y lenguaje casual mexicano. Perfecto para retail.',
-    sampleResponse: '¡Holaaa! 👋 ¿Qué onda? Estoy aquí para ayudarte a encontrar el auto perfecto. ¿Qué andas buscando? 😊',
+    sampleResponse: '¡Holaaa! 👋 ¿Qué onda? Estoy aquí para ayudarte a encontrar la solución perfecta. ¿Qué andas buscando? 😊',
   },
   {
     id: 'Aggressive',
@@ -75,10 +76,10 @@ const personalities = [
 ]
 
 const testMessages = [
-  'Hola, me interesa un Tucson 2024',
-  '¿Cuánto cuesta el Sentra?',
-  'Quiero ver opciones de financing',
-  '¿Tienen prueba de manejo?',
+  'Hola, me interesa el plan Pro',
+  '¿Cuánto cuesta el plan Pro?',
+  'Quiero ver opciones de financiamiento',
+  '¿Puedo agendar una demo?',
 ]
 
 export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardProps) {
@@ -96,7 +97,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
   const [isAnimating, setIsAnimating] = useState(false)
 
   // Live AI Preview state
-  const [previewMessage, setPreviewMessage] = useState('Hola, me interesa un Tucson 2024')
+  const [previewMessage, setPreviewMessage] = useState('Hola, me interesa el plan Pro')
   const [aiResponse, setAiResponse] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiTested, setAiTested] = useState(false)

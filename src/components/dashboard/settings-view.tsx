@@ -72,7 +72,7 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
 
   // ── General Tab State ──
   const [workspaceName, setWorkspaceName] = useState(() => localStorage.getItem('vf_workspaceName') || 'Mi Negocio')
-  const [industry, setIndustry] = useState(() => localStorage.getItem('vf_industry') || 'automotive')
+  const [industry, setIndustry] = useState(() => localStorage.getItem('vf_industry') || 'services')
   const [language, setLanguage] = useState(() => localStorage.getItem('vf_language') || 'es')
   const [generalSaved, setGeneralSaved] = useState(false)
 
@@ -96,15 +96,18 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
 
   // ── Industries ──
   const industries = [
-    { value: 'automotive', label: 'Automotriz', emoji: '🚗', desc: 'Concesionarias y agencias' },
-    { value: 'realestate', label: 'Bienes Raíces', emoji: '🏠', desc: 'Inmobiliarias' },
-    { value: 'retail', label: 'Retail', emoji: '🛍️', desc: 'Tiendas y ecommerce' },
     { value: 'services', label: 'Servicios', emoji: '💼', desc: 'Consultorías y servicios' },
+    { value: 'realestate', label: 'Bienes Raíces', emoji: '🏠', desc: 'Inmobiliarias' },
+    { value: 'technology', label: 'Tecnología', emoji: '💻', desc: 'Software y SaaS' },
+    { value: 'retail', label: 'Retail', emoji: '🛍️', desc: 'Tiendas y ecommerce' },
+    { value: 'automotive', label: 'Automotriz', emoji: '🚗', desc: 'Concesionarias, agencias y distribuidoras' },
+    { value: 'health', label: 'Salud', emoji: '🏥', desc: 'Clínicas y hospitales' },
+    { value: 'education', label: 'Educación', emoji: '📚', desc: 'Escuelas y academias' },
   ]
 
   // ── Personalities ──
   const personalities = [
-    { id: 'JHON', label: 'JHON', emoji: '🚗', desc: 'Vendedor automotriz experto, cercano y persuasivo' },
+    { id: 'JHON', label: 'JHON', emoji: '💼', desc: 'Asesor comercial inteligente, cercano y persuasivo' },
     { id: 'Professional', label: 'Profesional', emoji: '💼', desc: 'Formal y corporativo, ideal para B2B' },
     { id: 'Friendly', label: 'Amigable', emoji: '😊', desc: 'Cercano y casual, perfecto para retail' },
     { id: 'Aggressive', label: 'Agresivo', emoji: '🔥', desc: 'Cerrador de ventas, urgente y directo' },
@@ -688,7 +691,7 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
                         <div>
                           <p className="text-xs font-medium text-emerald-800">WhatsApp conectado y funcionando</p>
                           <p className="text-[10px] text-emerald-600 mt-1">
-                            Los mensajes entrantes se procesan automáticamente con IA (JHON).
+                            Los mensajes entrantes se procesan automáticamente con IA.
                             Los leads se crean y califican de forma automática en tu CRM.
                           </p>
                         </div>
@@ -717,7 +720,7 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
                   {[
                     { num: '1', title: 'Escanea el QR', desc: 'Vincula tu WhatsApp como si fuera WhatsApp Web. No necesitas cuenta de Meta Business ni verificación.' },
                     { num: '2', title: 'Recibe mensajes automáticamente', desc: 'Cuando un cliente te escribe, el mensaje llega a ValiAutoFlow y se guarda en tu CRM automáticamente.' },
-                    { num: '3', title: 'IA responde por ti (JHON)', desc: 'Nuestro agente IA analiza el mensaje, califica al lead y responde automáticamente con la personalidad JHON.' },
+                    { num: '3', title: 'IA responde por ti', desc: 'Nuestro agente IA analiza el mensaje, califica al lead y responde automáticamente con la personalidad configurable.' },
                     { num: '4', title: 'Gestiona desde el Inbox', desc: 'Ve todas las conversaciones, toma el control cuando quieras, o deja que la IA maneje todo.' },
                   ].map(step => (
                     <div key={step.num} className="flex items-start gap-3">

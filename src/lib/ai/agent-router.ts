@@ -47,28 +47,28 @@ const INTENT_KEYWORDS: Record<Intent, { patterns: RegExp[]; words: string[]; wei
   },
   question_product: {
     patterns: [
-      /\b(veh[ií]culo|auto|carro|coche|camioneta|suv|sedan|hatchback|modelo|versi[oó]n|caracter[ií]stica|equipamiento|color|motor|rendimiento|seguridad)\b/i,
-      /\b(sentra|versa|kicks|tsuru|corolla|civic|cx-5|rav4|hr-v|tiguan|golf|jetta|aveo|altima|frontier|np300|trax|trailblazer|captiva|equinox)\b/i,
-      /\b(tiene|tiene disponibilidad|qu[ie]ro ver|me interesa|showroom|agencia|concesionario)\b/i,
+      /\b(producto|servicio|plan|paquete|soluci[oó]n|opc[ióo]n|versi[oó]n|caracter[ií]stica|equipamiento|funcionalidad|modalidad)\b/i,
+      /\b(b[aá]sico|est[aá]ndar|premium|vip|enterprise|pro|elite)\b/i,
+      /\b(tiene|tiene disponibilidad|qu[ie]ro ver|me interesa|oficina|sucursal|empresa)\b/i,
     ],
     words: [
-      'vehiculo', 'auto', 'carro', 'coche', 'camioneta', 'suv', 'sedan', 'hatchback',
-      'modelo', 'version', 'caracteristicas', 'equipamiento', 'motor', 'rendimiento',
-      'sentra', 'versa', 'kicks', 'tsuru', 'corolla', 'civic', 'cx-5', 'rav4',
-      'disponibilidad', 'showroom', 'agencia', 'concesionario',
+      'producto', 'servicio', 'plan', 'paquete', 'solucion', 'opcion',
+      'version', 'caracteristicas', 'equipamiento', 'funcionalidad',
+      'basico', 'estandar', 'premium', 'vip', 'enterprise', 'pro',
+      'disponibilidad', 'oficina', 'sucursal', 'empresa',
     ],
     weight: 1.2,
   },
   question_price: {
     patterns: [
-      /\b(precio|cuanto cuesta|cuanto vale|costo|tasa|mensualidad|cuota|cat|enganche|anticipo)\b/i,
-      /\b(msi|meses sin intereses|financiamiento|cr[eé]dito|pr[eé]stamo|buro|bur[oó]\b|aprovacion)\b/i,
+      /\b(precio|cuanto cuesta|cuanto vale|costo|tasa|mensualidad|cuota|cat|pago inicial|anticipo)\b/i,
+      /\b(msi|meses sin intereses|financiamiento|cr[eé]dito|pr[eé]stamo)\b/i,
       /\b(oferta|promoci[oó]n|descuento|rebaja|especial|plan|paquete)\b/i,
     ],
     words: [
       'precio', 'cuanto cuesta', 'cuanto vale', 'costo', 'tasa', 'mensualidad', 'cuota',
-      'cat', 'enganche', 'anticipo', 'msi', 'meses sin intereses', 'financiamiento',
-      'credito', 'prestamo', 'buro', 'oferta', 'promocion', 'descuento', 'rebaja',
+      'cat', 'pago inicial', 'anticipo', 'msi', 'meses sin intereses', 'financiamiento',
+      'credito', 'prestamo', 'oferta', 'promocion', 'descuento', 'rebaja',
       'especial', 'plan', 'paquete',
     ],
     weight: 1.3,
@@ -76,16 +76,16 @@ const INTENT_KEYWORDS: Record<Intent, { patterns: RegExp[]; words: string[]; wei
   buy_signal: {
     patterns: [
       /\b(lo tomo|me lo llevo|vamos|quiero comprar|compro|lo compro|trato hecho|cerramos|hagamos trato)\b/i,
-      /\b(cu[aá]ndo puedo|cu[aá]ndo puedo pasar|agendar|cita|visitar|ver el auto|prueba de manejo|test drive)\b/i,
+      /\b(cu[aá]ndo puedo|cu[aá]ndo puedo pasar|agendar|cita|visitar|ver el producto|demostraci[oó]n|demo)\b/i,
       /\b(d[oó]nde est[aá]n|ubicaci[oó]n|direcci[oó]n|domicilio|sucursal)\b/i,
-      /\b(apartar|reservar|separar|dar enganche|inicial)\b/i,
+      /\b(apartar|reservar|separar|dar inicial|pago inicial)\b/i,
       /\b(que necesito|documentos|requisitos|qué necesito para comprar)\b/i,
     ],
     words: [
       'lo tomo', 'me lo llevo', 'vamos', 'quiero comprar', 'compro', 'trato hecho',
-      'cerramos', 'cuando puedo pasar', 'agendar', 'cita', 'visitar', 'ver el auto',
-      'prueba de manejo', 'test drive', 'donde estan', 'ubicacion', 'direccion',
-      'sucursal', 'apartar', 'reservar', 'separar', 'dar enganche', 'inicial',
+      'cerramos', 'cuando puedo pasar', 'agendar', 'cita', 'visitar', 'ver el producto',
+      'demostracion', 'demo', 'donde estan', 'ubicacion', 'direccion',
+      'sucursal', 'apartar', 'reservar', 'separar', 'pago inicial', 'inicial',
       'que necesito', 'documentos', 'requisitos',
     ],
     weight: 1.5,
@@ -128,12 +128,12 @@ const INTENT_KEYWORDS: Record<Intent, { patterns: RegExp[]; words: string[]; wei
   },
   appointment_request: {
     patterns: [
-      /\b(cita|agendar|visitar|pasar|ir|llegar|prueba|manejar|test drive|showroom)\b/i,
+      /\b(cita|agendar|visitar|pasar|ir|llegar|demo|demostraci[oó]n|oficina)\b/i,
       /\b(que horario|horarios|atenci[oó]n|abierto|cu[aá]ndo|d[ií]a|s[aá]bado|domingo)\b/i,
     ],
     words: [
-      'cita', 'agendar', 'visitar', 'pasar', 'ir', 'llegar', 'prueba', 'manejar',
-      'test drive', 'showroom', 'que horario', 'horarios', 'atencion', 'abierto',
+      'cita', 'agendar', 'visitar', 'pasar', 'ir', 'llegar', 'demo', 'demostracion',
+      'oficina', 'que horario', 'horarios', 'atencion', 'abierto',
       'cuando', 'dia', 'sabado', 'domingo',
     ],
     weight: 1.4,
@@ -311,7 +311,7 @@ export class AgentRouter {
       return {
         agentType: 'sales',
         confidence: 0.85,
-        reasoning: `Solicitud de cita/agencia detectada. Enrutando a Sales Agent para agendar.`,
+        reasoning: `Solicitud de cita/visita detectada. Enrutando a Sales Agent para agendar.`,
         intent: 'appointment_request',
       }
     }
@@ -441,7 +441,7 @@ export class AgentRouter {
     const detection = detectIntent(message)
     const mapping: Record<Intent, IntentType> = {
       greeting: 'greeting',
-      question_product: 'vehicle_inquiry',
+      question_product: 'product_inquiry',
       question_price: 'price_inquiry',
       buy_signal: 'buy_signal',
       objection_price: 'objection',

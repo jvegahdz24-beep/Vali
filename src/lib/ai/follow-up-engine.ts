@@ -66,8 +66,8 @@ const EDGE_CASES = [
   // ── Close won (ya compró) ──
   { pattern: /\bye(s)? compr(e|é|ó)\b/i,              action: 'close_won' as const,   reason: 'Lead ya compró' },
   { pattern: /\balready (bought|purchased|have)\b/i,    action: 'close_won' as const,   reason: 'Lead already bought (en)' },
-  { pattern: /\bya me (saqu[eé]|adelant[eé]|compr[eé])\b/i, action: 'close_won' as const, reason: 'Lead ya sacó/adelantó el auto' },
-  { pattern: /\bya (lo|la) (compr[eé]|saqu[eé])\b/i,   action: 'close_won' as const,   reason: 'Lead ya compró el vehículo' },
+  { pattern: /\bya me (saqu[eé]|adelant[eé]|compr[eé])\b/i, action: 'close_won' as const, reason: 'Lead ya sacó/adelantó su producto' },
+  { pattern: /\bya (lo|la) (compr[eé]|saqu[eé])\b/i,   action: 'close_won' as const,   reason: 'Lead ya compró el producto' },
   // ── Continue (postergación) ──
   { pattern: /\bluego\b/i,                              action: 'continue' as const,    reason: 'Lead dijo luego — seguir timeline' },
   { pattern: /\bdespu(e|é)s\b/i,                        action: 'continue' as const,    reason: 'Lead dijo después — seguir timeline' },
@@ -92,7 +92,7 @@ function buildFollowUpPrompt(
 ): string {
   const daysSince = Math.floor(minutesSinceLastMessage / (24 * 60))
 
-  // ── 8 TIPOS DE MENSAJE OPTIMIZADOS PARA AUTOS SEMINUEVOS ──
+  // ── 8 TIPOS DE MENSAJE OPTIMIZADOS PARA VENTAS ──
   // Cada tipo tiene una estrategia, tono y estructura específica.
   // El engine usa estos prompts como system para generar mensajes dinámicos.
   const tipoInstructions: Record<FollowUpTipo, string> = {
@@ -105,15 +105,15 @@ function buildFollowUpPrompt(
 
 Estrategia: Retoma la conversación como si acabaras de revisar el inventario y encontraste algo que le sirve.
 
-Tono: Casual, amigable, como un buen amigo que les cae bien. Habla como Jhon Asesor de AutoMax.
+Tono: Casual, amigable, como un buen amigo que les cae bien. Habla como Asesor comercial.
 
 Estructura obligatoria:
-- Referencia algo específico de lo que el lead busca (ej: SUV familiar, buen rendimiento, espacio)
+- Referencia algo específico de lo que el lead busca (ej: producto premium, buen rendimiento, espacio)
 - Menciona que revisaste el inventario y tienes opciones que coinciden
 - Termina con UNA pregunta abierta que invite a seguir
 
 Ejemplos de ángulos (NO copiar, usa como inspiración):
-- "Acabo de revisar y tengo una SUV que podría ser justo lo que necesitas..."
+- "Acabo de revisar y tengo un producto premium que podría ser justo lo que necesitas..."
 - "Me acordé de ti, queria mostrarte algo que acaba de entrar..."
 - "Tengo una pregunta sobre lo que buscas para afinar la busqueda..."
 
@@ -126,19 +126,19 @@ PROHIBIDO: No digas "te escribo de nuevo", "solo queria confirmar", "no te olvid
     // ────────────────────────────────────────────────────────────
     valor: `TIPO: MENSAJE DE VALOR / INFORMACION
 
-Estrategia: Aporta información útil sobre el proceso de compra de auto seminuevo que el lead probablemente no sabe.
+Estrategia: Aporta información útil sobre el proceso de compra que el lead probablemente no sabe.
 
-Tono: Experto pero accesible. Eres el asesor que sabe todo de autos y financiamiento.
+Tono: Experto pero accesible. Eres el asesor que sabe todo de productos y planes de pago.
 
 Elige UNO de estos ángulos (varía cada vez, no repitas):
-- Tipos de financiamiento disponibles (enganche desde 20-30%, meses sin intereses)
-- Garantía incluida en autos seminuevos certificados
-- Diferencia entre millaje aceptable vs excesivo
-- Por qué un auto seminuevo con 2-3 años es mejor inversión que uno nuevo
-- Seguro de auto: cómo funciona al financiar un seminuevo
+- Tipos de planes de pago disponibles (pago inicial desde 20-30%, meses sin intereses)
+- Garantía incluida en productos verificados
+- Diferencia entre condición del producto aceptable vs deficiente
+- Por qué un producto con 2-3 años de uso es mejor inversión que uno nuevo
+- Garantía del producto: cómo funciona al financiar
 - Historial de servicio: qué revisar antes de comprar
-- Tips de compra: qué verificar en prueba de manejo
-- Depreciación: cuánto pierde valor un auto en los primeros 3 años
+- Tips de compra: qué verificar en la demostración
+- Depreciación: cuánto pierde valor un producto en los primeros 3 años
 
 Estructura:
 - Arranca con un dato curioso o un tip que sorprenda
@@ -160,12 +160,12 @@ Tono: Orgulloso pero humilde. "Me da gusto contarte porque me recordó a ti."
 Estructura obligatoria:
 - "Se me hace que te cuento..." o "Me acuerdo de un cliente que..."
 - Describe la situación del otro cliente (similar al lead actual)
-- Menciona el auto que se llevó y cómo le va
+- Menciona el producto que se llevó y cómo le va
 - Termina preguntando si le gustaría ver opciones parecidas
 
 Reglas estrictas:
-- La historia debe ser VEROSÍMIL y contextualizada al negocio (concesionaria de seminuevos en GDL)
-- Si el lead busca SUV, el ejemplo debe ser de alguien que buscaba SUV
+- La historia debe ser VEROSÍMIL y contextualizada al negocio (nuestra empresa)
+- Si el lead busca producto premium, el ejemplo debe ser de alguien que buscaba algo similar
 - Si el lead tiene presupuesto X, el ejemplo debe ser de alguien con presupuesto similar
 - NO inventes nombres reales. Usa "un cliente" o "una señora" o "un señor"
 - MÁXIMO 3-4 líneas
@@ -183,16 +183,16 @@ Estrategia: Crea urgencia real basada en hechos del negocio, sin mentir ni inven
 Tono: Informativo, no desesperado. "Te aviso porque sé que te interesa."
 
 Elige UNO de estos ángulos:
-- Rotación de inventario: "Ese tipo de auto se mueve rápido, entro y sale en menos de X días"
-- Oferta vigente: "Esta semana tenemos un financiamiento especial que podría servirte"
-- Unidad específica: "Tengo una unidad que encaja con lo que buscas y ya tiene 2 personas preguntando"
+- Rotación de inventario: "Ese tipo de producto se mueve rápido, entro y sale en menos de X días"
+- Oferta vigente: "Esta semana tenemos planes de pago especiales que podrían servirte"
+- Unidad específica: "Tengo un producto que encaja con lo que buscas y ya tiene 2 personas preguntando"
 - Temporada: "Estamos en temporada alta y el inventario se renueva cada semana"
 
 Reglas:
 - La urgencia debe ser VEROSÍMIL y contextualizada
 - NUNCA inventes unidades que no existen
 - NUNCA digas "última unidad" ni "si no compras hoy se acaba"
-- Termina con una acción clara: agendar visita, llamada, prueba de manejo
+- Termina con una acción clara: agendar visita, llamada, demostración
 
 PROHIBIDO: No presiones. No mentiras. No falsa escasez.`,
 
@@ -202,18 +202,18 @@ PROHIBIDO: No presiones. No mentiras. No falsa escasez.`,
     // ────────────────────────────────────────────────────────────
     recordatorio_necesidad: `TIPO: RECORDATORIO DE NECESIDAD
 
-Estrategia: Reconecta al lead con su necesidad original (ej: cambiar su Río por una SUV más grande, más segura, mejor rendimiento).
+Estrategia: Reconecta al lead con su necesidad original (ej: cambiar su producto actual por una opción más grande, más segura, mejor rendimiento).
 
 Tono: Empático, comprensivo. "Entiendo que es una decisión importante."
 
 Estructura:
-- Reconoce que tomar la decisión de cambiar auto no es fácil
-- Recuerda por qué el lead quería cambiar (referencia su auto actual y lo que busca)
+- Reconoce que tomar la decisión de cambiar no es fácil
+- Recuerda por qué el lead quería cambiar (referencia su producto actual y lo que busca)
 - Menciona un beneficio concreto de hacer el cambio YA (seguridad, espacio, rendimiento, valor)
 - Termina con una invitación baja presión: "¿Te gustaría que te muestre opciones sin compromiso?"
 
 Reglas:
-- Usa la información específica del lead (auto actual, lo que busca, presupuesto)
+- Usa la información específica del lead (producto actual, lo que busca, presupuesto)
 - Si no tienes datos específicos, usa el contexto de la conversación
 - Enfócate en el beneficio de ACTUAR, no en la pérdida de NO actuar
 
@@ -231,7 +231,7 @@ Tono: Entusiasta pero natural. "Me emociona mostrarte esto porque creo que te va
 
 Elige UNO de estos ángulos:
 - Nueva llegada: "Acaba de entrar una unidad que me recordó a ti..."
-- Precio ajustado: "Tenemos una promo de enganche reducido esta semana..."
+- Precio ajustado: "Tenemos una promo de pago inicial reducido esta semana..."
 - Alternativa sugerente: "Qué tal si en lugar de X, ves esta otra opción que tiene..."
 - Combo atractivo: "Si te decides esta semana, te incluimos..."
 
@@ -254,11 +254,11 @@ Estrategia: Envía un mensaje completamente inesperado que rompa el patrón ante
 Tono: Personal, directo, como si te acordaras de él de repente. SIN tono de venta.
 
 Elige UNO de estos ángulos:
-- Dato curioso: "Oye, sabías que el auto que tienes pierde X% de valor al año? Te lo digo porque..."
-- Pregunta personal: "¿Cómo te va con tu Río? Espero que bien. Me acordé de ti porque..."
+- Dato curioso: "Oye, sabías que el producto que tienes pierde X% de valor al año? Te lo digo porque..."
+- Pregunta personal: "¿Cómo te va con tu producto actual? Espero que bien. Me acordé de ti porque..."
 - Consejo genuino: "Te voy a ser honesto, sin compromiso..."
-- Noticia del mercado: "Te cuento algo que está pasando en el mercado de seminuevos..."
-- Historia corta: "Hoy pasó algo en el piso de ventas que me hizo acordar de ti..."
+- Noticia del mercado: "Te cuento algo que está pasando en el mercado..."
+- Historia corta: "Hoy pasó algo en la oficina que me hizo acordar de ti..."
 
 Reglas:
 - NO preguntes si ya compró (asume que no, pero con respeto)
@@ -309,7 +309,7 @@ ${tipoInstructions[tipo]}
 
 ═══ REGLAS DE ORO ═══
 - Corto, natural, conversacional. Como WhatsApp real.
-- Tono: amigable, cercano, mexicano. Habla como Jhon Asesor.
+- Tono: amigable, cercano, mexicano. Habla como asesor comercial.
 - UNA sola idea. UNA sola acción.
 - NUNCA repitas un mensaje anterior del historial.
 - NUNCA suenes robot, desesperado o repetitivo.
@@ -318,7 +318,7 @@ ${tipoInstructions[tipo]}
 - SIEMPRE aporta algo de valor en cada mensaje.
 - Maximo 4 lineas + maximo 1 emoji.
 - Termina con pregunta clara que invite respuesta (excepto reactivacion_final).
-- Personaliza con datos reales del lead (auto actual, lo que busca, presupuesto).
+- Personaliza con datos reales del lead (producto actual, lo que busca, presupuesto).
 
 FORMATO: Responde SOLO con el mensaje a enviar. Sin explicaciones, sin etiquetas, sin formato, sin comillas.`
   }
@@ -607,11 +607,11 @@ export async function generateContextSummary(
         role: 'system',
         content: `${dynamicContext}
 
-TAREA: Resume en MÁXIMO 3 frases la conversación con un prospecto de compra de auto seminuevo. Incluye:
-1. Qué auto tiene actualmente y qué quiere cambiar (marca, modelo, características)
-2. Presupuesto mencionado (enganche, mensualidad, precio total)
-3. En qué se quedó la conversación (agendó visita, pidió financiamiento, no respondió, etc.)
-4. Objeciones detectadas (precio, millaje, garantía, plazo, etc.)
+TAREA: Resume en MÁXIMO 3 frases la conversación con un prospecto de compra. Incluye:
+1. Qué producto tiene actualmente y qué quiere cambiar (características)
+2. Presupuesto mencionado (pago inicial, mensualidad, precio total)
+3. En qué se quedó la conversación (agendó visita, pidió planes de pago, no respondió, etc.)
+4. Objeciones detectadas (precio, condición, garantía, plazo, etc.)
 5. Nivel de interés: alto / medio / bajo
 
 FORMATO: Solo el resumen, sin etiquetas, sin viñetas, sin formato. Texto continuo.`,

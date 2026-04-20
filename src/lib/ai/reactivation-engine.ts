@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Reactivation Engine (DIB Layer)
+// ValiFlow Pro — Reactivation Engine (DIB Layer)
 // 6 psychological angles + 4 automatic cycles for cold leads
 // ═══════════════════════════════════════════════════════════════
 
@@ -150,7 +150,7 @@ function generateSocialProofAction(profile: LeadProfileData): string {
 
 function generateExclusiveOffer(profile: LeadProfileData): string {
   if (profile.priceSensitivity === 'high') {
-    return 'una opción con financiamiento especial que no estaba disponible antes'
+    return 'una opción con promoción especial que no estaba disponible antes'
   }
   if (profile.archetype === 'aspiracional') {
     return 'una opción premium que apenas llegó y tiene alta demanda'

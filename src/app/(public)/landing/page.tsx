@@ -66,7 +66,7 @@ const steps = [
     number: '02',
     icon: <Sparkles className="h-8 w-8" />,
     title: 'Configura tu agente IA',
-    description: 'Elige entre 4 personalidades: JHON (automotriz), Profesional, Amigable o Agresivo. Personaliza el tono.',
+    description: 'Elige entre 4 personalidades: JHON (Ventas), Profesional, Amigable o Agresivo. Personaliza el tono.',
   },
   {
     number: '03',
@@ -83,7 +83,7 @@ const faqs = [
   },
   {
     question: '¿Cómo funcionan los agentes IA?',
-    answer: 'Nuestros agentes usan modelos de lenguaje avanzados (LLaMA, DeepSeek, Gemini, OpenAI) con system prompts especializados para el sector automotriz mexicano. Detectan intención, califican leads y responden con personalidad humana.',
+    answer: 'Nuestros agentes usan modelos de lenguaje avanzados (LLaMA, DeepSeek, Gemini, OpenAI) con system prompts especializados para tu sector. Detectan intención, califican leads y responden con personalidad humana.',
   },
   {
     question: '¿Puedo personalizar la personalidad del agente?',
@@ -270,7 +270,7 @@ export default function LandingPage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              <span className="text-xs font-medium text-emerald-700">+500 concesionarias ya lo usan</span>
+              <span className="text-xs font-medium text-emerald-700">+500 empresas ya lo usan</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6 animate-fade-in">
@@ -330,7 +330,7 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {[
-              { value: '500+', label: 'Agencias confían en nosotros', sublabel: 'en México y LATAM' },
+              { value: '500+', label: 'Empresas confían en nosotros', sublabel: 'en México y LATAM' },
               { value: '50K+', label: 'Conversaciones procesadas por IA', sublabel: 'mensajes automatizados al mes' },
               { value: '35%', label: 'Más ventas cerradas', sublabel: 'incremento promedio en conversiones' },
             ].map((stat, i) => (
@@ -348,10 +348,10 @@ export default function LandingPage() {
       <section className="py-16 border-y border-zinc-100 bg-zinc-50/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm font-medium text-zinc-500 mb-8">
-            Confiado por agencias en Monterrey, Guadalajara, CDMX, Querétaro
+            Confiado por empresas en Monterrey, Guadalajara, CDMX, Querétaro
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
-            {['AutoMax', 'Premium Cars', 'Grupo Automotriz del Pacífico', 'Motors MX', 'AutoElite', 'CarWorld'].map((name) => (
+            {['TechStart', 'Innova Solutions', 'Grupo Digital del Pacífico', 'Connect MX', 'ServiceElite', 'BizWorld'].map((name) => (
               <div key={name} className="text-lg font-bold text-zinc-300 tracking-tight">{name}</div>
             ))}
           </div>
@@ -475,7 +475,7 @@ export default function LandingPage() {
                 Comienza a automatizar tu negocio hoy
               </h2>
               <p className="text-emerald-100 text-lg max-w-xl mx-auto mb-10">
-                Únete a las 500+ concesionarias que ya venden más con ValiAutoFlow.
+                Únete a las 500+ empresas que ya venden más con ValiAutoFlow.
               </p>
               <Link href="/signup">
                 <Button size="lg" className="bg-white text-emerald-700 hover:bg-emerald-50 h-12 px-8 text-base font-semibold gap-2 shadow-lg">

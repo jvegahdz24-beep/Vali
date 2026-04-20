@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Revenue Engine
+// ValiFlow Pro — Revenue Engine
 // Full 9-step pipeline: Analyze → Trigger → Decide → Objection →
 // Generate → Follow-up → CRM → Route → Deliver
 // ═══════════════════════════════════════════════════════════════
@@ -23,15 +23,15 @@ function normalize(text: string): string {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
-// ─── Keyword Categories (Mexican Automotive) ─────────────────
+// ─── Keyword Categories (General Sales) ─────────────────
 
 const KEYWORD_CATEGORIES = {
   // Budget & Financial
   budget: {
     keywords: [
-      'enganche', 'anticipo', 'inicial', 'separar', 'apartar', 'reservar',
-      'financiamiento', 'credito', 'prestamo', 'msi', 'meses sin intereses',
-      'mensualidad', 'cuota', 'cat', 'tasa', 'interes', 'pagare', 'comodato',
+      'pago inicial', 'anticipo', 'inicial', 'separar', 'apartar', 'reservar',
+      'planes de financiamiento', 'credito', 'prestamo', 'msi', 'meses sin intereses',
+      'mensualidad', 'cuota', 'cat', 'tasa', 'interes', 'pagare',
       'buro', 'buero', 'aprobacion', 'solicitad', 'capacidad de pago',
       'ingresos', 'comprobante', 'afore', 'infonavit', 'pension',
     ],
@@ -49,23 +49,21 @@ const KEYWORD_CATEGORIES = {
     weight: 1.3,
   },
 
-  // Model Interest
+  // Product Interest
   modelInterest: {
     keywords: [
-      'sentra', 'versa', 'kicks', 'tsuru', 'marcha', 'frontier', 'np300',
-      'pathfinder', 'altima', 'maxima', 'gtr', 'z', 'murano', 'rogue',
-      'corolla', 'camry', 'rav4', 'hilux', 'yaris', 'prius', 'supra',
-      'civic', 'cr-v', 'hr-v', 'accord', 'city', 'wr-v',
-      'cx-5', 'cx-3', 'cx-30', 'cx-50', 'cx-90', '3', '6', 'mx-5',
-      'jetta', 'golf', 'tiguan', 'taos', 'vento', 't-cross', 'saveiro',
-      'aveo', 'trax', 'trailblazer', 'captiva', 'equinox', 'suburban',
-      'silverado', 'colorado', 's10', 'onix', 'tracker',
-      'mustang', 'bronco', 'ranger', 'ecosport', 'maverick',
-      'sorento', 'sportage', 'rio', 'forte', 'selto', 'morning',
-      'tucson', 'creta', 'accent', 'grand i10',
-      'suvs', 'sedan', 'hatchback', 'pickup', 'camioneta', 'deportivo',
-      'suv', 'automatico', 'manual', 'hibrido', 'electrico', 'gasolina',
-      'diesel', 'turbo', 'am', 'mt',
+      'producto', 'servicio', 'plan', 'paquete', 'solucion', 'opcion',
+      'basico', 'estandar', 'premium', 'vip', 'elite', 'gold', 'silver',
+      'empresarial', 'personal', 'familiar', 'profesional',
+      'consultoria', 'asesoria', 'capacitacion', 'curso', 'taller',
+      'software', 'plataforma', 'sistema', 'app', 'pagina', 'tienda',
+      'suscripcion', 'membresia', 'licencia', 'contrato',
+      'pro', 'max', 'plus', 'lite', 'start', 'basic',
+      'personalizado', 'a medida', 'dorado', 'plata', 'bronce',
+      'digital', 'fisico', 'hibrido',
+      'automotriz', 'inmobiliario', 'tecnologico', 'financiero',
+      'terraza', 'jardin', 'vista', 'esquina', 'centro',
+      'garantia', 'soporte', 'instalacion', 'entrega',
     ],
     weight: 1.1,
   },
@@ -75,10 +73,10 @@ const KEYWORD_CATEGORIES = {
     keywords: [
       'lo tomo', 'me lo llevo', 'compro', 'lo compro', 'vamos', 'trato hecho',
       'cerramos', 'lo quiero', 'comprar', 'adquirir', 'mejor precio',
-      'que necesito', 'requisitos', 'documentos', 'cuanto enganche',
+      'que necesito', 'requisitos', 'documentos', 'cuanto pago inicial',
       'cuota mensual', 'meses', 'plazo', 'años', 'a 48 meses',
-      'visitar', 'ir', 'pasar', 'cita', 'agendar', 'test drive',
-      'prueba de manejo', 'showroom', 'donde estan', 'sucursal',
+      'visitar', 'ir', 'pasar', 'cita', 'agendar', 'demostracion',
+      'reunion', 'donde estan', 'sucursal',
       'direccion', 'ubicacion', 'que horario',
     ],
     weight: 1.5,
@@ -252,16 +250,16 @@ export class RevenueEngine {
       tagsDetected.push('tiene_objeciones')
     }
 
-    // Detect specific vehicle mentioned
-    const vehicleKeywords = KEYWORD_CATEGORIES.modelInterest.keywords.slice(0, 60)
-    const mentionedVehicles: string[] = []
-    for (const v of vehicleKeywords) {
+    // Detect specific product mentioned
+    const productKeywords = KEYWORD_CATEGORIES.modelInterest.keywords.slice(0, 60)
+    const mentionedProducts: string[] = []
+    for (const v of productKeywords) {
       if (allText.toLowerCase().includes(v)) {
-        mentionedVehicles.push(v)
+        mentionedProducts.push(v)
       }
     }
-    if (mentionedVehicles.length > 0) {
-      tagsDetected.push(`vehiculo: ${mentionedVehicles[0]}`)
+    if (mentionedProducts.length > 0) {
+      tagsDetected.push(`producto: ${mentionedProducts[0]}`)
     }
 
     // Count conversation turns (engagement proxy)
@@ -414,7 +412,7 @@ export class RevenueEngine {
         isActive: true,
         triggerType: 'appointment_request',
         confidence: 0.85,
-        description: 'El prospecto solicitó cita o información de agencia.',
+        description: 'El prospecto solicitó cita o información de la empresa.',
       }
     }
 
@@ -449,7 +447,7 @@ export class RevenueEngine {
       if (analysis.score < 20) {
         return {
           action: 'question',
-          strategy: 'CALIFICACIÓN INICIAL: Identificar presupuesto, vehículo de interés, plazos.',
+          strategy: 'CALIFICACIÓN INICIAL: Identificar presupuesto, producto de interés, plazos.',
           priority: 1,
         }
       }
@@ -479,14 +477,14 @@ export class RevenueEngine {
       case 'price_objection':
         return {
           action: 'handle_objection',
-          strategy: 'OBJECIÓN DE PRECIO: Redirigir de "caro" a "inversión". Mostrar MSI, enganche bajo, valor de reventa.',
+          strategy: 'OBJECIÓN DE PRECIO: Redirigir de "caro" a "inversión". Mostrar MSI, pago inicial bajo, valor de reventa.',
           priority: 8,
         }
 
       case 'appointment_request':
         return {
           action: 'close',
-          strategy: 'AGENDAR CITA: Confirmar fecha, hora y qué vehículo ver. Enviar confirmación.',
+          strategy: 'AGENDAR CITA: Confirmar fecha, hora y qué producto ver. Enviar confirmación.',
           priority: 9,
         }
 
@@ -530,9 +528,9 @@ export class RevenueEngine {
     ) {
       return {
         insight: 'Detecto que el precio es una preocupación. Esto es normal — la mayoría de nuestros clientes sienten lo mismo al inicio.',
-        direction: 'Un auto no es un gasto, es una herramienta que genera valor. Hablemos de financiamiento: desde $3,000-5,000 MXN mensuales con enganche desde 10%. Además, el auto se deprecia menos que el dinero en el banco.',
+        direction: 'Un producto no es un gasto, es una herramienta que genera valor. Hablemos de planes de pago: desde $3,000-5,000 MXN mensuales con pago inicial desde 10%. Además, el producto se deprecia menos que el dinero en el banco.',
         question: '¿Cuál es el monto mensual que te sentirías cómodo pagando? Así busco la mejor opción para ti.',
-        rawResponse: 'Entiendo que el precio es una preocupación, es muy normal. Un auto no es un gasto, es una herramienta que genera valor. Hablemos de financiamiento: desde $3,000-5,000 MXN mensuales con enganche desde 10%. ¿Cuál es el monto mensual que te sentirías cómodo pagando?',
+        rawResponse: 'Entiendo que el precio es una preocupación, es muy normal. Un producto no es un gasto, es una herramienta que genera valor. Hablemos de planes de pago: desde $3,000-5,000 MXN mensuales con pago inicial desde 10%. ¿Cuál es el monto mensual que te sentirías cómodo pagando?',
         tone: 'empathetic',
         isClosingAttempt: false,
         suggestedReplies: [
@@ -554,13 +552,13 @@ export class RevenueEngine {
     ) {
       return {
         insight: 'Entiendo que quieres tomarte tu tiempo. Es una decisión importante.',
-        direction: 'Solo que cada mes que esperas, el auto sube entre $3,000-5,000 MXN por ajustes de precio. Además, las promociones de financiamiento cambian constantemente. Lo que hoy está a 48 MSI, mañana puede ser solo a 24.',
+        direction: 'Solo que cada mes que esperas, los precios pueden ajustarse entre $3,000-5,000 MXN. Además, las promociones de financiamiento cambian constantemente. Lo que hoy está a 48 MSI, mañana puede ser solo a 24.',
         question: '¿Qué te falta definir para tomar la decisión? Si te ayudo con esa información, ¿podríamos avanzar?',
-        rawResponse: 'Entiendo que quieres tomarte tu tiempo, es una decisión importante. Solo que cada mes que esperas, el auto sube entre $3,000-5,000 MXN por ajustes de precio, y las promociones cambian constantemente. ¿Qué te falta definir para tomar la decisión?',
+        rawResponse: 'Entiendo que quieres tomarte tu tiempo, es una decisión importante. Solo que cada mes que esperas, los precios pueden ajustarse, y las promociones cambian constantemente. ¿Qué te falta definir para tomar la decisión?',
         tone: 'educational',
         isClosingAttempt: false,
         suggestedReplies: [
-          'Necesito ver el auto primero',
+          'Necesito ver el producto primero',
           'Quiero comparar precios',
           '¿Puedes mandarme información?',
         ],
@@ -578,9 +576,9 @@ export class RevenueEngine {
     ) {
       return {
         insight: 'Es excelente que tomes en cuenta a tu familia en esta decisión. Un auto impacta a todos en casa.',
-        direction: '¿Qué te parece si agendamos una cita para que vengan juntos? Así pueden ver el auto, hacer prueba de manejo y tomar la decisión juntos. Tenemos horario de lunes a sábado.',
+        direction: '¿Qué te parece si agendamos una reunión para que vengan juntos? Así pueden conocer el producto, hacer una demostración y tomar la decisión juntos. Tenemos horario de lunes a sábado.',
         question: '¿Sábado a las 10am o a las 12pm les quedaría mejor?',
-        rawResponse: 'Es excelente que tomes en cuenta a tu familia en esta decisión. ¿Qué te parece si agendamos una cita para que vengan juntos? Así pueden ver el auto, hacer prueba de manejo y tomar la decisión juntos. ¿Sábado a las 10am o a las 12pm les quedaría mejor?',
+        rawResponse: 'Es excelente que tomes en cuenta a tu familia en esta decisión. ¿Qué te parece si agendamos una reunión para que vengan juntos? Así pueden conocer el producto, hacer una demostración y tomar la decisión juntos. ¿Sábado a las 10am o a las 12pm les quedaría mejor?',
         tone: 'confident',
         isClosingAttempt: true,
         suggestedReplies: [
@@ -620,7 +618,7 @@ export class RevenueEngine {
       personalityName?: string
       workspaceContext?: WorkspaceContext
       contactName?: string
-      lastVehicle?: string
+      lastProduct?: string
       lastMessage?: string
       conversationHistory?: { role: string; content: string }[]
       temperature?: number
@@ -650,7 +648,7 @@ export class RevenueEngine {
           buyingSignals: analysis.buyingSignals,
           objections: analysis.objections,
           contactName: context?.contactName,
-          lastVehicle: context?.lastVehicle,
+          lastProduct: context?.lastProduct,
           lastMessage: context?.lastMessage,
         }
       )
@@ -662,7 +660,7 @@ export class RevenueEngine {
     }
 
     // Build conversation messages with full history for natural context
-    const userMessage = context?.lastMessage || 'Hola, busco información sobre un auto.'
+    const userMessage = context?.lastMessage || 'Hola, busco información sobre un producto.'
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
     ]
@@ -711,11 +709,11 @@ export class RevenueEngine {
           ? 'Vamos a enfocarnos en encontrar la mejor opción para ti.'
           : 'Me gustaría conocerte mejor para darte la mejor recomendación.',
         question: analysis.score > 50
-          ? '¿Qué día te viene mejor para visitar la agencia?'
-          : '¿Qué tipo de vehículo tienes en mente y cuál es tu presupuesto aproximado?',
+          ? '¿Qué día te viene mejor para visitar nuestra oficina?'
+          : '¿Qué tipo de producto tienes en mente y cuál es tu presupuesto aproximado?',
         rawResponse: analysis.score > 50
-          ? 'Vamos a enfocarnos en encontrar la mejor opción para ti. ¿Qué día te viene mejor para visitar la agencia?'
-          : 'Me gustaría conocerte mejor para darte la mejor recomendación. ¿Qué tipo de vehículo tienes en mente y cuál es tu presupuesto aproximado?',
+          ? 'Vamos a enfocarnos en encontrar la mejor opción para ti. ¿Qué día te viene mejor para visitar nuestra oficina?'
+          : 'Me gustaría conocerte mejor para darte la mejor recomendación. ¿Qué tipo de producto tienes en mente y cuál es tu presupuesto aproximado?',
         tone: analysis.score > 60 ? 'confident' : 'empathetic',
         isClosingAttempt: analysis.score > 70,
         suggestedReplies: ['Agendar cita', 'Quiero más información', 'Cuál es el precio'],
@@ -809,9 +807,9 @@ export class RevenueEngine {
       if (analysis.score > 70) {
         suggestedReplies = ['Sí, agendemos', '¿Cuándo puedo pasar?', 'Me interesa']
       } else if (analysis.score > 40) {
-        suggestedReplies = ['Quiero más información', '¿Puedo ver el auto?', 'Agendar cita']
+        suggestedReplies = ['Quiero más información', '¿Puedo ver el producto?', 'Agendar cita']
       } else {
-        suggestedReplies = ['Busco un sedan', 'Busco una SUV', '¿Cuál es el precio?']
+        suggestedReplies = ['Busco un plan básico', 'Busco la opción premium', '¿Cuál es el precio?']
       }
     }
 
@@ -852,7 +850,7 @@ export class RevenueEngine {
       tasks.push({
         delayHours: 0,
         channel: 'whatsapp',
-        template: 'Gracias por tu interés, {{name}}. Te comparto información sobre nuestros vehículos disponibles.',
+        template: 'Gracias por tu interés, {{name}}. Te comparto información sobre nuestros productos disponibles.',
         priority: 1,
       })
     }
@@ -882,7 +880,7 @@ export class RevenueEngine {
       tasks.push({
         delayHours: 4,
         channel: 'whatsapp',
-        template: 'Hola {{name}}, solo para confirmar: ¿vamos agendando tu visita a la agencia? Esta semana tenemos unidades limitadas.',
+        template: 'Hola {{name}}, solo para confirmar: ¿vamos agendando tu visita a la oficina? Esta semana tenemos disponibilidad limitada.',
         priority: 1,
       })
       tasks.push({
@@ -898,7 +896,7 @@ export class RevenueEngine {
       tasks.push({
         delayHours: 48,
         channel: 'whatsapp',
-        template: 'Hola {{name}}, sé que estás buscando opciones. Acabamos de llegar unidades nuevas. ¿Te interesa que te cuente?',
+        template: 'Hola {{name}}, sé que estás buscando opciones. Acabamos de llegar productos nuevos. ¿Te interesa que te cuente?',
         priority: 4,
       })
     }

@@ -37,7 +37,7 @@ interface Vendedor {
 
 interface ClienteSaaS {
   id: string
-  agencia: string
+  empresa: string
   plan: 'Enterprise' | 'Pro' | 'Free'
   mrr: number
   estatus: 'Activo' | 'Trial'
@@ -74,14 +74,14 @@ const mockVendedores: Vendedor[] = [
 ]
 
 const mockClientes: ClienteSaaS[] = [
-  { id: '1', agencia: 'AutoGrupo del Norte', plan: 'Enterprise', mrr: 8500, estatus: 'Activo' },
-  { id: '2', agencia: 'Motors CDMX', plan: 'Enterprise', mrr: 7200, estatus: 'Activo' },
-  { id: '3', agencia: 'Autos Premier Jalisco', plan: 'Pro', mrr: 4500, estatus: 'Activo' },
-  { id: '4', agencia: 'Dealership Monterrey', plan: 'Pro', mrr: 4500, estatus: 'Activo' },
-  { id: '5', agencia: 'AutoMax Puebla', plan: 'Pro', mrr: 4500, estatus: 'Trial' },
-  { id: '6', agencia: 'CarConnect Guadalajara', plan: 'Free', mrr: 0, estatus: 'Trial' },
-  { id: '7', agencia: 'Grupo Automotriz León', plan: 'Enterprise', mrr: 9200, estatus: 'Activo' },
-  { id: '8', agencia: 'SellAuto Querétaro', plan: 'Free', mrr: 0, estatus: 'Trial' },
+  { id: '1', empresa: 'TechStart Norte', plan: 'Enterprise', mrr: 8500, estatus: 'Activo' },
+  { id: '2', empresa: 'Innova CDMX', plan: 'Enterprise', mrr: 7200, estatus: 'Activo' },
+  { id: '3', empresa: 'Servicios Premier Jalisco', plan: 'Pro', mrr: 4500, estatus: 'Activo' },
+  { id: '4', empresa: 'Soluciones Monterrey', plan: 'Pro', mrr: 4500, estatus: 'Activo' },
+  { id: '5', empresa: 'DigitalMax Puebla', plan: 'Pro', mrr: 4500, estatus: 'Trial' },
+  { id: '6', empresa: 'Connect Guadalajara', plan: 'Free', mrr: 0, estatus: 'Trial' },
+  { id: '7', empresa: 'Grupo Empresarial León', plan: 'Enterprise', mrr: 9200, estatus: 'Activo' },
+  { id: '8', empresa: 'SellPro Querétaro', plan: 'Free', mrr: 0, estatus: 'Trial' },
 ]
 
 // ── Helpers ──
@@ -191,7 +191,7 @@ export function AdminView({ workspaceId }: AdminViewProps) {
     {
       title: 'Clientes SaaS',
       value: metrics.clientesSaaS.toString(),
-      description: 'Agencias suscritas',
+      description: 'Empresas suscritas',
       icon: <Building2 className="h-4 w-4" />,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
@@ -373,7 +373,7 @@ export function AdminView({ workspaceId }: AdminViewProps) {
                 <TableHeader>
                   <TableRow className="border-border/60">
                     <TableHead className="text-xs font-semibold text-muted-foreground">
-                      Agencia
+                      Empresa
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-muted-foreground text-center">
                       Plan
@@ -392,14 +392,14 @@ export function AdminView({ workspaceId }: AdminViewProps) {
                       <TableCell className="py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold shrink-0">
-                            {cliente.agencia
+                            {cliente.empresa
                               .split(' ')
                               .slice(0, 2)
                               .map((n) => n[0])
                               .join('')}
                           </div>
                           <span className="text-sm font-medium text-foreground truncate max-w-[170px]">
-                            {cliente.agencia}
+                            {cliente.empresa}
                           </span>
                         </div>
                       </TableCell>
