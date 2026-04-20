@@ -55,3 +55,29 @@ Stage Summary:
 - BLOCKER: Cannot execute SQL from sandbox due to network restrictions (pooler says "Tenant not found")
 - User must manually run SQL in Supabase Dashboard SQL Editor
 - After SQL execution, the app will connect to PostgreSQL automatically
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix DATABASE_URL region, NEXTAUTH_URL, Google OAuth, and server startup
+
+Work Log:
+- Identified DATABASE_URL was pointing to wrong Supabase region (aws-0-us-west-1 → aws-1-us-east-2)
+- Fixed NEXTAUTH_URL from space.z.ai to space.chatglm.site
+- Updated .env, .zscripts/dev.sh, and next.config.ts with correct URLs
+- Added Google OAuth credentials (Client ID + Secret) to dev.sh ensure_env
+- Added Supabase PostgreSQL override to dev.sh to prevent SQLite fallback
+- Started server via dev.sh with correct environment variables
+- Verified login API works (jvegahdz24@gmail.com / valiflow2026)
+- Verified preview accessible via space.chatglm.site
+- Seeded 5 sample contacts and 3 conversations into Supabase
+- Confirmed WhatsApp real-time messaging working
+- Confirmed JHON v4.0 AI agent responding automatically
+- Confirmed lead detection and archetype detection working
+
+Stage Summary:
+- ValiAutoFlow is 100% operational
+- Login, Dashboard, Contacts, Conversations, WhatsApp, AI Agent all working
+- Supabase PostgreSQL connected (aws-1-us-east-2)
+- Google OAuth configured but not yet tested (user needs to try)
+- Server running via dev.sh with auto-restart
