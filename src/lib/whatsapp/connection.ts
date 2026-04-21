@@ -167,6 +167,16 @@ class WhatsAppManager {
   // ─── Connection Lifecycle ───────────────────────────────────
 
   async start(): Promise<WhatsAppStatus> {
+    // FIX: Detect ghost connections — if _connected but socket is dead, force clean reconnect
+    if (this._connected && this.sock && !this.isSocketAlive()) {
+      console.warn('[WhatsApp] Ghost detected on start() — forcing clean reconnect')
+      this._connected = false
+      this._connecting = false
+      // Clean up dead socket
+      try { (this.sock.ev as any).removeAllListeners() } catch { /* ignore */ }
+      this.sock = null
+    }
+
     if (this._connected && this.sock) {
       return this.getStatus()
     }
@@ -176,6 +186,7 @@ class WhatsAppManager {
     }
 
     this._connecting = true
+    this._reconnectAttempts = 0
     this.emitStatus()
 
     // 🔥 NON-BLOCKING: Launch connection in background, return immediately

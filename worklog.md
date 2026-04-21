@@ -86,3 +86,44 @@ Stage Summary:
 - WhatsApp: connected, sending, AI-powered
 - AI: GLM-4.5-Flash responding (6-35s latency)
 - Zero broken imports, zero missing components
+
+---
+Task ID: 8
+Agent: Main Agent (Super Z)
+Task: Full System Reconnection — Ghost Fix + Dev.sh + E2E Verification
+
+Work Log:
+- Found WhatsApp ghost connection: _connected=true but socket dead (ws.readyState !== OPEN)
+- Fixed start() method in connection.ts to detect ghost connections and force clean reconnect
+- Fixed dev.sh startup script: replaced broken double-subshell with wrapper script approach
+  - Created .next/standalone/start-server.sh that sources .env before launching server
+  - Eliminated "current working directory was deleted" crash
+  - Added PORT=3000 and HOSTNAME=0.0.0.0 to standalone .env
+  - Added health check wait loop with 15s timeout
+- Rebuilt project and restarted server successfully
+- Reconnected WhatsApp: auto-connected using persisted DB credentials (1737 auth files)
+- Verified WhatsApp send message: messageId 3EB08B8B25A7007C61309D
+- Tested AI pipeline (POST /api/ai/chat): response in 28s with full analysis
+  - Action: question, Strategy: CALIFICACIÓN INICIAL
+  - Agent routing: qualifier (80% confidence)
+  - CRM updates: score 7, stage engaged, persona explorador
+- Verified conversation saved in DB with 4 messages (2 inbound + 2 outbound)
+- Verified webhook endpoint: POST /api/webhooks/whatsapp → received: true
+- Full endpoint verification:
+  - Health: 200, Login: 200, Auth/me: 200, Contacts: 200, Workspaces: 200
+  - Frontend: /login 200, /signup 200, /privacy 200, /terms 200
+  - Google OAuth: 307 redirect (correct)
+- Dashboard stats: 23 contacts, 15 conversations, 14 deals, $1.127M pipeline, 45 AI messages
+- 3 agents active: JHON (qualifier), SELLER Pro (sales), FollowUp Bot
+- 3 automations active: Seguimiento 24h, Deal Ganado, Lead Score > 80
+- 4 notifications active
+
+Stage Summary:
+- ALL systems connected and verified end-to-end
+- WhatsApp: connected, phone 5219842084424, sending/receiving
+- AI: GLM-4.5-Flash pipeline working (28s latency)
+- Database: Supabase PostgreSQL, 23 contacts, 15 conversations, 14 deals
+- Auth: login + session + rate limiting + Google OAuth
+- Frontend: all pages rendering correctly
+- Server: stable with auto-restart via fixed dev.sh
+- Preview: https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site
