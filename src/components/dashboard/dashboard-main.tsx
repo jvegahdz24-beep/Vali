@@ -548,7 +548,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                         </div>
                         <Avatar className="h-7 w-7 shrink-0 mt-0.5">
                           <AvatarFallback className="bg-zinc-100 text-zinc-600 text-[9px] font-semibold">
-                            {getInitials(conv.contact ? `${conv.contact.firstName} ${conv.contact.lastName}` : '??')}
+                            {getInitials(conv.contact ? `${conv.contact.firstName} ${conv.contact.lastName || ''}`.trim() : '??')}
                           </AvatarFallback>
                         </Avatar>
                         {conv.contact.leadScore > 0 && (
@@ -557,7 +557,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 transition-colors">
-                              {conv.contact ? `${conv.contact.firstName} ${conv.contact.lastName}` : 'Sin contacto'}
+                              {conv.contact ? `${conv.contact.firstName}${conv.contact.lastName ? ' ' + conv.contact.lastName : ''}`.trim() : 'Sin contacto'}
                             </span>
                             <span className="text-xs">{getChannelIcon(conv.channel)}</span>
                           </div>
@@ -676,7 +676,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                           <div>
                             <p className="text-xs font-medium text-foreground">{stage.name}</p>
                             <p className="text-[10px] text-muted-foreground">
-                              {stage.dealCount} trato{stage.dealCount !== 1 ? 's' : ''}
+                              {stage.dealCount > 0 ? `${stage.dealCount} trato${stage.dealCount !== 1 ? 's' : ''}` : 'Sin tratos'}
                             </p>
                           </div>
                         </div>
