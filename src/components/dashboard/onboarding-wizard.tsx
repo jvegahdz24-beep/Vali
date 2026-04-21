@@ -33,7 +33,7 @@ const industries = [
   { id: 'real-estate', label: 'Bienes Raíces', icon: '🏠' },
   { id: 'retail', label: 'Retail', icon: '🛍️' },
   { id: 'professional', label: 'Servicios Profesionales', icon: '⚖️' },
-  { id: 'automotive', label: 'Automotriz', icon: '🚗' },
+  { id: 'technology', label: 'Tecnología', icon: '💻' },
   { id: 'health', label: 'Salud', icon: '🏥' },
   { id: 'restaurants', label: 'Restaurantes', icon: '🍽️' },
   { id: 'education', label: 'Educación', icon: '📚' },

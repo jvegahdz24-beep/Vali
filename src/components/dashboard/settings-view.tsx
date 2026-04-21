@@ -71,9 +71,10 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   const [saving, setSaving] = useState(false)
 
   // ── General Tab State ──
-  const [workspaceName, setWorkspaceName] = useState(() => localStorage.getItem('vf_workspaceName') || 'Mi Negocio')
+  // Prefer user context (from API) over stale localStorage
+  const [workspaceName, setWorkspaceName] = useState(() => user?.workspaceName || localStorage.getItem('vf_workspaceName') || 'Mi Negocio')
   const [industry, setIndustry] = useState(() => localStorage.getItem('vf_industry') || 'services')
-  const [language, setLanguage] = useState(() => localStorage.getItem('vf_language') || 'es')
+  const [language, setLanguage] = useState(() => user?.locale || localStorage.getItem('vf_language') || 'es')
   const [generalSaved, setGeneralSaved] = useState(false)
 
   // ── Billing Tab State ──
@@ -96,13 +97,14 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
 
   // ── Industries ──
   const industries = [
-    { value: 'services', label: 'Servicios', emoji: '💼', desc: 'Consultorías y servicios' },
-    { value: 'realestate', label: 'Bienes Raíces', emoji: '🏠', desc: 'Inmobiliarias' },
-    { value: 'technology', label: 'Tecnología', emoji: '💻', desc: 'Software y SaaS' },
-    { value: 'retail', label: 'Retail', emoji: '🛍️', desc: 'Tiendas y ecommerce' },
-    { value: 'automotive', label: 'Automotriz', emoji: '🚗', desc: 'Concesionarias, agencias y distribuidoras' },
-    { value: 'health', label: 'Salud', emoji: '🏥', desc: 'Clínicas y hospitales' },
-    { value: 'education', label: 'Educación', emoji: '📚', desc: 'Escuelas y academias' },
+    { value: 'services', label: 'Servicios', emoji: '💼', desc: 'Consultorías y servicios profesionales' },
+    { value: 'technology', label: 'Tecnología', emoji: '💻', desc: 'Software, SaaS y desarrollo' },
+    { value: 'retail', label: 'Retail', emoji: '🛍️', desc: 'Tiendas, ecommerce y ventas' },
+    { value: 'realestate', label: 'Bienes Raíces', emoji: '🏠', desc: 'Inmobiliarias y corretaje' },
+    { value: 'health', label: 'Salud', emoji: '🏥', desc: 'Clínicas, hospitales y wellness' },
+    { value: 'education', label: 'Educación', emoji: '📚', desc: 'Escuelas, academias y formación' },
+    { value: 'food', label: 'Alimentos', emoji: '🍽️', desc: 'Restaurantes, cafeterías y foodtech' },
+    { value: 'finance', label: 'Finanzas', emoji: '🏦', desc: 'Bancos, fintech y asesoría financiera' },
   ]
 
   // ── Personalities ──

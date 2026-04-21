@@ -348,7 +348,7 @@ export default function LandingPage() {
       <section className="py-16 border-y border-zinc-100 bg-zinc-50/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm font-medium text-zinc-500 mb-8">
-            Confiado por empresas en Monterrey, Guadalajara, CDMX, Querétaro
+            Confiado por empresas en Monterrey, Guadalajara, CDMX, Querétaro, Puebla y más
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
             {['TechStart', 'Innova Solutions', 'Grupo Digital del Pacífico', 'Connect MX', 'ServiceElite', 'BizWorld'].map((name) => (

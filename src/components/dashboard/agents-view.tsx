@@ -271,7 +271,7 @@ function AgentConfigDialog({
                   <SelectValue placeholder="Seleccionar..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="JHON">JHON (Automotriz)</SelectItem>
+                  <SelectItem value="JHON">JHON (Comercial)</SelectItem>
                   <SelectItem value="Professional">Profesional (B2B)</SelectItem>
                   <SelectItem value="Friendly">Amigable (Retail)</SelectItem>
                   <SelectItem value="Aggressive">Agresivo (Cierre)</SelectItem>

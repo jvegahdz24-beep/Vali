@@ -448,7 +448,7 @@ export default function SignupPage() {
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">2. Descripción del Servicio</h4>
-              <p>ValiAutoFlow es una plataforma SaaS de automatización de ventas y CRM con inteligencia artificial diseñada para concesionarias automotrices en México. El servicio incluye gestión de contactos, automatización de WhatsApp, análisis de conversaciones y herramientas de ventas asistidas por IA.</p>
+              <p>ValiAutoFlow es una plataforma SaaS de automatización de ventas y CRM con inteligencia artificial diseñada para Pymes y empresas de servicios en México. El servicio incluye gestión de contactos, automatización de WhatsApp, análisis de conversaciones y herramientas de ventas asistidas por IA.</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900">3. Cuentas de Usuario</h4>

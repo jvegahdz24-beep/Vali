@@ -127,3 +127,28 @@ Stage Summary:
 - Frontend: all pages rendering correctly
 - Server: stable with auto-restart via fixed dev.sh
 - Preview: https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site
+
+---
+Task ID: 9
+Agent: Main Agent (Super Z)
+Task: Final Automotive Content Cleanup — Settings, Onboarding, All Views
+
+Work Log:
+- Found "AutoMax Guadalajara" shown in user's browser from stale localStorage (not in codebase)
+- Fixed settings-view.tsx: workspaceName now prefers user?.workspaceName (from API) over localStorage
+- Replaced automotive industry in settings industries list: Automotriz → Alimentos, Finanzas
+- Fixed onboarding-wizard.tsx: automotive industry → technology
+- Fixed agents-view.tsx: "JHON (Automotriz)" → "JHON (Comercial)"
+- Fixed developer-view.tsx: "🚗 Vendedor automotriz" → "💼 Asesor comercial inteligente"
+- Fixed signup/page.tsx: "concesionarias automotrices" → "Pymes y empresas de servicios"
+- Fixed landing/page.tsx: updated social proof cities list
+- Admin-view.tsx: "Connect Guadalajara" kept (generic company name, not automotive)
+- Verified zero automotive references in UI code (only 2 in NLP keyword detection)
+- Rebuilt project successfully, server restarted
+
+Stage Summary:
+- 7 files cleaned of automotive references
+- Settings now correctly initializes workspace name from API data (not stale localStorage)
+- Industry selector shows 8 generic industries (no automotive)
+- All personality descriptions are industry-neutral
+- Server rebuilt and running on port 3000

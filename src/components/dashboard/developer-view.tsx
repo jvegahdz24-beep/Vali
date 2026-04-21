@@ -652,7 +652,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                     <Label className="text-sm font-medium text-slate-200">Personalidades Disponibles</Label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { id: 'JHON', emoji: '🚗', desc: 'Vendedor automotriz' },
+                        { id: 'JHON', emoji: '💼', desc: 'Asesor comercial inteligente' },
                         { id: 'Professional', emoji: '💼', desc: 'B2B formal' },
                         { id: 'Friendly', emoji: '😊', desc: 'Retail casual' },
                         { id: 'Aggressive', emoji: '🔥', desc: 'Alta presión' },
