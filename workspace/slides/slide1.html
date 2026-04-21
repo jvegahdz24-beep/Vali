@@ -1,14 +1,105 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{width:720pt;height:405pt;font-family:Arial,Helvetica,sans-serif;background:#0A0E1A;color:#F1F5F9;display:flex;flex-direction:column;overflow:hidden}
+body{
+  width:720pt;height:405pt;
+  font-family:Arial,Helvetica,sans-serif;
+  background-color:#0F1117;
+  background-image:url('../assets/bg-dark.png');
+  background-size:cover;
+  color:#FFFFFF;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+</style>
+</head>
+<body>
 
-</style></head><body>
-<div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40pt;text-align:center">
-  <div style="width:80pt;height:3pt;background:#00D4AA;margin-bottom:20pt;border-radius:2pt"></div>
-  <h1 style="font-size:38pt;font-weight:900;letter-spacing:2pt;color:#F1F5F9;line-height:1.2">JHON v4.0</h1>
-  <p style="font-size:18pt;color:#00D4AA;margin-top:10pt;font-weight:300;letter-spacing:4pt">LA EVOLUCION</p>
-  <div style="width:80pt;height:3pt;background:#00D4AA;margin-top:20pt;border-radius:2pt"></div>
-  <p style="font-size:11pt;color:#94A3B8;margin-top:24pt;max-width:420pt;line-height:1.5">De vendedor de automoviles a consultor comercial multi-agente inteligente. Una transformacion completa de identidad y funcionalidad.</p>
-  <p style="font-size:9pt;color:#94A3B8;margin-top:30pt;opacity:0.5">ValiAutoFlow — 2026</p>
+<!-- HEADER BAR -->
+<div style="background:rgba(34,211,238,0.06);border-bottom:2pt solid rgba(34,211,238,0.25);padding:16pt 32pt 14pt 32pt">
+  <p style="font-size:9pt;color:#22D3EE;letter-spacing:3pt;font-weight:700">SISTEMA MULTI-AGENTE</p>
+  <h1 style="font-size:24pt;font-weight:800;margin-top:4pt">JHON v4.0</h1>
 </div>
-</body></html>
+
+<!-- 3 AGENT CARDS -->
+<div style="display:flex;flex:1;padding:18pt 24pt 22pt 24pt;gap:0">
+
+  <!-- AGENT 1: DIAGNOSTICO -->
+  <div style="flex:1;background:rgba(34,211,238,0.07);border:1pt solid rgba(34,211,238,0.2);border-radius:8pt;padding:14pt 14pt 12pt 14pt;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8pt;margin-bottom:8pt">
+      <img src="../assets/num-cyan.png" style="width:28pt;height:28pt">
+      <p style="font-size:11pt;font-weight:700;color:#22D3EE">Diagnostico</p>
+    </div>
+    <p style="font-size:8.5pt;color:#CBD5E1;line-height:1.5;margin-bottom:8pt">Pregunta, detecta la fuga, abre conciencia</p>
+    <div style="border-top:1pt solid rgba(34,211,238,0.15);padding-top:8pt;margin-bottom:6pt">
+      <p style="font-size:7.5pt;color:#94A3B8;font-weight:700;letter-spacing:1pt;margin-bottom:4pt">SKILLS</p>
+      <ul style="padding-left:12pt;color:#94A3B8;font-size:8pt;line-height:1.6">
+        <li>Investigacion</li>
+        <li>Escucha Activa</li>
+        <li>Deteccion de Patrones</li>
+      </ul>
+    </div>
+    <div style="margin-top:auto;border-top:1pt solid rgba(34,211,238,0.15);padding-top:6pt">
+      <p style="font-size:7pt;color:#94A3B8;font-weight:700;letter-spacing:1pt">OUTPUT</p>
+      <p style="font-size:8.5pt;color:#22D3EE;font-weight:600;margin-top:2pt">Diagnostico Inicial</p>
+    </div>
+  </div>
+
+  <!-- ARROW 1 -->
+  <div style="display:flex;align-items:center;justify-content:center;width:28pt">
+    <img src="../assets/arrow-right.png" style="width:22pt;height:22pt">
+  </div>
+
+  <!-- AGENT 2: ESTRATEGIA -->
+  <div style="flex:1;background:rgba(52,211,153,0.07);border:1pt solid rgba(52,211,153,0.2);border-radius:8pt;padding:14pt 14pt 12pt 14pt;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8pt;margin-bottom:8pt">
+      <img src="../assets/num-emerald.png" style="width:28pt;height:28pt">
+      <p style="font-size:11pt;font-weight:700;color:#34D399">Estrategia</p>
+    </div>
+    <p style="font-size:8.5pt;color:#CBD5E1;line-height:1.5;margin-bottom:8pt">Traduce en numeros, cuantifica la perdida</p>
+    <div style="border-top:1pt solid rgba(52,211,153,0.15);padding-top:8pt;margin-bottom:6pt">
+      <p style="font-size:7.5pt;color:#94A3B8;font-weight:700;letter-spacing:1pt;margin-bottom:4pt">SKILLS</p>
+      <ul style="padding-left:12pt;color:#94A3B8;font-size:8pt;line-height:1.6">
+        <li>Analisis Financiero</li>
+        <li>Calculo ROI</li>
+        <li>Proyecciones</li>
+      </ul>
+    </div>
+    <div style="margin-top:auto;border-top:1pt solid rgba(52,211,153,0.15);padding-top:6pt">
+      <p style="font-size:7pt;color:#94A3B8;font-weight:700;letter-spacing:1pt">OUTPUT</p>
+      <p style="font-size:8.5pt;color:#34D399;font-weight:600;margin-top:2pt">Estrategia Cuantificada</p>
+    </div>
+  </div>
+
+  <!-- ARROW 2 -->
+  <div style="display:flex;align-items:center;justify-content:center;width:28pt">
+    <img src="../assets/arrow-right.png" style="width:22pt;height:22pt">
+  </div>
+
+  <!-- AGENT 3: CIERRE -->
+  <div style="flex:1;background:rgba(167,139,250,0.07);border:1pt solid rgba(167,139,250,0.2);border-radius:8pt;padding:14pt 14pt 12pt 14pt;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8pt;margin-bottom:8pt">
+      <img src="../assets/num-purple.png" style="width:28pt;height:28pt">
+      <p style="font-size:11pt;font-weight:700;color:#A78BFA">Cierre</p>
+    </div>
+    <p style="font-size:8.5pt;color:#CBD5E1;line-height:1.5;margin-bottom:8pt">Invita sin presion, solo si hay conciencia</p>
+    <div style="border-top:1pt solid rgba(167,139,250,0.15);padding-top:8pt;margin-bottom:6pt">
+      <p style="font-size:7.5pt;color:#94A3B8;font-weight:700;letter-spacing:1pt;margin-bottom:4pt">SKILLS</p>
+      <ul style="padding-left:12pt;color:#94A3B8;font-size:8pt;line-height:1.6">
+        <li>Negociacion Empatia</li>
+        <li>Propuesta de Valor</li>
+      </ul>
+    </div>
+    <div style="margin-top:auto;border-top:1pt solid rgba(167,139,250,0.15);padding-top:6pt">
+      <p style="font-size:7pt;color:#94A3B8;font-weight:700;letter-spacing:1pt">OUTPUT</p>
+      <p style="font-size:8.5pt;color:#A78BFA;font-weight:600;margin-top:2pt">Cierre Natural</p>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
