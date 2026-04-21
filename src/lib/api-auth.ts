@@ -110,10 +110,11 @@ export function errorResponse(error: unknown, fallbackMessage = 'Error interno d
     return Response.json(error.toJSON(), { status: error.statusCode })
   }
 
-  console.error('[API Error]', error)
+  const errMsg = error instanceof Error ? error.message : String(error)
+  console.error('[API Error]', errMsg, error)
 
   return Response.json(
-    { error: fallbackMessage, code: 'INTERNAL_ERROR' },
+    { error: fallbackMessage, code: 'INTERNAL_ERROR', details: errMsg },
     { status: 500 }
   )
 }

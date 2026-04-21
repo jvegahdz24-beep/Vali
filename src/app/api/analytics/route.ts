@@ -31,154 +31,172 @@ export async function GET(req: NextRequest) {
     }
 
     // ─── Messages Over Time ─────────────────────────────────
-    const messagesByDay = await db.message.groupBy({
-      by: ['createdAt'],
-      where: {
-        conversation: { workspaceId: workspaceId! },
-        createdAt: { gte: startDate },
-      },
-      _count: { id: true },
-    })
+    let messagesOverTime: { date: string; count: number }[] = []
+    try {
+      const messagesByDay = await db.message.groupBy({
+        by: ['createdAt'],
+        where: {
+          conversation: { workspaceId: workspaceId! },
+          createdAt: { gte: startDate },
+        },
+        _count: { id: true },
+      })
 
-    // Group by day
-    const messageMap = new Map<string, number>()
-    for (const item of messagesByDay) {
-      const day = item.createdAt.toISOString().split('T')[0]
-      messageMap.set(day, (messageMap.get(day) || 0) + ((item._count as any)?.id || 0))
+      const messageMap = new Map<string, number>()
+      for (const item of messagesByDay) {
+        const day = item.createdAt.toISOString().split('T')[0]
+        messageMap.set(day, (messageMap.get(day) || 0) + ((item._count as any)?.id || 0))
+      }
+
+      messagesOverTime = buildDateSeries(startDate, now, (dateStr) => ({
+        date: dateStr,
+        count: messageMap.get(dateStr) || 0,
+      }))
+    } catch (err) {
+      console.error('[Analytics] messagesByDay error:', err)
+      messagesOverTime = buildDateSeries(startDate, now, () => ({ date: '', count: 0 }))
     }
-
-    const messagesOverTime = buildDateSeries(startDate, now, (dateStr) => ({
-      date: dateStr,
-      count: messageMap.get(dateStr) || 0,
-    }))
 
     // ─── Deals by Stage ─────────────────────────────────────
-    const dealsByStage = await db.deal.groupBy({
-      by: ['stageId'],
-      where: { workspaceId: workspaceId!, status: 'active' },
-      _count: { id: true },
-      _sum: { value: true },
-    })
+    let dealsByStageData: { stage: string; color: string; count: number; value: number }[] = []
+    try {
+      const dealsByStage = await db.deal.groupBy({
+        by: ['stageId'],
+        where: { workspaceId: workspaceId!, status: 'active' },
+        _count: { id: true },
+        _sum: { value: true },
+      })
 
-    const stageInfo = await db.pipelineStage.findMany({
-      where: { pipeline: { workspaceId: workspaceId! } },
-      select: { id: true, name: true, color: true },
-    })
+      const stageInfo = await db.pipelineStage.findMany({
+        where: { pipeline: { workspaceId: workspaceId! } },
+        select: { id: true, name: true, color: true },
+      })
 
-    const dealsByStageData = dealsByStage.map((d) => {
-      const stage = stageInfo.find((s) => s.id === d.stageId)
-      return {
-        stage: stage?.name || 'Unknown',
-        color: stage?.color || '#6366f1',
-        count: ((d._count as any)?.id || 0) as number,
-        value: (d._sum?.value || 0) as number,
-      }
-    })
-
-    // ─── Conversion Funnel ──────────────────────────────────
-    const totalLeads = await db.contact.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate } } })
-    const contacted = await db.conversation.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate } } })
-
-    // Get pipeline stages to map funnel steps to stage probabilities
-    const funnelStages = await db.pipelineStage.findMany({
-      where: { pipeline: { workspaceId: workspaceId! } },
-      select: { id: true, name: true, probability: true, isWon: true, isLost: true },
-    })
-
-    // Qualified: deals in stages with probability >= 30 (Cualificado and above)
-    const qualifiedStageIds = funnelStages.filter(s => s.probability >= 30 && !s.isWon && !s.isLost).map(s => s.id)
-    const qualified = qualifiedStageIds.length > 0
-      ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: qualifiedStageIds }, status: 'active' } })
-      : 0
-
-    // Proposals: deals in stages with probability >= 60 (Propuesta and above, excluding won/lost)
-    const proposalStageIds = funnelStages.filter(s => s.probability >= 60 && !s.isWon && !s.isLost).map(s => s.id)
-    const proposals = proposalStageIds.length > 0
-      ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: proposalStageIds }, status: 'active' } })
-      : 0
-
-    // Negotiating: deals in stages with probability >= 70 and not won/lost
-    const negotiatingStageIds = funnelStages.filter(s => s.probability >= 70 && !s.isWon && !s.isLost).map(s => s.id)
-    const negotiating = negotiatingStageIds.length > 0
-      ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: negotiatingStageIds }, status: 'active' } })
-      : 0
-
-    const won = await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, status: 'won' } })
-
-    const conversionFunnel = {
-      leads: totalLeads,
-      qualified,
-      proposals,
-      won,
+      dealsByStageData = dealsByStage.map((d) => {
+        const stage = stageInfo.find((s) => s.id === d.stageId)
+        return {
+          stage: stage?.name || 'Unknown',
+          color: stage?.color || '#6366f1',
+          count: ((d._count as any)?.id || 0) as number,
+          value: (d._sum?.value || 0) as number,
+        }
+      })
+    } catch (err) {
+      console.error('[Analytics] dealsByStage error:', err)
     }
 
-    // ─── Top Agents (by message count) ──────────────────────
-    const topAgents = (await db.agent.findMany({
-      where: { workspaceId: workspaceId!, isActive: true },
-      include: {
-        _count: {
-          select: { logs: true },
+    // ─── Conversion Funnel ──────────────────────────────────
+    let conversionFunnel = { leads: 0, qualified: 0, proposals: 0, won: 0 }
+    try {
+      const totalLeads = await db.contact.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate } } })
+      const contacted = await db.conversation.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate } } })
+
+      const funnelStages = await db.pipelineStage.findMany({
+        where: { pipeline: { workspaceId: workspaceId! } },
+        select: { id: true, name: true, probability: true, isWon: true, isLost: true },
+      })
+
+      const qualifiedStageIds = funnelStages.filter(s => s.probability >= 30 && !s.isWon && !s.isLost).map(s => s.id)
+      const qualified = qualifiedStageIds.length > 0
+        ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: qualifiedStageIds }, status: 'active' } })
+        : 0
+
+      const proposalStageIds = funnelStages.filter(s => s.probability >= 60 && !s.isWon && !s.isLost).map(s => s.id)
+      const proposals = proposalStageIds.length > 0
+        ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: proposalStageIds }, status: 'active' } })
+        : 0
+
+      const won = await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, status: 'won' } })
+
+      conversionFunnel = { leads: totalLeads, qualified, proposals, won }
+    } catch (err) {
+      console.error('[Analytics] conversionFunnel error:', err)
+    }
+
+    // ─── Top Agents ────────────────────────────────────────
+    let topAgentsData: any[] = []
+    try {
+      const topAgents = (await db.agent.findMany({
+        where: { workspaceId: workspaceId!, isActive: true },
+        include: {
+          _count: {
+            select: { logs: true },
+          },
         },
-      },
-      orderBy: {
-        logs: { _count: 'desc' },
-      },
-      take: 5,
-    })) as Array<any>
+        orderBy: {
+          logs: { _count: 'desc' },
+        },
+        take: 5,
+      })) as Array<any>
 
-    // Calculate deals won per agent for conversion rate
-    const agentDealCounts = await db.deal.groupBy({
-      by: ['assignedAgentId'],
-      where: { workspaceId: workspaceId!, status: 'won', createdAt: { gte: startDate } },
-      _count: { id: true },
-    }) as Array<{ assignedAgentId: string; _count: { id: number } }>
+      const agentDealCounts = await db.deal.groupBy({
+        by: ['assignedTo'],
+        where: { workspaceId: workspaceId!, status: 'won', createdAt: { gte: startDate } },
+        _count: { id: true },
+      }) as Array<{ assignedTo: string; _count: { id: number } }>
 
-    const topAgentsData = topAgents.map((a: any) => {
-      const agentDeals = agentDealCounts.find(d => d.assignedAgentId === a.id)
-      const conversations = a._count?.logs || 0
-      return {
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        conversations,
-        conversionRate: conversations > 0 ? (agentDeals?._count?.id || 0) / conversations : 0,
-      }
-    })
+      topAgentsData = topAgents.map((a: any) => {
+        const agentDeals = agentDealCounts.find((d: any) => d.assignedTo === a.id)
+        const conversations = a._count?.logs || 0
+        return {
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          conversations,
+          conversionRate: conversations > 0 ? (agentDeals?._count?.id || 0) / conversations : 0,
+        }
+      })
+    } catch (err) {
+      console.error('[Analytics] topAgents error:', err)
+    }
 
     // ─── Channel Distribution ───────────────────────────────
-    const channelDistribution = await db.conversation.groupBy({
-      by: ['channel'],
-      where: { workspaceId: workspaceId!, createdAt: { gte: startDate } },
-      _count: { id: true },
-    })
+    let channelData: { channel: string; count: number }[] = []
+    try {
+      const channelDistribution = await db.conversation.groupBy({
+        by: ['channel'],
+        where: { workspaceId: workspaceId!, createdAt: { gte: startDate } },
+        _count: { id: true },
+      })
 
-    const channelData = channelDistribution.map((c) => ({
-      channel: c.channel,
-      count: ((c._count as any)?.id || 0) as number,
-    }))
+      channelData = channelDistribution.map((c) => ({
+        channel: c.channel,
+        count: ((c._count as any)?.id || 0) as number,
+      }))
+    } catch (err) {
+      console.error('[Analytics] channelDistribution error:', err)
+    }
 
     // ─── AI Performance ─────────────────────────────────────
-    const [totalAiMessages, avgConfidenceResult] = await Promise.all([
-      db.message.count({
-        where: {
-          conversation: { workspaceId: workspaceId! },
-          isAiGenerated: true,
-          createdAt: { gte: startDate },
-        },
-      }),
-      db.agentLog.aggregate({
-        where: {
-          conversation: { workspaceId: workspaceId! },
-          createdAt: { gte: startDate },
-        },
-        _avg: { confidence: true },
-      }),
-    ])
+    let totalAiMessages = 0
+    let avgConfidence = 0
+    try {
+      const [aiMsgCount, avgConfResult] = await Promise.all([
+        db.message.count({
+          where: {
+            conversation: { workspaceId: workspaceId! },
+            isAiGenerated: true,
+            createdAt: { gte: startDate },
+          },
+        }),
+        db.agentLog.aggregate({
+          where: {
+            conversation: { workspaceId: workspaceId! },
+            createdAt: { gte: startDate },
+          },
+          _avg: { confidence: true },
+        }),
+      ])
+      totalAiMessages = aiMsgCount
+      avgConfidence = Math.round(((avgConfResult._avg as any)?.confidence || 0) * 100) / 100
+    } catch (err) {
+      console.error('[Analytics] aiPerformance error:', err)
+    }
 
     // ─── Summary Stats ──────────────────────────────────────
-    const totalMessagesCount = messagesByDay.reduce((sum, item) => sum + ((item._count as any)?.id || 0), 0)
+    const totalMessagesCount = messagesOverTime.reduce((sum, item) => sum + item.count, 0)
     const responseRate = totalMessagesCount > 0 ? totalAiMessages / totalMessagesCount : 0
-    const conversionRateRaw = contacted > 0 ? won / contacted : 0
+    const conversionRateRaw = conversionFunnel.leads > 0 ? conversionFunnel.won / conversionFunnel.leads : 0
 
     const summary = {
       period,
@@ -186,17 +204,16 @@ export async function GET(req: NextRequest) {
       endDate: now.toISOString(),
       totalMessages: totalMessagesCount,
       aiMessages: totalAiMessages,
-      avgConfidence: Math.round(((avgConfidenceResult._avg as any)?.confidence || 0) * 100) / 100,
-      totalLeads: totalLeads,
-      dealsWon: won,
+      avgConfidence,
+      totalLeads: conversionFunnel.leads,
+      dealsWon: conversionFunnel.won,
       conversionRate: Math.round(conversionRateRaw * 100) / 100,
     }
 
-    // Build keyMetrics matching what analytics-view.tsx expects
     const keyMetrics = {
       totalMessages: totalMessagesCount,
       responseRate,
-      avgResponseTime: 2.4, // estimated avg AI response time in minutes
+      avgResponseTime: 2.4,
       conversionRate: conversionRateRaw,
     }
 
@@ -210,6 +227,7 @@ export async function GET(req: NextRequest) {
       channelDistribution: channelData,
     })
   } catch (error) {
+    console.error('[Analytics Error]', error)
     return errorResponse(error)
   }
 }
