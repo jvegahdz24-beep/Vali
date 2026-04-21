@@ -6,6 +6,7 @@ import {
   Inbox,
   Kanban,
   Users,
+  UserCog,
   Bot,
   BarChart3,
   Settings,
@@ -15,6 +16,9 @@ import {
   Wifi,
   Shield,
   Building2,
+  Zap,
+  Code2,
+  MessageSquareCode,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -46,7 +50,11 @@ const navItems: NavItem[] = [
   { id: 'inbox', label: 'Bandeja de Entrada', icon: <Inbox className="h-5 w-5" /> },
   { id: 'pipeline', label: 'Pipeline', icon: <Kanban className="h-5 w-5" /> },
   { id: 'contacts', label: 'Contactos', icon: <Users className="h-5 w-5" /> },
+  { id: 'agents', label: 'Agentes IA', icon: <Bot className="h-5 w-5" /> },
+  { id: 'automations', label: 'Automatizaciones', icon: <Zap className="h-5 w-5" /> },
   { id: 'analytics', label: 'Analíticas', icon: <BarChart3 className="h-5 w-5" /> },
+  { id: 'team', label: 'Equipo', icon: <UserCog className="h-5 w-5" /> },
+  { id: 'developer', label: 'Desarrollador', icon: <Code2 className="h-5 w-5" /> },
   { id: 'valiguard', label: 'ValiGuard', icon: <Shield className="h-5 w-5" /> },
   { id: 'admin', label: 'Admin', icon: <Building2 className="h-5 w-5" /> },
   { id: 'settings', label: 'Configuración', icon: <Settings className="h-5 w-5" /> },

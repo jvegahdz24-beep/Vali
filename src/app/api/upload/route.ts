@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { randomUUID } from 'crypto'
+import { db } from '@/lib/db'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = [
@@ -12,6 +13,19 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
+
+// Map MIME types to simple content types for media serving
+const MIME_CONTENT_TYPE: Record<string, string> = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/gif': 'image/gif',
+  'image/webp': 'image/webp',
+  'application/pdf': 'application/pdf',
+  'text/plain': 'text/plain',
+  'text/csv': 'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: 'Tipo de archivo no permitido' }, { status: 400 })
+      return NextResponse.json({ error: 'Tipo de archivo no permitido. Usa JPG, PNG, GIF, WebP, PDF, TXT, CSV, XLSX o DOCX.' }, { status: 400 })
     }
 
     const bytes = await file.arrayBuffer()
@@ -41,16 +55,31 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const ext = file.name.split('.').pop() || 'bin'
-    const filename = `${randomUUID()}.${ext}`
+    const fileId = randomUUID()
+    const filename = `${fileId}.${ext}`
     const filepath = join(uploadDir, filename)
 
     await writeFile(filepath, buffer)
 
-    const publicUrl = `/api/media/${filename}`
+    // Save to DB as MediaFile record (so /api/media/[id] can serve it)
+    const mediaFile = await db.mediaFile.create({
+      data: {
+        id: fileId,
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+        filePath: `uploads/${filename}`,
+        source: 'upload',
+        workspaceId: session.workspaceId || null,
+      },
+    })
+
+    const publicUrl = `/api/media/${fileId}.${ext}`
 
     return NextResponse.json({
       success: true,
       url: publicUrl,
+      mediaId: mediaFile.id,
       filename: file.name,
       size: file.size,
       type: file.type,
