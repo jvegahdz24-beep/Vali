@@ -23,6 +23,8 @@ const publicApiRoutes = [
   '/api/whatsapp/status',     // QR polling needs no auth
   '/api/whatsapp/connect',    // Connection trigger
   '/api/whatsapp/qr-standalone', // QR image
+  '/api/followups/worker',    // Cron worker (auth via X-Worker-Key header)
+  '/api/cron',                // Cron endpoints (auth via worker keys)
 ]
 
 // Rate-limited route prefixes (endpoint → { limit, windowMs })
