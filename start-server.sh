@@ -15,24 +15,24 @@ while true; do
   if ! ss -tlnp 2>/dev/null | grep -q ":3000 "; then
     echo "$(date): Starting server..." >> /home/z/my-project/server.log
     (
-      setsid \
-        HOSTNAME=0.0.0.0 \
-        NODE_ENV=production \
-        DATABASE_URL="$DATABASE_URL" \
-        DIRECT_URL="$DIRECT_URL" \
-        NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
-        NEXTAUTH_URL="$NEXTAUTH_URL" \
-        NEXT_PUBLIC_APP_NAME="$NEXT_PUBLIC_APP_NAME" \
-        NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL" \
-        WHATSAPP_AUTH_DIR="$WHATSAPP_AUTH_DIR" \
-        ZAI_API_KEY="$ZAI_API_KEY" \
-        NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
-        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
-        SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
-        GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-        GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
-        bun .next/standalone/server.js >> /home/z/my-project/server.log 2>&1 &
+      export HOSTNAME=0.0.0.0
+      export NODE_ENV=production
+      export DATABASE_URL="$DATABASE_URL"
+      export DIRECT_URL="$DIRECT_URL"
+      export NEXTAUTH_SECRET="$NEXTAUTH_SECRET"
+      export NEXTAUTH_URL="$NEXTAUTH_URL"
+      export NEXT_PUBLIC_APP_NAME="$NEXT_PUBLIC_APP_NAME"
+      export NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL"
+      export WHATSAPP_AUTH_DIR="$WHATSAPP_AUTH_DIR"
+      export ZAI_API_KEY="$ZAI_API_KEY"
+      export NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL"
+      export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+      export SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY"
+      export GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+      export GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET"
+      exec setsid bun .next/standalone/server.js >> /home/z/my-project/server.log 2>&1
     ) &
+    disown
     sleep 5
     if ss -tlnp 2>/dev/null | grep -q ":3000 "; then
       echo "$(date): Server started successfully" >> /home/z/my-project/server.log

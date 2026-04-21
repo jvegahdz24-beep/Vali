@@ -28,6 +28,7 @@ import {
   Loader2,
   RefreshCw,
   AlertCircle,
+  Trash2,
 } from 'lucide-react'
 import { cn, formatCurrency, getInitials } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,12 +74,13 @@ import { Check, ChevronsUpDown } from 'lucide-react'
 interface Deal {
   id: string
   contactName: string
-  vehicle: string
+  title: string
   value: number
   daysInStage: number
   stage: string
   stageId: string
   phone?: string
+  leadScore?: number
 }
 
 interface Stage {
@@ -96,7 +98,15 @@ interface CrmPipelineProps {
 
 // ── Sortable Deal Card ──
 
-function DealCard({ deal, overlay = false }: { deal: Deal; overlay?: boolean }) {
+function DealCard({
+  deal,
+  overlay = false,
+  onClick,
+}: {
+  deal: Deal
+  overlay?: boolean
+  onClick?: () => void
+}) {
   const {
     attributes,
     listeners,
@@ -128,6 +138,7 @@ function DealCard({ deal, overlay = false }: { deal: Deal; overlay?: boolean }) 
         isDragging && 'opacity-50 shadow-lg',
         overlay && 'shadow-xl rotate-2'
       )}
+      onClick={onClick}
     >
       <div className="flex items-start gap-2">
         <div
@@ -147,8 +158,18 @@ function DealCard({ deal, overlay = false }: { deal: Deal; overlay?: boolean }) 
             <span className="text-xs font-semibold text-foreground truncate">
               {deal.contactName}
             </span>
+            {deal.leadScore !== undefined && deal.leadScore > 0 && (
+              <Badge variant="secondary" className={cn(
+                "text-[9px] px-1 py-0 border-0",
+                deal.leadScore >= 80 ? "bg-emerald-100 text-emerald-700" :
+                deal.leadScore >= 50 ? "bg-yellow-100 text-yellow-700" :
+                "bg-zinc-100 text-zinc-500"
+              )}>
+                {deal.leadScore}
+              </Badge>
+            )}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1 truncate">{deal.vehicle}</p>
+          <p className="text-[11px] text-muted-foreground mt-1 truncate">{deal.title}</p>
           <div className="flex items-center justify-between mt-2">
             <span className="text-xs font-bold text-emerald-600">
               {formatCurrency(deal.value)}
@@ -164,6 +185,12 @@ function DealCard({ deal, overlay = false }: { deal: Deal; overlay?: boolean }) 
               {deal.phone}
             </div>
           )}
+          {deal.daysInStage > 7 && (
+            <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-500">
+              <AlertCircle className="h-3 w-3" />
+              {deal.daysInStage}d sin movimiento
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -175,9 +202,11 @@ function DealCard({ deal, overlay = false }: { deal: Deal; overlay?: boolean }) 
 function PipelineColumn({
   stage,
   deals,
+  onDealClick,
 }: {
   stage: Stage
   deals: Deal[]
+  onDealClick?: (deal: Deal) => void
 }) {
   const totalValue = deals.reduce((sum, d) => sum + d.value, 0)
 
@@ -207,11 +236,11 @@ function PipelineColumn({
       >
         <div className="space-y-2 min-h-[100px] p-1 rounded-lg bg-muted/20">
           {deals.map((deal) => (
-            <DealCard key={deal.id} deal={deal} />
+            <DealCard key={deal.id} deal={deal} onClick={() => onDealClick?.(deal)} />
           ))}
           {deals.length === 0 && (
             <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
-              Sin tratos
+              Sin oportunidades
             </div>
           )}
         </div>
@@ -227,6 +256,8 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
   const [stages, setStages] = useState<Stage[]>([])
   const [pipelineId, setPipelineId] = useState<string>('')
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
+  const [deletingDealId, setDeletingDealId] = useState<string | null>(null)
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -306,29 +337,10 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       }))
       setStages(stageList)
 
-      const dealsMap: Record<string, Deal[]> = {}
-      for (const stage of stageList) {
-        dealsMap[stage.name] = (stage as unknown as { deals: Array<{ id: string; title: string; value: number; contact: { firstName: string; lastName: string } | null; createdAt: string }> } | undefined)?.deals?.map((d) => {
-          const contact = d.contact
-          const contactName = contact ? `${contact.firstName} ${contact.lastName || ''}`.trim() : 'Sin contacto'
-          const created = new Date(d.createdAt)
-          const now = new Date()
-          const daysInStage = Math.max(0, Math.floor((now.getTime() - created.getTime()) / 86400000))
-          return {
-            id: d.id,
-            contactName,
-            vehicle: d.title,
-            value: d.value,
-            daysInStage,
-            stage: stage.name,
-            stageId: stage.id,
-          }
-        }) || []
-      }
       // We need the actual stage deals — reconstruct from the API data
       const apiDealsMap: Record<string, Deal[]> = {}
       for (const s of pipeline.stages) {
-        const stageDeals = (s as unknown as { deals: Array<{ id: string; title: string; value: number; contact: { firstName: string; lastName: string } | null; createdAt: string }> } | undefined)?.deals || []
+        const stageDeals = (s as unknown as { deals: Array<{ id: string; title: string; value: number; contact: { firstName: string; lastName: string; phone?: string; leadScore?: number } | null; createdAt: string }> } | undefined)?.deals || []
         apiDealsMap[s.name] = stageDeals.map((d) => {
           const contact = d.contact
           const contactName = contact ? `${contact.firstName} ${contact.lastName || ''}`.trim() : 'Sin contacto'
@@ -338,11 +350,13 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
           return {
             id: d.id,
             contactName,
-            vehicle: d.title,
+            title: d.title,
             value: d.value,
             daysInStage,
             stage: s.name,
             stageId: s.id,
+            phone: contact?.phone || undefined,
+            leadScore: contact?.leadScore || 0,
           }
         })
       }
@@ -441,6 +455,21 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
     }
   }
 
+  const handleDeleteDeal = async (dealId: string) => {
+    try {
+      setDeletingDealId(dealId)
+      const res = await fetch(`/api/deals/${dealId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Error al eliminar')
+      toast.success('Trato eliminado')
+      setSelectedDeal(null)
+      fetchPipeline()
+    } catch {
+      toast.error('Error al eliminar trato')
+    } finally {
+      setDeletingDealId(null)
+    }
+  }
+
   const handleCreateDeal = async () => {
     if (!newDealTitle || !newDealStage) return
 
@@ -482,7 +511,10 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
 
   const totalPipeline = Object.values(dealsByStage)
     .flat()
-    .filter((d) => !['Cerrado Ganado', 'Cerrado Perdido'].includes(d.stage))
+    .filter((d) => {
+      const stage = stages.find(s => s.name === d.stage)
+      return stage && !stage.isWon && !stage.isLost
+    })
     .reduce((sum, d) => sum + d.value, 0)
 
   if (loading) {
@@ -569,8 +601,8 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>Título del trato</Label>
-                <Input placeholder="Ej: Honda CR-V 2024" value={newDealTitle} onChange={(e) => setNewDealTitle(e.target.value)} />
+                <Label>Nombre del trato</Label>
+                <Input placeholder="Ej: Consultoría mensual" value={newDealTitle} onChange={(e) => setNewDealTitle(e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -685,6 +717,86 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
         </Dialog>
       </div>
 
+      {/* Deal Detail Dialog */}
+      <Dialog open={!!selectedDeal} onOpenChange={(open) => { if (!open) setSelectedDeal(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedDeal?.title}</DialogTitle>
+          </DialogHeader>
+          {selectedDeal && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Valor</p>
+                  <p className="text-sm font-bold text-emerald-600">{formatCurrency(selectedDeal.value)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Etapa</p>
+                  <p className="text-sm font-medium">{selectedDeal.stage}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Días en etapa</p>
+                  <p className="text-sm font-medium">{selectedDeal.daysInStage}d</p>
+                </div>
+                {selectedDeal.leadScore !== undefined && selectedDeal.leadScore > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Lead Score</p>
+                    <Badge variant="secondary" className={cn(
+                      "text-[10px] px-1.5 py-0.5 border-0",
+                      selectedDeal.leadScore >= 80 ? "bg-emerald-100 text-emerald-700" :
+                      selectedDeal.leadScore >= 50 ? "bg-yellow-100 text-yellow-700" :
+                      "bg-zinc-100 text-zinc-500"
+                    )}>
+                      {selectedDeal.leadScore}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Contacto</p>
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="bg-zinc-100 text-zinc-600 text-[9px] font-semibold">
+                      {getInitials(selectedDeal.contactName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{selectedDeal.contactName}</span>
+                </div>
+                {selectedDeal.phone && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Phone className="h-3 w-3" />
+                    {selectedDeal.phone}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-between pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedDeal(null)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="gap-1.5"
+                  onClick={() => handleDeleteDeal(selectedDeal.id)}
+                  disabled={deletingDealId === selectedDeal.id}
+                >
+                  {deletingDealId === selectedDeal.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Pipeline Board */}
       <DndContext
         sensors={sensors}
@@ -699,6 +811,7 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
                 key={stage.id}
                 stage={stage}
                 deals={dealsByStage[stage.name] || []}
+                onDealClick={setSelectedDeal}
               />
             ))}
           </div>

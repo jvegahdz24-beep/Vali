@@ -7,10 +7,8 @@ import {
   DollarSign,
  TrendingUp,
   Bot,
-  Wifi,
   Loader2,
   ArrowUpRight,
- Phone,
  BarChart3,
 } from 'lucide-react'
 import { cn, formatCurrency, timeAgo, getInitials, getChannelIcon } from '@/lib/utils'
@@ -21,6 +19,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { ScoreRing } from '@/components/ui/score-ring'
 import {
   Select,
   SelectContent,
@@ -352,16 +351,24 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* Connected to Real Data Indicator */}
+      {/* Status Indicators */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="h-6 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-            <Wifi className="h-3 w-3" />
-            Conectado a datos reales
-          </Badge>
-          <span className="text-[10px] text-muted-foreground">
-            {stats?.aiMessagesSent || 0} mensajes IA · {stats?.activeAgents || 0} agentes activos
+          <span className="flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {stats?.aiMessagesSent || 0} mensajes IA · {stats?.activeAgents || 0} agentes activos
+            </span>
           </span>
+          {(stats?.activeAgents ?? 0) > 0 && (
+            <Badge variant="secondary" className="h-5 text-[9px] bg-violet-50 text-violet-600 border-violet-200 gap-1">
+              <Bot className="h-3 w-3" />
+              {stats!.activeAgents} agente{stats!.activeAgents !== 1 ? 's' : ''} IA
+            </Badge>
+          )}
         </div>
         <Badge variant="secondary" className="h-6 text-[10px] gap-1">
           <Bot className="h-3 w-3 text-emerald-500" />
@@ -393,12 +400,55 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
         ))}
       </div>
 
+      {/* Conversion Funnel */}
+      {stats?.stages && stats.stages.length > 0 && (
+        <Card className="border-border/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              Embudo de Conversión
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-2">
+              {stats.stages
+                .filter(s => !s.name.toLowerCase().includes('perdido'))
+                .map((stage) => {
+                  const maxCount = Math.max(...stats.stages.filter(s => !s.name.toLowerCase().includes('perdido')).map(s => s.dealCount), 1)
+                  const widthPercent = Math.max(8, (stage.dealCount / maxCount) * 100)
+                  return (
+                    <div key={stage.name} className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-28 shrink-0 truncate">{stage.name}</span>
+                      <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
+                        <div
+                          className="h-full rounded-md transition-all duration-500"
+                          style={{
+                            width: `${widthPercent}%`,
+                            backgroundColor: stage.color || '#94a3b8',
+                            opacity: 0.8,
+                          }}
+                        />
+                        <span className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-foreground">
+                          {stage.dealCount}
+                        </span>
+                      </div>
+                      {stage.totalValue > 0 && (
+                        <span className="text-[10px] text-muted-foreground w-20 text-right shrink-0">{formatCurrency(stage.totalValue)}</span>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Nuevo Contacto', icon: <Users className="h-4 w-4" />, onClick: () => onViewChange?.('contacts'), color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
-          { label: 'Conectar WhatsApp', icon: <Phone className="h-4 w-4" />, onClick: () => onViewChange?.('settings'), color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
-          { label: 'Ver Analíticas', icon: <BarChart3 className="h-4 w-4" />, onClick: () => onViewChange?.('analytics'), color: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100' },
+          { label: 'Ver Pipeline', icon: <TrendingUp className="h-4 w-4" />, onClick: () => onViewChange?.('pipeline'), color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
+          { label: 'Agentes IA', icon: <Bot className="h-4 w-4" />, onClick: () => onViewChange?.('agents'), color: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100' },
+          { label: 'Ver Analíticas', icon: <BarChart3 className="h-4 w-4" />, onClick: () => onViewChange?.('analytics'), color: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' },
         ].map((action) => (
           <button
             key={action.label}
@@ -501,6 +551,9 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                             {getInitials(conv.contact ? `${conv.contact.firstName} ${conv.contact.lastName}` : '??')}
                           </AvatarFallback>
                         </Avatar>
+                        {conv.contact.leadScore > 0 && (
+                          <ScoreRing score={conv.contact.leadScore} size={20} strokeWidth={2.5} className="mt-1 shrink-0" />
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 transition-colors">
