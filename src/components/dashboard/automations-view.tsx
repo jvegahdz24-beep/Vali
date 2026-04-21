@@ -19,14 +19,40 @@ import {
   ChevronDown,
   ChevronRight,
   LayoutTemplate,
+  CheckSquare,
+  Square,
+  Activity,
+  CheckCircle2,
+  XCircle,
+  Timer,
+  Bot,
+  Target,
+  DollarSign,
+  Megaphone,
+  Wrench,
+  MessageCircle,
+  PhoneCall,
+  Star,
+  Trophy,
+  Bell,
+  AlertTriangle,
+  Brain,
+  MapPin,
+  Copy,
+  HelpCircle,
+  Cake,
+  FileText,
+  Send,
+  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, timeAgo } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -52,6 +78,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { automationTemplates, templateCategories } from '@/lib/automation-templates'
 
 // ── Types ──
@@ -73,6 +100,20 @@ interface Automation {
 interface AutomationsViewProps {
   workspaceId: string
 }
+
+// ── Execution Log Types (Mock) ──
+
+interface ExecutionLog {
+  id: string
+  automationId: string
+  automationName: string
+  status: 'success' | 'error' | 'running'
+  startedAt: string
+  completedAt?: string
+  message: string
+}
+
+// ── Icon Mapping ──
 
 const triggerIcons: Record<string, React.ReactNode> = {
   message_received: <MessageSquare className="h-4 w-4" />,
@@ -109,6 +150,88 @@ const categoryColors: Record<string, string> = {
   marketing: 'bg-pink-100 text-pink-700',
 }
 
+// Template icon mapping
+const templateIconMap: Record<string, LucideIcon> = {
+  'message-square': MessageCircle,
+  'brain': Brain,
+  'calendar': Calendar,
+  'dollar-sign': DollarSign,
+  'phone-call': PhoneCall,
+  'bot': Bot,
+  'target': Target,
+  'refresh-cw': RefreshCw,
+  'map-pin': MapPin,
+  'copy': Copy,
+  'bell': Bell,
+  'clock': Clock,
+  'alert-triangle': AlertTriangle,
+  'trophy': Trophy,
+  'star': Star,
+  'wrench': Wrench,
+  'help-circle': HelpCircle,
+  'cake': Cake,
+  'megaphone': Megaphone,
+  'file-text': FileText,
+  'send': Send,
+}
+
+function getTemplateIcon(iconName: string): LucideIcon {
+  return templateIconMap[iconName] || Zap
+}
+
+// ── Visual Flow Builder Preview ──
+
+function FlowPreview({ automation }: { automation: Automation }) {
+  return (
+    <div className="mt-3 p-3 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2.5 font-medium">Flujo de Automatización</p>
+      <div className="flex items-center gap-2">
+        {/* Trigger Node */}
+        <div className={cn(
+          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-border/40 shrink-0',
+          triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500'
+        )}>
+          {triggerIcons[automation.triggerType] || <Zap className="h-3 w-3" />}
+          <span>{triggerLabels[automation.triggerType] || automation.triggerType}</span>
+        </div>
+
+        {/* Arrow */}
+        <div className="flex items-center shrink-0">
+          <div className="w-5 h-px bg-border/60" />
+          <ArrowRight className="h-3 w-3 text-muted-foreground/60 -ml-0.5" />
+        </div>
+
+        {/* Action Nodes */}
+        <div className="flex-1 min-w-0 overflow-x-auto">
+          <div className="flex items-center gap-1.5">
+            {automation.actions && automation.actions.length > 0 ? (
+              automation.actions.map((action, index) => (
+                <div key={index} className="flex items-center shrink-0">
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-[11px] font-medium">
+                    <div className="w-4 h-4 rounded-full bg-emerald-200 flex items-center justify-center shrink-0">
+                      <span className="text-[8px] font-bold text-emerald-700">{index + 1}</span>
+                    </div>
+                    <span className="truncate max-w-[140px]">{action.description || action.type}</span>
+                  </div>
+                  {index < automation.actions.length - 1 && (
+                    <ArrowRight className="h-3 w-3 text-muted-foreground/40 mx-1 shrink-0" />
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground text-[11px]">
+                Sin acciones
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Component ──
+
 export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   const [automations, setAutomations] = useState<Automation[]>([])
   const [showNewAutomation, setShowNewAutomation] = useState(false)
@@ -122,6 +245,13 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   const [showTemplates, setShowTemplates] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null)
+
+  // Batch operations
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchLoading, setBatchLoading] = useState(false)
+
+  // Execution history
+  const [showHistory, setShowHistory] = useState(false)
 
   // Form state
   const [newName, setNewName] = useState('')
@@ -225,6 +355,10 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   }
 
   const activeCount = automations.filter((a) => a.isActive).length
+  const totalExecutions = automations.reduce((sum, a) => sum + (a.runCount || 0), 0)
+  const lastRunTime = automations
+    .filter((a) => a.lastRunAt)
+    .sort((a, b) => new Date(b.lastRunAt!).getTime() - new Date(a.lastRunAt!).getTime())[0]?.lastRunAt
 
   const handleEditAutomation = (automation: Automation) => {
     setEditName(automation.name)
@@ -290,6 +424,71 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
     }
   }
 
+  // Batch operations
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    if (selectedIds.size === automations.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(automations.map((a) => a.id)))
+    }
+  }
+
+  const handleBatchToggle = async (activate: boolean) => {
+    if (selectedIds.size === 0) return
+    setBatchLoading(true)
+    try {
+      const promises = Array.from(selectedIds).map((id) =>
+        fetch(`/api/automations/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: activate }),
+        })
+      )
+      await Promise.all(promises)
+      toast.success(`${selectedIds.size} automatizaciones ${activate ? 'activadas' : 'desactivadas'}`)
+      setSelectedIds(new Set())
+      fetchAutomations()
+    } catch {
+      toast.error('Error en operación batch')
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  // Mock execution history
+  const mockExecutionLogs: ExecutionLog[] = (() => {
+    const logs: ExecutionLog[] = []
+    automations.forEach((a) => {
+      if (a.runCount && a.runCount > 0) {
+        const successCount = Math.ceil(a.runCount * 0.85)
+        for (let i = 0; i < Math.min(3, a.runCount); i++) {
+          logs.push({
+            id: `log-${a.id}-${i}`,
+            automationId: a.id,
+            automationName: a.name,
+            status: i < successCount ? 'success' : 'error',
+            startedAt: new Date(Date.now() - (i + 1) * 3600000 * (Math.random() * 24 + 1)).toISOString(),
+            completedAt: new Date(Date.now() - (i + 1) * 3600000 * (Math.random() * 24 + 1) + 2000).toISOString(),
+            message: i < successCount ? 'Ejecutada correctamente' : 'Error en la ejecución',
+          })
+        }
+      }
+    })
+    return logs.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt)).slice(0, 15)
+  })()
+
   const filteredTemplates = selectedCategory === 'all'
     ? automationTemplates
     : automationTemplates.filter((t) => t.category === selectedCategory)
@@ -351,7 +550,7 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-lg font-semibold">Automatizaciones</h3>
           <p className="text-sm text-muted-foreground">
@@ -414,10 +613,24 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
             size="sm"
             variant="outline"
             className="gap-1.5"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            <Activity className="h-4 w-4" />
+            Historial
+            {showHistory ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
             onClick={() => setShowTemplates(!showTemplates)}
           >
             <LayoutTemplate className="h-4 w-4" />
-            Cargar Plantilla
+            Plantillas
             {showTemplates ? (
               <ChevronDown className="h-3 w-3" />
             ) : (
@@ -426,6 +639,140 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
           </Button>
         </div>
       </div>
+
+      {/* Stats Header */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <Card className="border-border/40 bg-gradient-to-br from-emerald-50/50 to-transparent">
+          <CardContent className="p-3.5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-100">
+                <Zap className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium">Activas</p>
+                <p className="text-lg font-bold text-emerald-700">{activeCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/40 bg-gradient-to-br from-blue-50/50 to-transparent">
+          <CardContent className="p-3.5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-100">
+                <Play className="h-4 w-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium">Total Ejecuciones</p>
+                <p className="text-lg font-bold text-blue-700">{totalExecutions}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/40 bg-gradient-to-br from-violet-50/50 to-transparent">
+          <CardContent className="p-3.5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-violet-100">
+                <Timer className="h-4 w-4 text-violet-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium">Última Ejecución</p>
+                <p className="text-sm font-bold text-violet-700 mt-0.5">
+                  {lastRunTime ? timeAgo(new Date(lastRunTime)) : 'Nunca'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Execution History */}
+      {showHistory && (
+        <Card className="border-border/40 mb-5">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                <h4 className="text-sm font-semibold">Historial de Ejecuciones</h4>
+              </div>
+              <Badge variant="secondary" className="text-[10px] bg-muted border-0">
+                {mockExecutionLogs.length} registros
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 px-4 pb-3">
+            {mockExecutionLogs.length === 0 ? (
+              <div className="text-center py-6">
+                <Clock className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Sin ejecuciones registradas</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-64">
+                <div className="space-y-1.5">
+                  {mockExecutionLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
+                    >
+                      {log.status === 'success' ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      ) : log.status === 'error' ? (
+                        <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      ) : (
+                        <Loader2 className="h-4 w-4 text-blue-500 shrink-0 animate-spin" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{log.automationName}</p>
+                        <p className="text-[10px] text-muted-foreground">{log.message}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {timeAgo(new Date(log.startedAt))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Batch Operations Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+          <span className="text-xs font-medium text-emerald-700">
+            {selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="flex-1" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+            onClick={() => handleBatchToggle(true)}
+            disabled={batchLoading}
+          >
+            {batchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckSquare className="h-3 w-3" />}
+            Activar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] gap-1 border-orange-300 text-orange-700 hover:bg-orange-100"
+            onClick={() => handleBatchToggle(false)}
+            disabled={batchLoading}
+          >
+            {batchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+            Desactivar
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-[11px] text-muted-foreground"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Cancelar
+          </Button>
+        </div>
+      )}
 
       {/* Automations List */}
       <div className="space-y-3">
@@ -438,127 +785,131 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
             </CardContent>
           </Card>
         ) : (
-          automations.map((automation) => (
-            <Card key={automation.id} className="border-border/60 hover:shadow-sm transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Icon */}
-                  <div className={cn(
-                    'flex items-center justify-center w-10 h-10 rounded-xl shrink-0',
-                    triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500'
-                  )}>
-                    {triggerIcons[automation.triggerType] || <Zap className="h-4 w-4" />}
-                  </div>
+          <>
+            {/* Select All */}
+            <div className="flex items-center gap-2 px-1">
+              <Checkbox
+                checked={selectedIds.size === automations.length && automations.length > 0}
+                onCheckedChange={selectAll}
+              />
+              <span className="text-[11px] text-muted-foreground">Seleccionar todas</span>
+            </div>
+            {automations.map((automation) => (
+              <Card key={automation.id} className={cn(
+                "border-border/60 hover:shadow-sm transition-shadow",
+                selectedIds.has(automation.id) && "border-emerald-300 bg-emerald-50/20"
+              )}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox for batch */}
+                    <div className="pt-0.5">
+                      <Checkbox
+                        checked={selectedIds.has(automation.id)}
+                        onCheckedChange={() => toggleSelect(automation.id)}
+                      />
+                    </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-foreground truncate">{automation.name}</h4>
-                          <span className={cn(
-                            'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
-                            automation.isActive
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-zinc-100 text-zinc-500'
-                          )}>
+                    {/* Icon */}
+                    <div className={cn(
+                      'flex items-center justify-center w-10 h-10 rounded-xl shrink-0',
+                      triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500'
+                    )}>
+                      {triggerIcons[automation.triggerType] || <Zap className="h-4 w-4" />}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-semibold text-foreground truncate">{automation.name}</h4>
                             <span className={cn(
-                              'w-1.5 h-1.5 rounded-full',
-                              automation.isActive ? 'bg-emerald-500' : 'bg-zinc-400'
-                            )} />
-                            {automation.isActive ? 'Activa' : 'Inactiva'}
-                          </span>
+                              'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
+                              automation.isActive
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-zinc-100 text-zinc-500'
+                            )}>
+                              <span className={cn(
+                                'w-1.5 h-1.5 rounded-full',
+                                automation.isActive ? 'bg-emerald-500' : 'bg-zinc-400'
+                              )} />
+                              {automation.isActive ? 'Activa' : 'Inactiva'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{automation.description || 'Sin descripción'}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{automation.description || 'Sin descripción'}</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Switch
+                            checked={automation.isActive}
+                            onCheckedChange={() => toggleAutomation(automation.id, automation.isActive)}
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditAutomation(automation)}>
+                                <Pencil className="h-3 w-3 mr-1" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleRunNow(automation.id)}
+                                disabled={runningId === automation.id}
+                              >
+                                {runningId === automation.id ? (
+                                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando...</>
+                                ) : (
+                                  <><Play className="h-3 w-3 mr-1" />Ejecutar ahora</>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => handleDeleteAutomation(automation.id)}
+                                disabled={deletingId === automation.id}
+                              >
+                                {deletingId === automation.id ? (
+                                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Eliminando...</>
+                                ) : (
+                                  <><Trash2 className="h-3 w-3 mr-1" />Eliminar</>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Switch
-                          checked={automation.isActive}
-                          onCheckedChange={() => toggleAutomation(automation.id, automation.isActive)}
-                        />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEditAutomation(automation)}>
-                              <Pencil className="h-3 w-3 mr-1" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleRunNow(automation.id)}
-                              disabled={runningId === automation.id}
-                            >
-                              {runningId === automation.id ? (
-                                <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando...</>
-                              ) : (
-                                <><Play className="h-3 w-3 mr-1" />Ejecutar ahora</>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => handleDeleteAutomation(automation.id)}
-                              disabled={deletingId === automation.id}
-                            >
-                              {deletingId === automation.id ? (
-                                <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Eliminando...</>
-                              ) : (
-                                <><Trash2 className="h-3 w-3 mr-1" />Eliminar</>
-                              )}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
 
-                    {/* Trigger & Stats */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Zap className="h-3 w-3" />
-                        {triggerLabels[automation.triggerType] || automation.triggerType}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <ArrowRight className="h-3 w-3" />
-                        {automation.actions?.length || 0} acciones
-                      </div>
-                      {automation.runCount !== undefined && automation.runCount > 0 && (
+                      {/* Stats Row */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Play className="h-3 w-3" />
-                          {automation.runCount} ejecuciones
+                          <Zap className="h-3 w-3" />
+                          {triggerLabels[automation.triggerType] || automation.triggerType}
                         </div>
-                      )}
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        Creada: {timeAgo(new Date(automation.createdAt))}
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <ArrowRight className="h-3 w-3" />
+                          {automation.actions?.length || 0} acciones
+                        </div>
+                        {automation.runCount !== undefined && automation.runCount > 0 && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Play className="h-3 w-3" />
+                            {automation.runCount} ejecuciones
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          Creada: {timeAgo(new Date(automation.createdAt))}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Actions Flow */}
-                    {automation.actions && automation.actions.length > 0 && (
-                      <div className="mt-3 p-2.5 rounded-lg bg-muted/30 border border-border/40">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Flujo de Acciones</p>
-                        <div className="space-y-1.5">
-                          {automation.actions.map((action, index) => (
-                            <div key={index} className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                                <span className="text-[9px] font-bold text-emerald-700">{index + 1}</span>
-                              </div>
-                              <span className="text-[11px] text-foreground truncate">{action.description || action.type}</span>
-                              {index < automation.actions.length - 1 && (
-                                <ChevronDown className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      {/* Visual Flow Preview */}
+                      <FlowPreview automation={automation} />
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            ))}
+          </>
         )}
       </div>
 
@@ -566,7 +917,10 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
       {showTemplates && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold">Galería de Plantillas</h4>
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <LayoutTemplate className="h-4 w-4" />
+              Galería de Plantillas
+            </h4>
             <span className="text-xs text-muted-foreground">{automationTemplates.length} plantillas disponibles</span>
           </div>
 
@@ -583,60 +937,91 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
             >
               Todas
             </button>
-            {templateCategories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium rounded-full transition-colors',
-                  selectedCategory === cat.id
-                    ? 'bg-foreground text-background'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                {cat.name}
-              </button>
-            ))}
+            {templateCategories.map((cat) => {
+              const CatIcon = getTemplateIcon(cat.icon)
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-medium rounded-full transition-colors flex items-center gap-1.5',
+                    selectedCategory === cat.id
+                      ? 'bg-foreground text-background'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  )}
+                >
+                  <CatIcon className="h-3 w-3" />
+                  {cat.name}
+                </button>
+              )
+            })}
           </div>
 
           {/* Template Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredTemplates.map((template) => (
-              <Card key={template.id} className="border-border/60 hover:shadow-sm transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      'flex items-center justify-center w-9 h-9 rounded-lg shrink-0',
-                      categoryColors[template.category] || 'bg-zinc-100 text-zinc-500'
-                    )}>
-                      <Zap className="h-4 w-4" />
+            {filteredTemplates.map((template) => {
+              const TemplateIcon = getTemplateIcon(template.icon)
+              return (
+                <Card key={template.id} className="border-border/60 hover:shadow-sm transition-all hover:border-emerald-200/50">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        'flex items-center justify-center w-10 h-10 rounded-xl shrink-0',
+                        categoryColors[template.category] || 'bg-zinc-100 text-zinc-500'
+                      )}>
+                        <TemplateIcon className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h5 className="text-xs font-semibold text-foreground truncate">{template.name}</h5>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{template.description}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h5 className="text-xs font-semibold text-foreground truncate">{template.name}</h5>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
+
+                    {/* Action flow preview */}
+                    <div className="flex items-center gap-1.5 mt-3 overflow-x-auto">
+                      <div className="px-2 py-1 rounded-md bg-muted/50 text-[9px] text-muted-foreground shrink-0">
+                        {template.triggerType === 'message_received' ? 'Mensaje' :
+                         template.triggerType === 'schedule' ? 'Timer' :
+                         template.triggerType === 'event' ? 'Evento' :
+                         template.triggerType === 'webhook' ? 'Webhook' :
+                         template.triggerType === 'deal_stage_change' ? 'Etapa' :
+                         template.triggerType}
+                      </div>
+                      <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
+                      <div className="flex items-center gap-1">
+                        {template.actions.slice(0, 2).map((action, idx) => (
+                          <span key={idx} className="px-2 py-1 rounded-md bg-emerald-50 text-[9px] text-emerald-600 shrink-0 border border-emerald-100">
+                            {action.description.length > 20 ? action.description.slice(0, 20) + '...' : action.description}
+                          </span>
+                        ))}
+                        {template.actions.length > 2 && (
+                          <span className="text-[9px] text-muted-foreground shrink-0">+{template.actions.length - 2}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <Badge variant="secondary" className={cn('text-[10px] border-0', categoryColors[template.category])}>
-                      {templateCategories.find((c) => c.id === template.category)?.name || template.category}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[11px] gap-1"
-                      onClick={() => handleLoadTemplate(template.id)}
-                      disabled={loadingTemplateId === template.id}
-                    >
-                      {loadingTemplateId === template.id ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" />Cargando...</>
-                      ) : (
-                        <><Plus className="h-3 w-3" />Cargar</>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                    <div className="flex items-center justify-between mt-3">
+                      <Badge variant="secondary" className={cn('text-[10px] border-0', categoryColors[template.category])}>
+                        {templateCategories.find((c) => c.id === template.category)?.name || template.category}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] gap-1"
+                        onClick={() => handleLoadTemplate(template.id)}
+                        disabled={loadingTemplateId === template.id}
+                      >
+                        {loadingTemplateId === template.id ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" />Cargando...</>
+                        ) : (
+                          <><Plus className="h-3 w-3" />Cargar</>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
 
           {filteredTemplates.length === 0 && (

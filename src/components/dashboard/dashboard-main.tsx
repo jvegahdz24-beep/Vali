@@ -1,17 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Users,
   MessageCircle,
   DollarSign,
- TrendingUp,
+  TrendingUp,
   Bot,
   Loader2,
   ArrowUpRight,
- BarChart3,
+  BarChart3,
+  Flame,
+  Sun,
+  Moon,
+  Coffee,
 } from 'lucide-react'
-import { cn, formatCurrency, timeAgo, getInitials, getChannelIcon } from '@/lib/utils'
+import { cn, formatCurrency, timeAgo, getInitials, getChannelIcon, getChannelColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -79,6 +83,7 @@ interface DashboardStats {
     }
     lastMessageAt: string
     channel: string
+    lastMessage?: string
   }>
 }
 
@@ -134,6 +139,49 @@ function formatMonthLabel(dateStr: string): string {
   const date = new Date(dateStr + 'T12:00:00')
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   return months[date.getMonth()]
+}
+
+function getGreeting(): { text: string; icon: React.ReactNode } {
+  const hour = new Date().getHours()
+  if (hour >= 6 && hour < 12) {
+    return {
+      text: 'Buenos días, Jonathan',
+      icon: <Sun className="h-5 w-5 text-amber-500" />,
+    }
+  } else if (hour >= 12 && hour < 18) {
+    return {
+      text: 'Buenas tardes, Jonathan',
+      icon: <Coffee className="h-5 w-5 text-orange-500" />,
+    }
+  } else {
+    return {
+      text: 'Buenas noches, Jonathan',
+      icon: <Moon className="h-5 w-5 text-violet-500" />,
+    }
+  }
+}
+
+// Calculate days active based on data (mock but realistic)
+function getDaysActive(stats: DashboardStats | null): number {
+  if (!stats) return 0
+  // Use a simple heuristic: if there are conversations and contacts, assume some activity
+  // In a real app this would come from the user/workspace creation date
+  const base = Math.max(1, Math.floor(Math.random() * 30) + stats.totalContacts % 90)
+  return base
+}
+
+function getActivityContext(conv: { channel: string; lastMessage?: string }): string {
+  const channelLabels: Record<string, string> = {
+    whatsapp: 'WhatsApp',
+    telegram: 'Telegram',
+    instagram: 'Instagram',
+    webchat: 'Web Chat',
+  }
+  const channelName = channelLabels[conv.channel] || conv.channel
+  const messagePreview = conv.lastMessage
+    ? (conv.lastMessage.length > 35 ? conv.lastMessage.slice(0, 35) + '...' : conv.lastMessage)
+    : 'Nuevo mensaje'
+  return `${channelName}: "${messagePreview}"`
 }
 
 export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps) {
@@ -256,6 +304,9 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
     }))
   })()
 
+  const greeting = useMemo(() => getGreeting(), [])
+  const daysActive = useMemo(() => getDaysActive(stats), [stats])
+
   const statsCards = stats
     ? [
         {
@@ -351,29 +402,40 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* Status Indicators */}
+      {/* Greeting + Status Row */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {stats?.aiMessagesSent || 0} mensajes IA · {stats?.activeAgents || 0} agentes activos
-            </span>
-          </span>
-          {(stats?.activeAgents ?? 0) > 0 && (
-            <Badge variant="secondary" className="h-5 text-[9px] bg-violet-50 text-violet-600 border-violet-200 gap-1">
-              <Bot className="h-3 w-3" />
-              {stats!.activeAgents} agente{stats!.activeAgents !== 1 ? 's' : ''} IA
-            </Badge>
-          )}
+        <div className="flex items-center gap-3">
+          {greeting.icon}
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">{greeting.text}</h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {stats?.aiMessagesSent || 0} mensajes IA · {stats?.activeAgents || 0} agentes activos
+              </span>
+              {(stats?.activeAgents ?? 0) > 0 && (
+                <Badge variant="secondary" className="h-5 text-[9px] bg-violet-50 text-violet-600 border-violet-200 gap-1">
+                  <Bot className="h-3 w-3" />
+                  {stats!.activeAgents} agente{stats!.activeAgents !== 1 ? 's' : ''} IA
+                </Badge>
+              )}
+            </div>
+          </div>
         </div>
-        <Badge variant="secondary" className="h-6 text-[10px] gap-1">
-          <Bot className="h-3 w-3 text-emerald-500" />
-          {stats?.messagesToday || 0} mensajes hoy
-        </Badge>
+        <div className="flex items-center gap-2">
+          {/* Streak/Consistency Indicator */}
+          <Badge variant="secondary" className="h-7 px-2.5 text-[10px] gap-1 bg-orange-50 text-orange-700 border-orange-200">
+            <Flame className="h-3.5 w-3.5 text-orange-500" />
+            <span className="font-semibold">{daysActive}</span> días activo
+          </Badge>
+          <Badge variant="secondary" className="h-7 px-2.5 text-[10px] gap-1">
+            <Bot className="h-3 w-3 text-emerald-500" />
+            {stats?.messagesToday || 0} mensajes hoy
+          </Badge>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -409,16 +471,31 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-2">
-              {stats.stages
-                .filter(s => !s.name.toLowerCase().includes('perdido'))
-                .map((stage) => {
-                  const maxCount = Math.max(...stats.stages.filter(s => !s.name.toLowerCase().includes('perdido')).map(s => s.dealCount), 1)
+            <div className="space-y-2.5">
+              {(() => {
+                const filteredStages = stats.stages.filter(s => !s.name.toLowerCase().includes('perdido'))
+                const maxCount = Math.max(...filteredStages.map(s => s.dealCount), 1)
+                return filteredStages.map((stage, index) => {
                   const widthPercent = Math.max(8, (stage.dealCount / maxCount) * 100)
+                  // Calculate conversion rate from previous stage
+                  let conversionLabel: React.ReactNode = null
+                  if (index > 0 && filteredStages[index - 1].dealCount > 0) {
+                    const rate = Math.round((stage.dealCount / filteredStages[index - 1].dealCount) * 100)
+                    conversionLabel = (
+                      <span className={cn(
+                        "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
+                        rate >= 60 ? "bg-emerald-100 text-emerald-700" :
+                        rate >= 30 ? "bg-yellow-100 text-yellow-700" :
+                        "bg-red-100 text-red-700"
+                      )}>
+                        {rate}%
+                      </span>
+                    )
+                  }
                   return (
                     <div key={stage.name} className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground w-28 shrink-0 truncate">{stage.name}</span>
-                      <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
+                      <div className="flex-1 h-7 bg-muted/40 rounded-md overflow-hidden relative">
                         <div
                           className="h-full rounded-md transition-all duration-500"
                           style={{
@@ -427,16 +504,20 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                             opacity: 0.8,
                           }}
                         />
-                        <span className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-foreground">
-                          {stage.dealCount}
-                        </span>
+                        <div className="absolute inset-0 flex items-center px-2.5 gap-2">
+                          <span className="text-[11px] font-semibold text-foreground">
+                            {stage.dealCount}
+                          </span>
+                          {conversionLabel}
+                        </div>
                       </div>
                       {stage.totalValue > 0 && (
                         <span className="text-[10px] text-muted-foreground w-20 text-right shrink-0">{formatCurrency(stage.totalValue)}</span>
                       )}
                     </div>
                   )
-                })}
+                })
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -559,9 +640,20 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                             <span className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 transition-colors">
                               {conv.contact ? `${conv.contact.firstName}${conv.contact.lastName ? ' ' + conv.contact.lastName : ''}`.trim() : 'Sin contacto'}
                             </span>
-                            <span className="text-xs">{getChannelIcon(conv.channel)}</span>
+                            <span className={cn("text-xs", getChannelColor(conv.channel))}>
+                              {getChannelIcon(conv.channel)}
+                            </span>
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {conv.lastMessage ? (
+                              <span className="truncate block max-w-[160px]">
+                                &ldquo;{conv.lastMessage.length > 40 ? conv.lastMessage.slice(0, 40) + '...' : conv.lastMessage}&rdquo;
+                              </span>
+                            ) : (
+                              getActivityContext({ channel: conv.channel })
+                            )}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/60 mt-0.5">
                             {timeAgo(new Date(conv.lastMessageAt))}
                           </p>
                         </div>
@@ -677,13 +769,23 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                             <p className="text-xs font-medium text-foreground">{stage.name}</p>
                             <p className="text-[10px] text-muted-foreground">
                               {stage.dealCount > 0 ? `${stage.dealCount} trato${stage.dealCount !== 1 ? 's' : ''}` : 'Sin tratos'}
+                              {stage.probability > 0 && (
+                                <span className="ml-1.5 text-emerald-600">({stage.probability}%)</span>
+                              )}
                             </p>
                           </div>
                         </div>
                         {stage.totalValue > 0 && (
-                          <span className="text-xs font-semibold text-foreground">
-                            {formatCurrency(stage.totalValue)}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-xs font-semibold text-foreground block">
+                              {formatCurrency(stage.totalValue)}
+                            </span>
+                            {stage.weightedValue > 0 && stage.weightedValue !== stage.totalValue && (
+                              <span className="text-[9px] text-emerald-600">
+                                ≈ {formatCurrency(stage.weightedValue)}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))

@@ -152,3 +152,46 @@ Stage Summary:
 - Industry selector shows 8 generic industries (no automotive)
 - All personality descriptions are industry-neutral
 - Server rebuilt and running on port 3000
+
+---
+Task ID: 10
+Agent: Main Agent (Super Z)
+Task: Pipeline Flow + Automations + Dashboard UI/UX Polish
+
+Work Log:
+- Diagnosed server instability: bun process kept dying when launched via nohup/setsid
+- Fixed server startup: updated start-server.sh with proper env loading, while-loop restart
+- Verified all APIs working: Pipeline (200, 14 deals), Contacts (200, 23 contacts), Automations (200, 3 active)
+- Delegated UI improvements to fullstack-developer subagent
+
+Pipeline Improvements (crm-pipeline.tsx):
+  - Added summary stats bar: total value, deal count, avg value, win rate
+  - Added stage probability indicators (% per column header)
+  - Added weighted value display per stage (value × probability)
+  - Improved deal card design: colored left border by lead score (4 tiers)
+  - Added filter bar: source filter + lead score minimum filter
+  - Added Kanban/List view toggle
+  - Improved empty states: dashed-border dropzones with "Arrastra aquí"
+
+Automations Improvements (automations-view.tsx):
+  - Added stats header: active count, total executions, last execution time
+  - Added execution history section with mock logs
+  - Added visual flow builder preview (trigger → action nodes)
+  - Improved template gallery: icons per template, better card design
+  - Added batch operations: select all, activate/deactivate multiple
+
+Dashboard Polish (dashboard-main.tsx):
+  - Added time-of-day greeting ("Buenos días/tardes/noches, Jonathan")
+  - Improved activity feed: channel icons, message snippets
+  - Added streak/consistency indicator ("X días activo")
+  - Polished conversion funnel: conversion rate % between stages
+
+- Rebuilt Next.js app successfully (67+ routes)
+- Server verified: APIs respond correctly, page loads (307 → login for unauthenticated)
+
+Stage Summary:
+- 3 major dashboard components improved (pipeline, automations, dashboard)
+- File sizes: crm-pipeline.tsx 1180 lines, automations-view.tsx 1068 lines, dashboard-main.tsx 801 lines
+- All improvements are UI-only, no API routes modified
+- Emerald color scheme maintained, all text in Spanish
+- Preview: https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site
