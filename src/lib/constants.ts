@@ -158,6 +158,13 @@ export const DEFAULT_PIPELINE_STAGES = [
 // ─── AI Providers ─────────────────────────────────────────────
 
 export const AI_PROVIDERS = {
+  glm: {
+    name: 'GLM (Zhipu AI)',
+    models: ['glm-4-plus', 'glm-4-flash', 'glm-4.5-flash', 'glm-4-air', 'glm-4-long'],
+    defaultModel: 'glm-4.5-flash',
+    description: 'Modelo chino de alto rendimiento, multilingüe y económico',
+    recommended: true,
+  },
   groq: {
     name: 'Groq',
     models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],

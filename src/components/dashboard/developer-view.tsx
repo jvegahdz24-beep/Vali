@@ -464,9 +464,28 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
           {/* ═══ TAB 1: API Keys ═══ */}
           <TabsContent value="api-keys" className="space-y-4 pb-6">
+            {/* Provider recommendation banner */}
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="p-3 flex items-center gap-3">
+                <Zap className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-emerald-300">
+                  <span className="font-semibold">Recomendado:</span> GLM-4.5-Flash ofrece el mejor equilibrio entre calidad, velocidad y costo para respuestas en español.
+                </p>
+              </CardContent>
+            </Card>
+
             <div className="grid gap-4">
-              {Object.entries(AI_PROVIDERS).map(([key, prov]) => (
-                <Card key={key} className="border-slate-700/50 bg-slate-800/30">
+              {Object.entries(AI_PROVIDERS).map(([key, prov]) => {
+                const isRecommended = 'recommended' in prov && prov.recommended
+                return (
+                <Card key={key} className={cn(
+                  'transition-all duration-200',
+                  isRecommended
+                    ? 'border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60'
+                    : apiKeys[key]
+                      ? 'border-blue-500/30 bg-blue-500/5'
+                      : 'border-slate-700/50 bg-slate-800/30'
+                )}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
                       <div className="flex-1 space-y-3">
@@ -474,6 +493,12 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           <div className="flex items-center gap-2">
                             <Label className="text-sm font-medium text-slate-200">{prov.name}</Label>
                             <span className="text-[10px] text-slate-500 font-mono">{prov.defaultModel}</span>
+                            {isRecommended && (
+                              <Badge className="h-5 text-[9px] bg-emerald-500/15 text-emerald-400 border-emerald-500/25 gap-0.5">
+                                <Zap className="h-2.5 w-2.5" />
+                                Recomendado
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             {keyStatus[key] === 'valid' && (
@@ -489,11 +514,33 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                               </Badge>
                             )}
                             {(!keyStatus[key] || keyStatus[key] === 'idle') && (
-                              <Badge className="h-5 text-[10px] bg-slate-700 text-slate-400 border-slate-600">
+                              <Badge className={cn(
+                                'h-5 text-[10px]',
+                                apiKeys[key]
+                                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                  : 'bg-slate-700 text-slate-400 border-slate-600'
+                              )}>
                                 {apiKeys[key] ? 'Configurada' : 'Sin configurar'}
                               </Badge>
                             )}
                           </div>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed -mt-1">{prov.description}</p>
+                        {/* Available models pills */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {prov.models.map(model => (
+                            <span
+                              key={model}
+                              className={cn(
+                                'text-[9px] font-mono px-1.5 py-0.5 rounded border',
+                                model === prov.defaultModel
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  : 'bg-slate-800 text-slate-500 border-slate-700'
+                              )}
+                            >
+                              {model}{model === prov.defaultModel && ' *'}
+                            </span>
+                          ))}
                         </div>
                         <div className="relative">
                           <Input
@@ -527,7 +574,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              )})}
 
               {/* Connection Settings */}
               <Card className="border-slate-700/50 bg-slate-800/30">
