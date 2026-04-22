@@ -291,7 +291,7 @@ export class EphemeralClient {
       this._messagesSent++
       this.touch()
       this.resetIdleTimer()
-      return { success: true, id: result?.key?.id }
+      return { success: true, id: result?.key?.id ?? undefined }
     } catch (error) {
       console.error(`[Ephemeral:${this.id}] Send failed:`, error)
       return { success: false, error: String(error) }
@@ -309,7 +309,7 @@ export class EphemeralClient {
       this._messagesSent++
       this.touch()
       this.resetIdleTimer()
-      return { success: true, id: result?.key?.id }
+      return { success: true, id: result?.key?.id ?? undefined }
     } catch (error) {
       return { success: false, error: String(error) }
     }

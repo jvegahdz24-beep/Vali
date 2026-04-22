@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Supabase Setup Script
 // Creates tables and imports data into Supabase PostgreSQL

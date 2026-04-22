@@ -48,8 +48,8 @@ export async function POST(req: NextRequest) {
     const existingNames = new Set(existing.map((a) => a.name))
 
     // Create agents from templates (skip duplicates)
-    const created = []
-    const skipped = []
+    const created: any[] = []
+    const skipped: string[] = []
 
     for (const template of templatesToLoad) {
       if (existingNames.has(template.name)) {
@@ -65,17 +65,17 @@ export async function POST(req: NextRequest) {
           workspaceId,
           name: template.name,
           description: template.description,
-          type: template.type,
-          model: template.model,
+          type: template.type as any,
+          model: template.model as any,
           modelName: template.modelName,
           temperature: template.temperature,
           maxTokens: template.maxTokens,
           systemPrompt,
-          personality: template.personality,
+          personality: template.personality as any,
           priority: template.priority,
           isActive: true,
           config: '{}',
-        },
+        } as any,
       })
       created.push(agent)
     }

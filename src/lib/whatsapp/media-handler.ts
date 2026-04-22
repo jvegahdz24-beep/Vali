@@ -132,7 +132,7 @@ export function detectMedia(msg: any): MediaInfo | null {
       fileName: doc.fileName || generateFileName('document', doc.mimetype || 'application/octet-stream'),
       caption: doc.caption || undefined,
       fileSize: doc.fileLength || undefined,
-      pageCount: doc.pageCount || undefined,
+      // pageCount removed — not in Baileys 7 document message
       mediaKey: doc.mediaKey,
       externalId: doc.fileSha256 || doc.mediaKey,
     }
@@ -272,8 +272,8 @@ async function downloadMediaBuffer(sock: any, msg: any): Promise<Buffer | null> 
       return buffer
     }
 
-    if (buffer instanceof Uint8Array) {
-      return Buffer.from(buffer)
+    if ((buffer as any) instanceof Uint8Array) {
+      return Buffer.from(buffer as Uint8Array)
     }
 
     if (typeof buffer === 'string') {
@@ -414,7 +414,7 @@ export async function saveUploadedFile(
   ensureDirs()
 
   try {
-    const buffer = file instanceof Buffer ? file : Buffer.from(await file.arrayBuffer())
+    const buffer = file instanceof Buffer ? file : Buffer.from(await (file as Blob).arrayBuffer())
     const ext = getExtension(mimeType, originalName)
     const safeName = `upload_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`
     const filePath = path.join(UPLOADS_DIR, safeName)

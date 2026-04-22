@@ -482,9 +482,9 @@ export function getAgentName(stage: ValiAutoFlowStage): ValiAutoFlowAgent {
     case 'exploration':
       return 'diagnostico'
     case 'interest':
-      return 'estrategia'
+      return 'estratega'
     case 'intention':
-      return 'cierre'
+      return 'cerrador'
     default:
       return 'diagnostico'
   }
@@ -513,9 +513,9 @@ export function getAgentLabel(agent: ValiAutoFlowAgent): string {
   switch (agent) {
     case 'diagnostico':
       return '🩺 Agente Diagnóstico'
-    case 'estrategia':
+    case 'estratega':
       return '📊 Agente Estrategia'
-    case 'cierre':
+    case 'cerrador':
       return '🤝 Agente Cierre'
     default:
       return '🩺 Agente Diagnóstico'

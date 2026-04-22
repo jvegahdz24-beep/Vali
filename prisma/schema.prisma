@@ -236,8 +236,8 @@ model Agent {
   type        String   @default("qualifier") // qualifier, sales, followup, coach, custom
   description String?
   isActive    Boolean  @default(true)
-  model       String   @default("groq") // groq, deepseek, gemini, openai
-  modelName   String   @default("llama-3.3-70b-versatile")
+  model       String   @default("glm") // groq, glm, deepseek, gemini, openai
+  modelName   String   @default("glm-4.5-flash")
   temperature Float    @default(0.7)
   maxTokens   Int      @default(4096)
   systemPrompt String  @default("")

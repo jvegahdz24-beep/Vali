@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Unify ALL demo data under jvegahdz24@gmail.com
 // Creates: Agent Personas, Automations, Follow-Up Rules,

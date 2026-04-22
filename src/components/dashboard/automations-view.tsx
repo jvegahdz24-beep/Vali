@@ -486,7 +486,7 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
         }
       }
     })
-    return logs.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt)).slice(0, 15)
+    return logs.sort((a: ExecutionLog, b: ExecutionLog) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()).slice(0, 15)
   })()
 
   const filteredTemplates = selectedCategory === 'all'

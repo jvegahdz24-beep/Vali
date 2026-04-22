@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════
 // Script standalone para conectar WhatsApp (Baileys)
 // NO modifica lógica del bot — solo genera QR en consola

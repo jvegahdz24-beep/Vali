@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Data Migration Script
 // Exports all data from SQLite to a JSON file for migration

@@ -294,7 +294,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   // personality flip during hot-reloads. Cache persists across requests for 5 min.
   let personalityName = 'JHON'
   let aiTemperature = 0.75
-  let aiProvider = 'groq'
+  let aiProvider = 'glm'
   let customSystemPrompt = ''
   let dynamicContext = ''
   try {

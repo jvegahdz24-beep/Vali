@@ -130,6 +130,68 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
 
 // ─── Provider Implementations ────────────────────────────────
 
+export class GLMProvider implements AIProviderInstance {
+  name = 'glm' as const
+  displayName = 'GLM (Zhipu AI)'
+  defaultModel = AI_PROVIDERS.glm.defaultModel
+  availableModels = [...AI_PROVIDERS.glm.models]
+
+  async chat(messages: AIMessage[], options?: AICompletionOptions): Promise<AICompletionResult> {
+    const start = Date.now()
+    const targetMaxTokens = options?.maxTokens ?? 4096
+
+    // PRIMARY: Call GLM API directly
+    try {
+      console.log('[AI] GLMProvider → trying GLM direct (primary)...')
+      const result = await callGLMDirect(messages, { ...options, maxTokens: targetMaxTokens })
+      console.log(`[AI] GLMProvider → GLM direct success in ${Date.now() - start}ms`)
+      return result
+    } catch (glmErr) {
+      const msg = glmErr instanceof Error ? glmErr.message : String(glmErr)
+      console.warn(`[AI] GLM direct failed (${msg.slice(0, 80)}), trying SDK fallback`)
+    }
+
+    // FALLBACK: Try z.ai SDK
+    try {
+      const zai = await ZAI.create()
+      const model = options?.model || this.defaultModel
+
+      const completion = await Promise.race([
+        zai.chat.completions.create({
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          model,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: targetMaxTokens,
+          top_p: options?.topP,
+          frequency_penalty: options?.frequencyPenalty,
+          presence_penalty: options?.presencePenalty,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('SDK timeout')), GLM_SDK_TIMEOUT)
+        ),
+      ])
+
+      const content = extractGLMContent(completion)
+      if (content && content.trim()) {
+        console.log(`[AI] SDK fallback success in ${Date.now() - start}ms`)
+        return {
+          content,
+          model,
+          provider: 'glm',
+          tokensUsed: completion.usage?.total_tokens ?? 0,
+          latencyMs: Date.now() - start,
+          raw: completion,
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[AI] SDK fallback also failed (${msg.slice(0, 80)})`)
+    }
+
+    throw new Error('All GLM providers failed: direct + SDK')
+  }
+}
+
 export class GroqProvider implements AIProviderInstance {
   name = 'groq' as const
   displayName = 'Groq'
@@ -299,6 +361,7 @@ export class OpenAIProvider implements AIProviderInstance {
 // ─── Provider Registry ───────────────────────────────────────
 
 const providerInstances: Record<string, AIProviderInstance> = {
+  glm: new GLMProvider(),
   groq: new GroqProvider(),
   deepseek: new DeepSeekProvider(),
   gemini: new GeminiProvider(),
@@ -307,13 +370,13 @@ const providerInstances: Record<string, AIProviderInstance> = {
 
 /**
  * Get a provider instance by name.
- * Returns Groq as default if provider not found.
+ * Returns GLM as default if provider not found.
  */
 export function getProvider(providerName: string): AIProviderInstance {
   const provider = providerInstances[providerName.toLowerCase()]
   if (!provider) {
-    console.warn(`[AI] Unknown provider "${providerName}", falling back to Groq`)
-    return providerInstances.groq
+    console.warn(`[AI] Unknown provider "${providerName}", falling back to GLM`)
+    return providerInstances.glm
   }
   return provider
 }
@@ -336,7 +399,7 @@ export function getAllProviders(): AIProviderInstance[] {
  */
 export async function chatWithAI(
   messages: AIMessage[],
-  provider: string = 'groq',
+  provider: string = 'glm',
   model?: string,
   options?: AICompletionOptions
 ): Promise<AICompletionResult> {
@@ -358,15 +421,15 @@ export async function chatWithAI(
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error(`[AI] Provider "${provider}" failed:`, errMsg)
 
-    // Fallback to Groq if primary provider fails
-    if (provider !== 'groq') {
-      console.warn('[AI] Falling back to Groq...')
+    // Fallback to GLM if primary provider fails
+    if (provider !== 'glm') {
+      console.warn('[AI] Falling back to GLM...')
       try {
-        const fallback = await providerInstances.groq.chat(messages, mergedOptions)
+        const fallback = await providerInstances.glm.chat(messages, mergedOptions)
         return fallback
       } catch (fallbackError) {
         const fallbackErrMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-        console.error('[AI] Groq fallback also failed:', fallbackErrMsg)
+        console.error('[AI] GLM fallback also failed:', fallbackErrMsg)
         throw new Error(`All AI providers failed. Primary: ${errMsg}. Fallback: ${fallbackErrMsg}`)
       }
     }
@@ -381,7 +444,7 @@ export async function chatWithAI(
  */
 export async function chatWithAIJson<T>(
   messages: AIMessage[],
-  provider: string = 'groq',
+  provider: string = 'glm',
   model?: string,
   options?: AICompletionOptions
 ): Promise<{ data: T; result: AICompletionResult }> {

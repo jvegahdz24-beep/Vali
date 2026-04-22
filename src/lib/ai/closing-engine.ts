@@ -385,7 +385,7 @@ REGLAS:
     ]
 
     try {
-      const result = await chatWithAI(messages, 'groq', undefined, {
+      const result = await chatWithAI(messages, 'glm', undefined, {
         temperature: 0.7,
         maxTokens: 512,
       })
@@ -613,7 +613,7 @@ REGLAS:
     ]
 
     try {
-      const result = await chatWithAI(messages, 'groq', undefined, {
+      const result = await chatWithAI(messages, 'glm', undefined, {
         temperature: 0.7,
         maxTokens: 512,
       })

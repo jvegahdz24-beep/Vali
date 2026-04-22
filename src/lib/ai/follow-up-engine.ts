@@ -13,6 +13,49 @@ import { chatWithAI } from './providers'
 import { buildDynamicContext } from './context-builder'
 import { logInfo, logOk, logWarn, logError } from '@/lib/logger'
 
+// ─── CustomFields Helper ────────────────────────────────────
+// Follow-up engine stores its state in contact.customFields (JSON)
+// since the schema doesn't have dedicated fields.
+
+interface FollowUpContactState {
+  leadState?: string
+  followUpStep?: number
+  nextFollowUpAt?: string
+  followUpPaused?: boolean
+  followUpPauseUntil?: string
+  contextSummary?: string
+}
+
+async function getContactFUState(contactId: string): Promise<FollowUpContactState> {
+  const contact = await db.contact.findUnique({
+    where: { id: contactId },
+    select: { customFields: true },
+  })
+  if (!contact) return {}
+  try {
+    const cf = typeof contact.customFields === 'string'
+      ? JSON.parse(contact.customFields || '{}')
+      : (contact.customFields || {})
+    return cf.followUp || {}
+  } catch { return {} }
+}
+
+async function setContactFUState(contactId: string, state: FollowUpContactState): Promise<void> {
+  const contact = await db.contact.findUnique({
+    where: { id: contactId },
+    select: { customFields: true },
+  })
+  if (!contact) return
+  const cf = typeof contact.customFields === 'string'
+    ? JSON.parse(contact.customFields || '{}')
+    : (contact.customFields || {})
+  cf.followUp = { ...cf.followUp, ...state }
+  await db.contact.update({
+    where: { id: contactId },
+    data: { customFields: JSON.stringify(cf) },
+  })
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 export type LeadState = 'nuevo' | 'frio' | 'tibio' | 'caliente' | 'cerrado' | 'perdido'
@@ -337,10 +380,7 @@ export async function scheduleNextFollowUp(
 ): Promise<{ success: boolean; nextAt?: Date; step?: number } | null> {
   if (step >= FOLLOW_UP_TIMELINE.length) {
     // Timeline complete — lead is "perdido"
-    await db.contact.update({
-      where: { id: contactId },
-      data: { leadState: 'perdido' },
-    })
+    await setContactFUState(contactId, { leadState: 'perdido' })
     logWarn('FOLLOWUP', 'timeline_complete', { contactId, reason: 'All 12 steps exhausted' })
     return null
   }
@@ -374,18 +414,14 @@ export async function scheduleNextFollowUp(
       contactId,
       conversationId,
       status: 'pending',
-      tipo: config.tipo,
       scheduledAt: nextAt,
     },
   })
 
-  // Update contact with next follow-up info
-  await db.contact.update({
-    where: { id: contactId },
-    data: {
-      nextFollowUpAt: nextAt,
-      followUpStep: step,
-    },
+  // Update contact customFields with next follow-up info
+  await setContactFUState(contactId, {
+    nextFollowUpAt: nextAt.toISOString(),
+    followUpStep: step,
   })
 
   logOk('FOLLOWUP', 'scheduled', {
@@ -419,15 +455,12 @@ export async function resetFollowUpTimeline(
     data: { status: 'cancelled' },
   })
 
-  // Reset contact state
-  await db.contact.update({
-    where: { id: contactId },
-    data: {
-      followUpStep: 0,
-      nextFollowUpAt: null,
-      followUpPaused: false,
-      followUpPauseUntil: null,
-    },
+  // Reset contact follow-up state via customFields
+  await setContactFUState(contactId, {
+    followUpStep: 0,
+    nextFollowUpAt: undefined,
+    followUpPaused: false,
+    followUpPauseUntil: undefined,
   })
 
   logInfo('FOLLOWUP', 'timeline_reset', {
@@ -507,12 +540,9 @@ export async function handleEdgeCase(
   switch (action) {
     case 'pause_30d': {
       const pauseUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      await db.contact.update({
-        where: { id: contactId },
-        data: {
-          followUpPaused: true,
-          followUpPauseUntil: pauseUntil,
-        },
+      await setContactFUState(contactId, {
+        followUpPaused: true,
+        followUpPauseUntil: pauseUntil.toISOString(),
       })
       // Cancel pending
       await db.followUpTask.updateMany({
@@ -524,12 +554,9 @@ export async function handleEdgeCase(
     }
     case 'pause_60d': {
       const pauseUntil = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-      await db.contact.update({
-        where: { id: contactId },
-        data: {
-          followUpPaused: true,
-          followUpPauseUntil: pauseUntil,
-        },
+      await setContactFUState(contactId, {
+        followUpPaused: true,
+        followUpPauseUntil: pauseUntil.toISOString(),
       })
       await db.followUpTask.updateMany({
         where: { contactId, status: 'pending' },
@@ -539,12 +566,9 @@ export async function handleEdgeCase(
       break
     }
     case 'close_won': {
-      await db.contact.update({
-        where: { id: contactId },
-        data: {
-          leadState: 'cerrado',
-          followUpPaused: true,
-        },
+      await setContactFUState(contactId, {
+        leadState: 'cerrado',
+        followUpPaused: true,
       })
       await db.followUpTask.updateMany({
         where: { contactId, status: 'pending' },
@@ -554,13 +578,7 @@ export async function handleEdgeCase(
       break
     }
     case 'close_lost': {
-      await db.contact.update({
-        where: { id: contactId },
-        data: {
-          leadState: 'perdido',
-          followUpPaused: true,
-        },
-      })
+      await setContactFUState(contactId, { leadState: 'perdido', followUpPaused: true })
       await db.followUpTask.updateMany({
         where: { contactId, status: 'pending' },
         data: { status: 'cancelled' },
@@ -617,7 +635,7 @@ TAREA: Resume en MÁXIMO 3 frases la conversación con un prospecto de compra. I
 FORMATO: Solo el resumen, sin etiquetas, sin viñetas, sin formato. Texto continuo.`,
       },
       { role: 'user', content: history },
-    ], 'groq', undefined, { temperature: 0.3, maxTokens: 300 })
+    ], 'glm', undefined, { temperature: 0.3, maxTokens: 300 })
 
     return result.content.trim()
   } catch (err) {
@@ -665,19 +683,20 @@ export async function generateFollowUpMessage(
   const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Cliente'
 
   // Build prompt
+  const fuState = await getContactFUState(contactId)
   const prompt = buildFollowUpPrompt(
     tipo,
     businessContext,
     contactName,
     history,
-    contact.contextSummary || '',
+    fuState.contextSummary || '',
     minutesSince
   )
 
   // Generate message
   const result = await chatWithAI(
     [{ role: 'system', content: prompt }],
-    'groq',
+    'glm',
     undefined,
     { temperature: 0.7, maxTokens: 300 }
   )
@@ -711,36 +730,24 @@ export async function startFollowUpTimeline(
   workspaceId: string,
   conversationId: string
 ): Promise<void> {
-  const contact = await db.contact.findUnique({
-    where: { id: contactId },
-    select: {
-      followUpStep: true,
-      leadState: true,
-      followUpPaused: true,
-      followUpPauseUntil: true,
-    },
-  })
-
-  if (!contact) return
+  const fuState = await getContactFUState(contactId)
 
   // ── Guard: terminal states ──
-  if (contact.leadState === 'cerrado' || contact.leadState === 'perdido') {
+  if (fuState.leadState === 'cerrado' || fuState.leadState === 'perdido') {
     logInfo('FOLLOWUP', 'timeline_skipped_terminal', {
       contactId,
-      leadState: contact.leadState,
+      leadState: fuState.leadState,
     })
     return
   }
 
   // ── Guard: paused lead ──
-  if (contact.followUpPaused) {
+  if (fuState.followUpPaused) {
     // Check if pause period ended
-    if (contact.followUpPauseUntil && contact.followUpPauseUntil <= new Date()) {
-      // Auto-resume: clear pause flags (message-processor already reset step to 0)
-      await db.contact.update({
-        where: { id: contactId },
-        data: { followUpPaused: false, followUpPauseUntil: null },
-      })
+    const pauseUntil = fuState.followUpPauseUntil ? new Date(fuState.followUpPauseUntil) : null
+    if (pauseUntil && pauseUntil <= new Date()) {
+      // Auto-resume: clear pause flags
+      await setContactFUState(contactId, { followUpPaused: false, followUpPauseUntil: undefined })
       logInfo('FOLLOWUP', 'pause_auto_resumed_on_start', { contactId })
     } else {
       logInfo('FOLLOWUP', 'timeline_skipped_paused', { contactId })
@@ -765,6 +772,6 @@ export async function startFollowUpTimeline(
   await scheduleNextFollowUp(contactId, workspaceId, conversationId, 0)
   logOk('FOLLOWUP', 'timeline_started', {
     contactId,
-    leadState: contact.leadState,
+    leadState: fuState.leadState || 'nuevo',
   })
 }

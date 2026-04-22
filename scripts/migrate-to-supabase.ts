@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — SQLite → Supabase Data Migration Script
 // Reads ALL data via Prisma (SQLite), inserts ALL into Supabase

@@ -630,7 +630,7 @@ export class RevenueEngine {
     const personalityName = context?.personalityName || 'JHON'
     const dynamicTemperature = context?.temperature ?? 0.75
     const customSystemPrompt = context?.customSystemPrompt
-    const aiProvider = context?.aiProvider || 'groq'
+    const aiProvider = context?.aiProvider || 'glm'
 
     // Build the system prompt with full context
     let systemPrompt: string

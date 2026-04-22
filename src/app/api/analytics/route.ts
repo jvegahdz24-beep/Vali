@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
         by: ['assignedTo'],
         where: { workspaceId: workspaceId!, status: 'won', createdAt: { gte: startDate } },
         _count: { id: true },
-      }) as Array<{ assignedTo: string; _count: { id: number } }>
+      })
 
       topAgentsData = topAgents.map((a: any) => {
         const agentDeals = agentDealCounts.find((d: any) => d.assignedTo === a.id)

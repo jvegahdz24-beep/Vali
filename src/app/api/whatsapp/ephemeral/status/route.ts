@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
       const client = ephemeralManager.get(clientId)
       response.client = client ? client.getStatus() : null
     } else {
-      response.ephemeralSessions = ephemeralManager.list()
-      response.ephemeralCount = response.ephemeralSessions.length
+      const sessions = ephemeralManager.list()
+      response.ephemeralSessions = sessions
+      response.ephemeralCount = sessions.length
     }
 
     // Check if any connection is available for sending

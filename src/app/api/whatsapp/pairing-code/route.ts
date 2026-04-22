@@ -18,7 +18,14 @@ export async function POST(req: NextRequest) {
     }
 
     const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    const result = await whatsAppManager.connectWithPairingCode(phoneNumber)
+    const connectFn = (whatsAppManager as any).connectWithPairingCode
+    if (typeof connectFn !== 'function') {
+      return NextResponse.json({
+        success: false,
+        error: 'El método de conexión por código no está disponible. Usa QR escaneo.',
+      }, { status: 400 })
+    }
+    const result = await connectFn.call(whatsAppManager, phoneNumber)
 
     if (result.success) {
       return NextResponse.json({

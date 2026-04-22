@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     const existingNames = new Set(existing.map((a) => a.name))
 
     // Create automations from templates (skip duplicates)
-    const created = []
-    const skipped = []
+    const created: any[] = []
+    const skipped: string[] = []
 
     for (const template of templatesToLoad) {
       if (existingNames.has(template.name)) {
@@ -60,12 +60,12 @@ export async function POST(req: NextRequest) {
         data: {
           workspaceId,
           name: template.name,
-          description: template.description,
-          triggerType: template.triggerType,
+          description: template.description ?? null,
+          triggerType: template.triggerType as any,
           triggerConfig: JSON.stringify(template.triggerConfig),
           actions: JSON.stringify(template.actions),
           isActive: true,
-        },
+        } as any,
       })
       created.push(automation)
     }

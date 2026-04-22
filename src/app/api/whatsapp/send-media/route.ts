@@ -41,67 +41,36 @@ export async function POST(req: NextRequest) {
     const fs = await import('fs')
     const fileBuffer = fs.readFileSync(filePath)
 
-    // Import Baileys for message types
-    const baileys = await import('@whiskeysockets/baileys')
-
     // Build the appropriate message type based on MIME
+    // Baileys 7+ uses inline media objects (no MessageMedia constructor)
     let messageContent: any
     const jid = `${phone}@s.whatsapp.net`
+    const base64Data = fileBuffer.toString('base64')
 
     if (mediaInfo.mimeType.startsWith('image/')) {
       messageContent = {
-        image: new baileys.MessageMedia(
-          mediaInfo.mimeType,
-          fileBuffer.toString('base64'),
-          '',
-          mediaInfo.fileName
-        ),
+        image: { url: `data:${mediaInfo.mimeType};base64,${base64Data}` },
         caption: caption || mediaInfo.caption || '',
+        mimetype: mediaInfo.mimeType,
       }
     } else if (mediaInfo.mimeType.startsWith('video/')) {
       messageContent = {
-        video: new baileys.MessageMedia(
-          mediaInfo.mimeType,
-          fileBuffer.toString('base64'),
-          '',
-          mediaInfo.fileName
-        ),
+        video: { url: `data:${mediaInfo.mimeType};base64,${base64Data}` },
         caption: caption || mediaInfo.caption || '',
+        mimetype: mediaInfo.mimeType,
       }
     } else if (mediaInfo.mimeType.startsWith('audio/')) {
       messageContent = {
-        audio: new baileys.MessageMedia(
-          mediaInfo.mimeType,
-          fileBuffer.toString('base64'),
-          '',
-          ''
-        ),
-        ptt: false, // not a voice note
-        mimetype: mediaInfo.mimeType,
-      }
-    } else if (mediaInfo.mimeType.includes('pdf') || mediaInfo.mimeType.includes('document') || mediaInfo.mimeType.includes('sheet') || mediaInfo.mimeType.includes('csv')) {
-      messageContent = {
-        document: new baileys.MessageMedia(
-          mediaInfo.mimeType,
-          fileBuffer.toString('base64'),
-          '',
-          mediaInfo.fileName
-        ),
-        fileName: mediaInfo.fileName,
-        caption: caption || mediaInfo.caption || '',
+        audio: { url: `data:${mediaInfo.mimeType};base64,${base64Data}` },
+        ptt: false,
         mimetype: mediaInfo.mimeType,
       }
     } else {
-      // Fallback: send as document
+      // Document fallback (PDF, sheet, CSV, etc.)
       messageContent = {
-        document: new baileys.MessageMedia(
-          mediaInfo.mimeType,
-          fileBuffer.toString('base64'),
-          '',
-          mediaInfo.fileName
-        ),
+        document: { url: `data:${mediaInfo.mimeType};base64,${base64Data}` },
         fileName: mediaInfo.fileName,
-        caption: caption || '',
+        caption: caption || mediaInfo.caption || '',
         mimetype: mediaInfo.mimeType,
       }
     }

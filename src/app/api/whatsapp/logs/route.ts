@@ -8,13 +8,19 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   try {
     const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    const logs = whatsAppManager.getLogs()
+    // Access logs/status through getStatus which is always available
     const status = whatsAppManager.getStatus()
+    const logs = Array.isArray((whatsAppManager as any).getLogs?.())
+      ? (whatsAppManager as any).getLogs()
+      : []
+    const lastError = typeof (whatsAppManager as any).getLastError === 'function'
+      ? (whatsAppManager as any).getLastError()
+      : null
 
     return NextResponse.json({
       success: true,
       logs,
-      lastError: whatsAppManager.getLastError(),
+      lastError,
       status,
       timestamp: new Date().toISOString(),
     })

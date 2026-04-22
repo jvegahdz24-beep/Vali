@@ -5,7 +5,7 @@
 // ─── Enums & Union Types ──────────────────────────────────────
 
 export type AgentType = 'qualifier' | 'sales' | 'followup' | 'coach' | 'custom'
-export type AIProvider = 'groq' | 'deepseek' | 'gemini' | 'openai'
+export type AIProvider = 'groq' | 'glm' | 'deepseek' | 'gemini' | 'openai'
 export type Channel = 'whatsapp' | 'telegram' | 'instagram' | 'webchat'
 export type MessageDirection = 'inbound' | 'outbound'
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'document' | 'location' | 'interactive'
@@ -30,10 +30,35 @@ export type IntentType =
   | 'complaint'
   | 'appointment'
   | 'price_inquiry'
+  | 'product_inquiry'
   | 'vehicle_inquiry'
   | 'test_drive'
   | 'financing'
   | 'unknown'
+
+// ─── ValiAutoFlow Stage Types ────────────────────────────────
+
+export type ValiAutoFlowStage = 'exploration' | 'interest' | 'intention'
+export type ValiAutoFlowAgent = 'diagnostico' | 'estratega' | 'cerrador'
+
+export interface ValiAutoFlowStageTransition {
+  from: ValiAutoFlowStage
+  to: ValiAutoFlowStage
+  timestamp: Date
+  triggeredBy: string
+  confidence: number
+}
+
+export interface ValiAutoFlowStageState {
+  conversationId: string
+  currentStage: ValiAutoFlowStage
+  agent: ValiAutoFlowAgent
+  history: ValiAutoFlowStageTransition[]
+  stageEnteredAt: Date
+  messagesInStage: number
+  painDetected: boolean
+  costAcknowledged: boolean
+}
 
 // ─── Pipeline Types ───────────────────────────────────────────
 
