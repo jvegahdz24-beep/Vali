@@ -584,6 +584,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                         fontSize: '12px',
                       }}
+                      formatter={(value: any) => [value != null && !isNaN(Number(value)) ? Number(value) : 0, 'Mensajes']}
                     />
                     <Bar
                       dataKey="mensajes"
@@ -725,7 +726,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                         fontSize: '12px',
                       }}
-                      formatter={(value: number) => [formatCurrency(value), 'Ingresos']}
+                      formatter={(value: any) => [value != null && !isNaN(Number(value)) ? formatCurrency(Number(value)) : '$0', 'Ingresos']}
                     />
                     <Area
                       type="monotone"

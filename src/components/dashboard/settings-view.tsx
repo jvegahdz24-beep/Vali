@@ -55,6 +55,7 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ workspaceId }: SettingsViewProps) {
+  const { user } = useAuth()
   const [whatsappConnected, setWhatsappConnected] = useState(false)
   const [whatsappConnecting, setWhatsappConnecting] = useState(false)
   const [qrCode, setQrCode] = useState<string | null>(null)
@@ -71,7 +72,6 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   const [saving, setSaving] = useState(false)
 
   // ── General Tab State ──
-  // Prefer user context (from API) over stale localStorage
   const [workspaceName, setWorkspaceName] = useState(() => user?.workspaceName || localStorage.getItem('vf_workspaceName') || 'Mi Negocio')
   const [industry, setIndustry] = useState(() => localStorage.getItem('vf_industry') || 'services')
   const [language, setLanguage] = useState(() => user?.locale || localStorage.getItem('vf_language') || 'es')
@@ -93,7 +93,6 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   const [teamLoading, setTeamLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const { user } = useAuth()
 
   // ── Industries ──
   const industries = [

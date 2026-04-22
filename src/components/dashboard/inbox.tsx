@@ -1438,7 +1438,12 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                                   isMatch && 'ring-2 ring-amber-400'
                                 )}
                               >
-                                {msg.content}
+                                {typeof msg.content === 'string'
+                                  ? msg.content
+                                  : typeof msg.content === 'object' && msg.content !== null
+                                    ? JSON.stringify(msg.content, null, 2)
+                                    : String(msg.content ?? '')
+                                }
                               </div>
                             </ContextMenuTrigger>
                             <ContextMenuContent className="w-48">
