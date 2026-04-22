@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
         ? await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, stageId: { in: proposalStageIds }, status: 'active' } })
         : 0
 
-      const won = await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, status: 'won' } })
+      const won = await db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, OR: [{ status: 'won' }, { stage: { isWon: true } }] } })
 
       conversionFunnel = { leads: totalLeads, qualified, proposals, won }
     } catch (err) {
@@ -138,21 +138,24 @@ export async function GET(req: NextRequest) {
         take: 5,
       })) as Array<any>
 
-      const agentDealCounts = await db.deal.groupBy({
-        by: ['assignedTo'],
-        where: { workspaceId: workspaceId!, status: 'won', createdAt: { gte: startDate } },
-        _count: { id: true },
+      const agentDealCounts = await db.deal.findMany({
+        where: { workspaceId: workspaceId!, createdAt: { gte: startDate }, OR: [{ status: 'won' }, { stage: { isWon: true } }] },
+        select: { assignedTo: true },
       })
+      const agentDealCountMap: Record<string, number> = {}
+      for (const d of agentDealCounts) {
+        if (d.assignedTo) agentDealCountMap[d.assignedTo] = (agentDealCountMap[d.assignedTo] || 0) + 1
+      }
 
       topAgentsData = topAgents.map((a: any) => {
-        const agentDeals = agentDealCounts.find((d: any) => d.assignedTo === a.id)
+        const agentDeals = agentDealCountMap[a.id] || 0
         const conversations = a._count?.logs || 0
         return {
           id: a.id,
           name: a.name,
           type: a.type,
           conversations,
-          conversionRate: conversations > 0 ? (agentDeals?._count?.id || 0) / conversations : 0,
+          conversionRate: conversations > 0 ? agentDeals / conversations : 0,
         }
       })
     } catch (err) {
@@ -221,7 +224,13 @@ export async function GET(req: NextRequest) {
           },
         }),
         db.contact.count({ where: { workspaceId: workspaceId!, createdAt: { gte: prevStartDate, lt: prevEndDate } } }),
-        db.deal.count({ where: { workspaceId: workspaceId!, createdAt: { gte: prevStartDate, lt: prevEndDate }, status: 'won' } }),
+        db.deal.count({
+          where: {
+            workspaceId: workspaceId!,
+            createdAt: { gte: prevStartDate, lt: prevEndDate },
+            OR: [{ status: 'won' }, { stage: { isWon: true } }],
+          },
+        }),
       ])
       prevTotalMessages = prevMsgs
       prevTotalLeads = prevLeads

@@ -14,6 +14,11 @@ export async function GET(req: NextRequest) {
     const workspaceId = searchParams.get('workspaceId')
     await requireWorkspace(workspaceId!, session.userId)
 
+    // Use OR with stage.isWon/isLost for resilience
+    const wonWhere = { workspaceId: workspaceId!, OR: [{ status: 'won' }, { stage: { isWon: true } }] }
+    const lostWhere = { workspaceId: workspaceId!, OR: [{ status: 'lost' }, { stage: { isLost: true } }] }
+    const activeWhere = { workspaceId: workspaceId!, status: 'active', stage: { isWon: false, isLost: false } }
+
     // Run all queries in parallel for performance
     const [
       totalContacts,
@@ -37,19 +42,13 @@ export async function GET(req: NextRequest) {
       }),
 
       // Deals won
-      db.deal.count({
-        where: { workspaceId: workspaceId!, status: 'won' },
-      }),
+      db.deal.count({ where: wonWhere }),
 
       // Deals lost
-      db.deal.count({
-        where: { workspaceId: workspaceId!, status: 'lost' },
-      }),
+      db.deal.count({ where: lostWhere }),
 
       // Open/active deals
-      db.deal.count({
-        where: { workspaceId: workspaceId!, status: 'active' },
-      }),
+      db.deal.count({ where: activeWhere }),
 
       // Messages today
       db.message.count({
@@ -74,16 +73,16 @@ export async function GET(req: NextRequest) {
         where: { workspaceId: workspaceId!, isActive: true },
       }),
 
-      // Pipeline value (sum of active deals)
+      // Pipeline value (sum of active deals, excluding won/lost stages)
       db.deal.aggregate({
-        where: { workspaceId: workspaceId!, status: 'active' },
+        where: activeWhere,
         _sum: { value: true },
       }),
     ])
 
     // Total revenue (sum of won deals)
     const revenueResult = await db.deal.aggregate({
-      where: { workspaceId: workspaceId!, status: 'won' },
+      where: wonWhere,
       _sum: { value: true },
     })
 

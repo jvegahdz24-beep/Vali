@@ -422,3 +422,26 @@ Stage Summary:
 - Total dashboard code: ~13,000+ lines
 - All APIs verified returning real data
 - Server running on port 3000
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix 4 real problems found during "en la vida real" verification
+
+Work Log:
+- Diagnosed root cause: OLD workspace "Cerrado Ganado" stage had isWon=false, all 15 deals had status='active'
+- DB migration: Set isWon=true on "Cerrado Ganado" stage, isLost=true on "Cerrado Perdido" stage
+- Synced deal.status: 2 deals in won stage updated to status='won' ($195K + $500K = $695K)
+- Deleted duplicate workspace "ValiAutoFlow" (had placeholder agents with 10-17 char prompts vs real 10K+ char prompts)
+- Updated 3 API routes (admin/metrics, dashboard/stats, analytics) to use OR filter: status='won' OR stage.isWon=true
+- Updated agent metrics API: successRate returns null when no real data (no agentLogs AND no messages)
+- Updated agents-view.tsx UI: shows "Sin datos"/"N/A" instead of "0%" when no data
+- Rewrote automation /run endpoint to create AutomationLog entry on every execution
+- Verified: TSC 0 errors, build success, DB verified via Prisma
+
+Stage Summary:
+- Revenue: $695,000 (was $0) ✅
+- Pipeline: $2,600,000 ✅
+- Single workspace (duplicate removed) ✅
+- Agent metrics: returns null/"Sin datos" when no real data ✅
+- Automation run: creates AutomationLog automatically ✅
+- Files modified: admin/metrics/route.ts, dashboard/stats/route.ts, analytics/route.ts, agents/metrics/route.ts, agents-view.tsx, automations/[id]/run/route.ts

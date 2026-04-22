@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
       messagesSent: number
       messagesTotal: number
       avgResponseTimeMs: number
-      successRate: number
+      successRate: number | null
+      hasRealData: boolean
       leadsQualified: number
       dealsClosed: number
       lastActivity: string | null
@@ -84,14 +85,17 @@ export async function GET(req: NextRequest) {
           : 0
 
       // Calculate success rate (confidence > 0.7)
+      // Return null when no real interactions exist to avoid misleading 0%
+      const hasRealData = agentLogs.length > 0 || messagesTotal > 0
       const confidenceScores = agentLogs
         .map((log) => log.confidence)
         .filter((c) => c > 0)
       const successCount = confidenceScores.filter((c) => c >= 0.7).length
-      const successRate =
-        confidenceScores.length > 0
-          ? Math.round((successCount / confidenceScores.length) * 100)
-          : 0
+      const successRate = hasRealData
+        ? (confidenceScores.length > 0
+            ? Math.round((successCount / confidenceScores.length) * 100)
+            : 0)
+        : null
 
       // Last activity from agent logs
       const lastActivity = agentLogs.length > 0 ? agentLogs[0].createdAt : null
@@ -154,6 +158,7 @@ export async function GET(req: NextRequest) {
         messagesTotal,
         avgResponseTimeMs: avgResponseTime,
         successRate,
+        hasRealData,
         leadsQualified,
         dealsClosed,
         lastActivity: lastActivity?.toISOString() || null,

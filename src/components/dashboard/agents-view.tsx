@@ -88,7 +88,8 @@ interface AgentMetrics {
   messagesSent: number
   messagesTotal: number
   avgResponseTimeMs: number
-  successRate: number
+  successRate: number | null
+  hasRealData: boolean
   leadsQualified: number
   dealsClosed: number
   lastActivity: string | null
@@ -223,8 +224,8 @@ function AgentCard({
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Tasa de éxito</span>
-            <span className={cn('font-medium', (metrics?.successRate ?? 0) >= 70 ? 'text-emerald-600' : (metrics?.successRate ?? 0) >= 40 ? 'text-amber-600' : 'text-red-600')}>
-              {metrics?.successRate ?? 0}%
+            <span className={cn('font-medium', metrics?.successRate == null ? 'text-muted-foreground' : metrics.successRate >= 70 ? 'text-emerald-600' : metrics.successRate >= 40 ? 'text-amber-600' : 'text-red-600')}>
+              {metrics?.successRate == null ? 'Sin datos' : `${metrics.successRate}%`}
             </span>
           </div>
           <Separator className="my-1" />
@@ -547,9 +548,10 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
   // Summary metrics
   const totalMessages = Object.values(agentMetrics).reduce((sum, m) => sum + m.messagesSent, 0)
   const totalConversations = Object.values(agentMetrics).reduce((sum, m) => sum + m.conversationsHandled, 0)
-  const avgSuccessRate = Object.values(agentMetrics).length > 0
-    ? Math.round(Object.values(agentMetrics).reduce((sum, m) => sum + m.successRate, 0) / Object.values(agentMetrics).length)
-    : 0
+  const agentsWithData = Object.values(agentMetrics).filter(m => m.hasRealData)
+  const avgSuccessRate = agentsWithData.length > 0
+    ? Math.round(agentsWithData.reduce((sum, m) => sum + (m.successRate || 0), 0) / agentsWithData.length)
+    : null
   const totalDealsClosed = Object.values(agentMetrics).reduce((sum, m) => sum + m.dealsClosed, 0)
 
   return (
@@ -739,7 +741,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
                   <Activity className="h-3.5 w-3.5 text-emerald-600" />
                   <span className="text-[10px] text-muted-foreground">Tasa Éxito Prom.</span>
                 </div>
-                <p className="text-lg font-bold">{avgSuccessRate}%</p>
+                <p className="text-lg font-bold">{avgSuccessRate == null ? 'Sin datos' : `${avgSuccessRate}%`}</p>
               </CardContent>
             </Card>
             <Card className="border-border/60">
@@ -813,11 +815,12 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
                           <TableCell className="py-3 text-center">
                             <Badge className={cn(
                               'border-0 text-[9px] px-1.5 font-semibold',
-                              m.successRate >= 70 ? 'bg-emerald-100 text-emerald-700'
-                                : m.successRate >= 40 ? 'bg-amber-100 text-amber-700'
-                                : 'bg-red-100 text-red-700'
+                              m.successRate == null ? 'bg-gray-100 text-gray-500'
+                                : m.successRate >= 70 ? 'bg-emerald-100 text-emerald-700'
+                                  : m.successRate >= 40 ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-red-100 text-red-700'
                             )}>
-                              {m.successRate}%
+                              {m.successRate == null ? 'N/A' : `${m.successRate}%`}
                             </Badge>
                           </TableCell>
                           <TableCell className="py-3 text-center text-xs font-medium">{m.leadsQualified}</TableCell>

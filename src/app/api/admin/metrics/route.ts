@@ -14,7 +14,11 @@ export async function GET(req: NextRequest) {
     const workspaceId = searchParams.get('workspaceId')
     await requireWorkspace(workspaceId!, session.userId)
 
-    // Core counts
+    // Core counts — use OR with stage.isWon/isLost for resilience
+    const wonWhere = { workspaceId: workspaceId!, OR: [{ status: 'won' }, { stage: { isWon: true } }] }
+    const lostWhere = { workspaceId: workspaceId!, OR: [{ status: 'lost' }, { stage: { isLost: true } }] }
+    const activeWhere = { workspaceId: workspaceId!, status: 'active', stage: { isWon: false, isLost: false } }
+
     const [
       totalContacts,
       totalConversations,
@@ -28,24 +32,24 @@ export async function GET(req: NextRequest) {
       db.contact.count({ where: { workspaceId: workspaceId! } }),
       db.conversation.count({ where: { workspaceId: workspaceId! } }),
       db.deal.count({ where: { workspaceId: workspaceId! } }),
-      db.deal.count({ where: { workspaceId: workspaceId!, status: 'active' } }),
-      db.deal.count({ where: { workspaceId: workspaceId!, status: 'won' } }),
-      db.deal.count({ where: { workspaceId: workspaceId!, status: 'lost' } }),
+      db.deal.count({ where: activeWhere }),
+      db.deal.count({ where: wonWhere }),
+      db.deal.count({ where: lostWhere }),
       db.message.count({ where: { conversation: { workspaceId: workspaceId! } } }),
       db.agent.count({ where: { workspaceId: workspaceId! } }),
     ])
 
-    // Revenue
+    // Revenue — sum won deals (status='won' OR stage.isWon=true)
     const revenueAgg = await db.deal.aggregate({
       _sum: { value: true },
-      where: { workspaceId: workspaceId!, status: 'won' },
+      where: wonWhere,
     })
     const totalRevenue = revenueAgg._sum.value || 0
 
-    // Pipeline value (active deals)
+    // Pipeline value (active deals, excluding won/lost stages)
     const pipelineAgg = await db.deal.aggregate({
       _sum: { value: true },
-      where: { workspaceId: workspaceId!, status: 'active' },
+      where: activeWhere,
     })
     const pipelineValue = pipelineAgg._sum.value || 0
 
@@ -90,7 +94,10 @@ export async function GET(req: NextRequest) {
     const qualifiedDeals = await db.deal.count({
       where: {
         workspaceId: workspaceId!,
-        status: { in: ['active', 'won'] },
+        OR: [
+          { status: { in: ['active', 'won'] } },
+          { stage: { isWon: true } },
+        ],
       },
     })
 
@@ -110,12 +117,11 @@ export async function GET(req: NextRequest) {
         const assignedDeals = await db.deal.count({
           where: { workspaceId: workspaceId!, assignedTo: member.userId },
         })
-        const wonDealsForMember = await db.deal.count({
-          where: { workspaceId: workspaceId!, assignedTo: member.userId, status: 'won' },
-        })
+        const wonForMemberWhere = { workspaceId: workspaceId!, assignedTo: member.userId, OR: [{ status: 'won' }, { stage: { isWon: true } }] }
+        const wonDealsForMember = await db.deal.count({ where: wonForMemberWhere })
         const revenueForMember = await db.deal.aggregate({
           _sum: { value: true },
-          where: { workspaceId: workspaceId!, assignedTo: member.userId, status: 'won' },
+          where: wonForMemberWhere,
         })
 
         const conversionRate = assignedDeals > 0
