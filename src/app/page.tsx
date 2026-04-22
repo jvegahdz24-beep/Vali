@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { DashboardMain } from '@/components/dashboard/dashboard-main'
@@ -22,6 +23,22 @@ import { Button } from '@/components/ui/button'
 
 export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin'
 
+// Map URL paths to dashboard views
+const pathToView: Record<string, ViewType> = {
+  '/contacts': 'contacts',
+  '/pipeline': 'pipeline',
+  '/inbox': 'inbox',
+  '/agents': 'agents',
+  '/team': 'team',
+  '/analytics': 'analytics',
+  '/automations': 'automations',
+  '/developer': 'developer',
+  '/settings': 'settings',
+  '/valiguard': 'valiguard',
+  '/admin': 'admin',
+  '/chat-demo': 'chat-demo',
+}
+
 // Helper: fetch with timeout
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController()
@@ -36,7 +53,12 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 
 export default function Home() {
   const { user, isLoading: authLoading, isAuthenticated } = useAuth()
-  const [activeView, setActiveView] = useState<ViewType>('dashboard')
+  const searchParams = useSearchParams()
+  const redirectPath = searchParams.get('redirect') || ''
+  const [activeView, setActiveView] = useState<ViewType>(() => {
+    // Restore view from redirect param if available
+    return (pathToView[redirectPath] || 'dashboard')
+  })
   const [workspaceId, setWorkspaceId] = useState<string>('')
   const [isSeeding, setIsSeeding] = useState(false)
   const [seedError, setSeedError] = useState<string | null>(null)

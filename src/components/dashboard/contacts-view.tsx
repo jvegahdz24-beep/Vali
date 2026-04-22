@@ -139,10 +139,23 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
       if (!res.ok) throw new Error('Error al cargar contactos')
       const data = await res.json()
 
-      // Parse tags from JSON string
+      // Parse tags from JSON string (safe parsing)
+      const safeParseTags = (raw: unknown): string[] => {
+        if (Array.isArray(raw)) return raw
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) return parsed
+          } catch {
+            // Fallback: split by comma for raw strings like "calificado, lead"
+            return raw.split(',').map((t: string) => t.trim()).filter(Boolean)
+          }
+        }
+        return []
+      }
       const parsed = (data.items || []).map((c: Record<string, unknown>) => ({
         ...c,
-        tags: typeof c.tags === 'string' ? JSON.parse(c.tags) : (c.tags || []),
+        tags: safeParseTags(c.tags),
         _count: c._count || { conversations: 0, deals: 0 },
       }))
       setContacts(parsed)

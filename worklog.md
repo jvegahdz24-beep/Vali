@@ -287,3 +287,23 @@ Stage Summary:
 - Ephemeral sessions: create→connect→poll QR→send→auto-destroy lifecycle working
 - Build successful, server running on port 3000
 - All endpoints verified via curl with authentication
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix 404 page error and contacts JSON parse error
+
+Work Log:
+- Diagnosed server state: found dev server was stale, .next directory empty, multiple port conflicts
+- Killed all stale processes and cleaned .next directory
+- Fixed contacts-view.tsx: replaced unsafe JSON.parse(c.tags) with safeParseTags() helper that handles JSON arrays, raw strings, and comma-separated values
+- Fixed middleware.ts: added unknown route handling for authenticated users - redirects unknown paths like /contacts to /?redirect=/contacts
+- Updated page.tsx: added useSearchParams to read redirect param and pathToView mapping to restore correct dashboard view
+- Restarted dev server using double-fork orphan technique (survives tool call boundaries)
+- Verified all routes: Health 200, Homepage 200, /contacts redirect 307→/?redirect=/contacts, no-auth 307→/login, Contacts API with safe tags parsing, Caddy proxy 200
+
+Stage Summary:
+- Contacts page will no longer crash with JSON parse error regardless of tag format in database
+- All unknown routes now redirect properly instead of showing 404
+- Server is running on port 3000 with Caddy proxy on port 81
+- Preview URL: https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site/

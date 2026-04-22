@@ -204,7 +204,27 @@ export async function middleware(request: NextRequest) {
     return addSecurityHeaders(response)
   }
 
-  // User is authenticated, add security headers and allow access
+  // User is authenticated — handle unknown routes
+  // The dashboard is a single-page app; redirect unknown paths to /
+  const knownPaths = [
+    '/',
+    '/login', '/signup', '/landing',
+    '/terms', '/privacy', '/reset-password', '/setup-sql',
+  ]
+  const isKnownPath = knownPaths.some(p => pathname === p)
+  const isApiPath = pathname.startsWith('/api/')
+  const isNextInternal = pathname.startsWith('/_next') || pathname.startsWith('/__nextjs')
+  const isStaticFile = staticExtensions.some(ext => pathname.endsWith(ext))
+
+  if (!isKnownPath && !isApiPath && !isNextInternal && !isStaticFile) {
+    // Unknown route — redirect to homepage with the original path as query param
+    // so the client can restore the correct view
+    const homeUrl = new URL('/', request.url)
+    if (pathname !== '/') homeUrl.searchParams.set('redirect', pathname)
+    return addSecurityHeaders(NextResponse.redirect(homeUrl))
+  }
+
+  // Known route — add security headers and allow access
   return addSecurityHeaders(NextResponse.next())
 }
 
