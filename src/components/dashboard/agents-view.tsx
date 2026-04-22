@@ -11,10 +11,15 @@ import {
   Trophy,
   Loader2,
   Trash2,
+  BarChart3,
+  Clock,
+  MessageSquare,
+  TrendingUp,
+  Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AGENT_TYPES } from '@/lib/constants'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -29,6 +34,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -66,6 +79,22 @@ interface Agent {
   createdAt?: string
 }
 
+interface AgentMetrics {
+  agentId: string
+  agentName: string
+  agentType: string
+  isActive: boolean
+  conversationsHandled: number
+  messagesSent: number
+  messagesTotal: number
+  avgResponseTimeMs: number
+  successRate: number
+  leadsQualified: number
+  dealsClosed: number
+  lastActivity: string | null
+  messagesLast7Days: number[]
+}
+
 const typeLabels: Record<string, string> = {
   qualifier: 'Qualifier',
   sales: 'Sales Agent',
@@ -82,11 +111,76 @@ const typeIcons: Record<string, React.ReactNode> = {
   custom: <Settings className="h-5 w-5" />,
 }
 
-function AgentCard({ agent, onConfigure }: { agent: Agent; onConfigure: () => void }) {
+// ── Sparkline Component ──
+
+function MiniSparkline({ data, maxVal }: { data: number[]; maxVal: number }) {
+  if (data.length === 0) return null
+  const height = 28
+  const width = 80
+  const max = maxVal || Math.max(...data, 1)
+
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width
+    const y = height - (v / max) * height
+    return `${x},${y}`
+  }).join(' ')
+
+  const fillPoints = `0,${height} ${points} ${width},${height}`
+
+  return (
+    <svg width={width} height={height} className="shrink-0" viewBox={`0 0 ${width} ${height}`}>
+      <polygon
+        points={fillPoints}
+        fill="url(#sparkGradient)"
+        opacity={0.3}
+      />
+      <polyline
+        points={points}
+        fill="none"
+        stroke="#10b981"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <defs>
+        <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#10b981" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
+function formatTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return 'Sin actividad'
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = now - then
+
+  if (diff < 60000) return 'Ahora'
+  if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)}m`
+  if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)}h`
+  if (diff < 604800000) return `Hace ${Math.floor(diff / 86400000)}d`
+  return new Date(dateStr).toLocaleDateString('es-MX')
+}
+
+function AgentCard({
+  agent,
+  metrics,
+  onConfigure,
+}: {
+  agent: Agent
+  metrics?: AgentMetrics
+  onConfigure: () => void
+}) {
+  const sparkData = metrics?.messagesLast7Days || [0, 0, 0, 0, 0, 0, 0]
+  const maxSpark = Math.max(...sparkData, 1)
+
   return (
     <Card className="border-border/60 hover:shadow-md transition-shadow cursor-pointer" onClick={onConfigure}>
       <CardContent className="p-5">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className={cn(
               'flex items-center justify-center w-10 h-10 rounded-xl',
@@ -109,27 +203,37 @@ function AgentCard({ agent, onConfigure }: { agent: Agent; onConfigure: () => vo
           </Badge>
         </div>
 
+        {/* Sparkline */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            <Activity className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground">Últimos 7 días</span>
+          </div>
+          <MiniSparkline data={sparkData} maxVal={maxSpark} />
+        </div>
+
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Modelo</span>
-            <span className="font-medium text-foreground truncate max-w-[140px]">{agent.model || '—'}</span>
+            <span className="text-muted-foreground">Mensajes enviados</span>
+            <span className="font-medium text-foreground">{metrics?.messagesSent ?? '—'}</span>
           </div>
-          {agent.temperature !== undefined && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Temperatura</span>
-              <span className="font-medium text-foreground">{agent.temperature}</span>
-            </div>
-          )}
-          {agent.maxTokens !== undefined && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Max Tokens</span>
-              <span className="font-medium text-foreground">{agent.maxTokens}</span>
-            </div>
-          )}
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Conversaciones</span>
+            <span className="font-medium text-foreground">{metrics?.conversationsHandled ?? '—'}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Tasa de éxito</span>
+            <span className={cn('font-medium', (metrics?.successRate ?? 0) >= 70 ? 'text-emerald-600' : (metrics?.successRate ?? 0) >= 40 ? 'text-amber-600' : 'text-red-600')}>
+              {metrics?.successRate ?? 0}%
+            </span>
+          </div>
           <Separator className="my-1" />
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Creado</span>
-            <span className="text-muted-foreground">{agent.createdAt ? new Date(agent.createdAt).toLocaleDateString('es-MX') : '—'}</span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Última actividad
+            </span>
+            <span className="text-muted-foreground">{formatTimeAgo(metrics?.lastActivity ?? null)}</span>
           </div>
         </div>
       </CardContent>
@@ -314,6 +418,7 @@ interface AgentsViewProps {
 
 export function AgentsView({ workspaceId }: AgentsViewProps) {
   const [agents, setAgents] = useState<Agent[]>([])
+  const [agentMetrics, setAgentMetrics] = useState<Record<string, AgentMetrics>>({})
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
@@ -321,6 +426,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [metricsLoading, setMetricsLoading] = useState(false)
 
   // New agent form
   const [newAgent, setNewAgent] = useState({
@@ -334,10 +440,10 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
     if (!workspaceId) return
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/agents?workspaceId=${workspaceId}`)
+      const res = await fetch(`/api/agents?workspaceId=${workspaceId}&includeInactive=true`)
       if (!res.ok) throw new Error('Error al cargar agentes')
       const data = await res.json()
-      setAgents(data.agents || [])
+      setAgents(data.items || data.agents || [])
     } catch {
       toast.error('Error al cargar agentes')
     } finally {
@@ -345,9 +451,29 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
     }
   }, [workspaceId])
 
+  const fetchMetrics = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      setMetricsLoading(true)
+      const res = await fetch(`/api/agents/metrics?workspaceId=${workspaceId}`)
+      if (!res.ok) throw new Error('Error al cargar métricas')
+      const data = await res.json()
+      const metricsMap: Record<string, AgentMetrics> = {}
+      for (const m of data.metrics || []) {
+        metricsMap[m.agentId] = m
+      }
+      setAgentMetrics(metricsMap)
+    } catch {
+      // silent fail for metrics
+    } finally {
+      setMetricsLoading(false)
+    }
+  }, [workspaceId])
+
   useEffect(() => {
     fetchAgents()
-  }, [fetchAgents])
+    fetchMetrics()
+  }, [fetchAgents, fetchMetrics])
 
   const handleCreateAgent = async () => {
     if (!newAgent.name.trim() || !workspaceId || isCreating) return
@@ -368,6 +494,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
       setShowNewAgent(false)
       setNewAgent({ name: '', type: 'sales', personality: 'JHON', model: 'llama-3.3-70b-versatile' })
       await fetchAgents()
+      await fetchMetrics()
     } catch (err) {
       console.error('Error creating agent:', err)
     } finally {
@@ -388,6 +515,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
       setConfigOpen(false)
       setSelectedAgent(null)
       await fetchAgents()
+      await fetchMetrics()
     } catch (err) {
       console.error('Error updating agent:', err)
     } finally {
@@ -407,6 +535,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
       setShowDeleteDialog(false)
       toast.success(`Agente "${selectedAgent.name}" eliminado correctamente`)
       await fetchAgents()
+      await fetchMetrics()
     } catch (err) {
       toast.error('Error al eliminar agente')
       console.error('Error deleting agent:', err)
@@ -414,6 +543,14 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
   }
 
   const activeCount = agents.filter((a) => a.isActive).length
+
+  // Summary metrics
+  const totalMessages = Object.values(agentMetrics).reduce((sum, m) => sum + m.messagesSent, 0)
+  const totalConversations = Object.values(agentMetrics).reduce((sum, m) => sum + m.conversationsHandled, 0)
+  const avgSuccessRate = Object.values(agentMetrics).length > 0
+    ? Math.round(Object.values(agentMetrics).reduce((sum, m) => sum + m.successRate, 0) / Object.values(agentMetrics).length)
+    : 0
+  const totalDealsClosed = Object.values(agentMetrics).reduce((sum, m) => sum + m.dealsClosed, 0)
 
   return (
     <div className="p-4 lg:p-6">
@@ -503,61 +640,201 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
         </Dialog>
       </div>
 
-      {/* Agent Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="border-border/60">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <Skeleton className="h-10 w-10 rounded-xl" />
-                  <div className="flex-1">
-                    <Skeleton className="h-4 w-28 mb-1" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-5 w-14 rounded-full" />
+      <Tabs defaultValue="agentes" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="agentes" className="gap-1.5">
+            <Bot className="h-3.5 w-3.5" />
+            Agentes
+          </TabsTrigger>
+          <TabsTrigger value="metricas" className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Métricas
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Agents Grid Tab */}
+        <TabsContent value="agentes">
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i} className="border-border/60">
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Skeleton className="h-10 w-10 rounded-xl" />
+                      <div className="flex-1">
+                        <Skeleton className="h-4 w-28 mb-1" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                    </div>
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : agents.length === 0 ? (
+            <Card className="border-border/60">
+              <CardContent className="p-12 text-center">
+                <div className="p-4 rounded-2xl bg-emerald-50 w-fit mx-auto mb-4">
+                  <Bot className="h-10 w-10 text-emerald-600" />
                 </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
+                <h4 className="text-sm font-semibold mb-1">Sin agentes configurados</h4>
+                <p className="text-xs text-muted-foreground mb-4">Crea tu primer agente IA para automatizar conversaciones.</p>
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setShowNewAgent(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Crear Agente
+                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      ) : agents.length === 0 ? (
-        <Card className="border-border/60">
-          <CardContent className="p-12 text-center">
-            <div className="p-4 rounded-2xl bg-emerald-50 w-fit mx-auto mb-4">
-              <Bot className="h-10 w-10 text-emerald-600" />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {agents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  metrics={agentMetrics[agent.id]}
+                  onConfigure={() => {
+                    setSelectedAgent(agent)
+                    setConfigOpen(true)
+                  }}
+                />
+              ))}
             </div>
-            <h4 className="text-sm font-semibold mb-1">Sin agentes configurados</h4>
-            <p className="text-xs text-muted-foreground mb-4">Crea tu primer agente IA para automatizar conversaciones.</p>
-            <Button
-              size="sm"
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => setShowNewAgent(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Crear Agente
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {agents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              onConfigure={() => {
-                setSelectedAgent(agent)
-                setConfigOpen(true)
-              }}
-            />
-          ))}
-        </div>
-      )}
+          )}
+        </TabsContent>
+
+        {/* Metrics Tab */}
+        <TabsContent value="metricas">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[10px] text-muted-foreground">Mensajes Totales</span>
+                </div>
+                <p className="text-lg font-bold">{totalMessages.toLocaleString('es-MX')}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[10px] text-muted-foreground">Conversaciones</span>
+                </div>
+                <p className="text-lg font-bold">{totalConversations.toLocaleString('es-MX')}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[10px] text-muted-foreground">Tasa Éxito Prom.</span>
+                </div>
+                <p className="text-lg font-bold">{avgSuccessRate}%</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Trophy className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[10px] text-muted-foreground">Deals Cerrados</span>
+                </div>
+                <p className="text-lg font-bold">{totalDealsClosed}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Metrics Table */}
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-emerald-600" />
+                Rendimiento por Agente
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {metricsLoading ? (
+                <div className="space-y-3 py-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded" />
+                  ))}
+                </div>
+              ) : Object.keys(agentMetrics).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Sin datos de métricas</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border/60">
+                        <TableHead className="text-xs font-semibold text-muted-foreground">Agente</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Tipo</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Conversaciones</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Mensajes</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Tiempo Resp.</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Éxito %</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Calificados</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Cerrados</TableHead>
+                        <TableHead className="text-xs font-semibold text-muted-foreground text-center">Última Act.</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-border/40">
+                      {Object.values(agentMetrics).map((m) => (
+                        <TableRow key={m.agentId} className="hover:bg-muted/30">
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+                                m.isActive ? 'bg-emerald-100 text-emerald-600' : 'bg-zinc-100 text-zinc-400'
+                              )}>
+                                {typeIcons[m.agentType] || <Bot className="h-3.5 w-3.5" />}
+                              </div>
+                              <span className="text-xs font-medium text-foreground">{m.agentName}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3 text-center">
+                            <Badge className="bg-muted text-muted-foreground border-0 text-[9px] px-1.5">
+                              {typeLabels[m.agentType] || m.agentType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-3 text-center text-xs font-medium">{m.conversationsHandled}</TableCell>
+                          <TableCell className="py-3 text-center text-xs font-medium">{m.messagesSent}</TableCell>
+                          <TableCell className="py-3 text-center text-xs text-muted-foreground">
+                            {m.avgResponseTimeMs > 0 ? `${(m.avgResponseTimeMs / 1000).toFixed(1)}s` : '—'}
+                          </TableCell>
+                          <TableCell className="py-3 text-center">
+                            <Badge className={cn(
+                              'border-0 text-[9px] px-1.5 font-semibold',
+                              m.successRate >= 70 ? 'bg-emerald-100 text-emerald-700'
+                                : m.successRate >= 40 ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                            )}>
+                              {m.successRate}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-3 text-center text-xs font-medium">{m.leadsQualified}</TableCell>
+                          <TableCell className="py-3 text-center text-xs font-medium">{m.dealsClosed}</TableCell>
+                          <TableCell className="py-3 text-center text-[10px] text-muted-foreground">
+                            {formatTimeAgo(m.lastActivity)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Config Dialog */}
       {selectedAgent && (

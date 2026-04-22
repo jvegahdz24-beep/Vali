@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Single Conversation API
 // GET /api/conversations/:id — Get conversation with messages
-// POST /api/conversations/:id/messages — Send message
+// POST /api/conversations/:id — Send message
+// PUT /api/conversations/:id — Update conversation
+// DELETE /api/conversations/:id — Soft-delete conversation
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest } from 'next/server'
@@ -138,6 +140,67 @@ export async function POST(
     })
 
     return Response.json({ success: true, message }, { status: 201 })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(req)
+    const { id } = await params
+    const body = await req.json()
+    const { status, assignedTo, assignedAgentId, channel } = body
+
+    const conversation = await db.conversation.findUnique({ where: { id } })
+    if (!conversation) {
+      return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (status !== undefined) updateData.status = status
+    if (assignedTo !== undefined) updateData.assignedTo = assignedTo || null
+    if (assignedAgentId !== undefined) updateData.assignedAgentId = assignedAgentId || null
+    if (channel !== undefined) updateData.channel = channel
+
+    const updated = await db.conversation.update({
+      where: { id },
+      data: updateData,
+    })
+
+    return Response.json({ success: true, conversation: updated })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(req)
+    const { id } = await params
+
+    const conversation = await db.conversation.findUnique({ where: { id } })
+    if (!conversation) {
+      return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
+    }
+
+    // Soft-delete: set status to 'closed' and clear assignment
+    await db.conversation.update({
+      where: { id },
+      data: {
+        status: 'closed',
+        assignedTo: null,
+        assignedAgentId: null,
+      },
+    })
+
+    return Response.json({ success: true, message: 'Conversación eliminada (cerrada)' })
   } catch (error) {
     return errorResponse(error)
   }

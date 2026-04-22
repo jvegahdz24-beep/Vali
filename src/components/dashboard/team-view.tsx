@@ -46,6 +46,9 @@ import {
   Zap,
   Building2,
   Sparkles,
+  MessageSquare,
+ Clock,
+ CheckCircle2,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -63,6 +66,8 @@ interface TeamMember {
   workspaceId: string
   role: string
   joinedAt: string
+  lastActivity?: string | null
+  messagesSent?: number
   user: {
     id: string
     name: string | null
@@ -115,6 +120,9 @@ export function TeamView({ workspaceId }: TeamViewProps) {
   const [inviting, setInviting] = useState(false)
   const [removeMember, setRemoveMember] = useState<TeamMember | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [roleChangeMember, setRoleChangeMember] = useState<TeamMember | null>(null)
+  const [newRole, setNewRole] = useState('member')
+  const [changingRole, setChangingRole] = useState(false)
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -179,6 +187,30 @@ export function TeamView({ workspaceId }: TeamViewProps) {
     } finally {
       setRemoving(false)
       setRemoveMember(null)
+    }
+  }
+
+  const handleRoleChange = async () => {
+    if (!roleChangeMember || !newRole) return
+    setChangingRole(true)
+    try {
+      const res = await fetch(`/api/teams/${roleChangeMember.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole, workspaceId }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'No se pudo cambiar el rol.')
+        return
+      }
+      toast.success(`Rol cambiado a ${roleConfig[newRole]?.label || newRole}`)
+      setRoleChangeMember(null)
+      fetchMembers()
+    } catch {
+      toast.error('No se pudo cambiar el rol.')
+    } finally {
+    setChangingRole(false)
     }
   }
 
@@ -415,6 +447,18 @@ export function TeamView({ workspaceId }: TeamViewProps) {
                           {getDaysSince(member.joinedAt)}
                         </span>
                       </div>
+                      {/* Activity tracking */}
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>Última actividad: {member.lastActivity ? getDaysSince(member.lastActivity) : 'Sin actividad'}</span>
+                        </div>
+                        <span className="text-zinc-300">·</span>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <MessageSquare className="h-3 w-3" />
+                          <span>{member.messagesSent || 0} mensajes enviados</span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -430,7 +474,7 @@ export function TeamView({ workspaceId }: TeamViewProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem className="gap-2 cursor-pointer">
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setRoleChangeMember(member); setNewRole(member.role); }}>
                             <Shield className="h-4 w-4" />
                             Cambiar rol
                           </DropdownMenuItem>
@@ -548,6 +592,53 @@ export function TeamView({ workspaceId }: TeamViewProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Role Change confirmation dialog */}
+      <AlertDialog open={!!roleChangeMember} onOpenChange={(open) => !open && setRoleChangeMember(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-emerald-600" />
+              Cambiar rol
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Cambiar el rol de {roleChangeMember?.user.name || roleChangeMember?.user.email} de "{roleConfig[roleChangeMember?.role as string]?.label}" a "{roleConfig[newRole]?.label}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium text-foreground mb-2 block">Nuevo rol</label>
+            <Select value={newRole} onValueChange={setNewRole}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(roleConfig)
+                  .filter(([key]) => key !== 'owner' && key !== roleChangeMember?.role)
+                  .map(([key, config]) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        {config.icon}
+                        <span className="font-medium">{config.label}</span>
+                        <span className="text-muted-foreground text-xs">— {config.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={changingRole}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRoleChange}
+              disabled={changingRole}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {changingRole && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Cambiar rol
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Remove confirmation */}
       <AlertDialog open={!!removeMember} onOpenChange={(open) => !open && setRemoveMember(null)}>

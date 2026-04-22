@@ -41,12 +41,17 @@ export const metadata: Metadata = {
   },
 };
 
-// Script to force light theme and prevent dark mode flash
+// Script to prevent dark mode flash
 const themeScript = `
   (function() {
     try {
-      localStorage.setItem('theme', 'light');
-      document.documentElement.classList.remove('dark');
+      var theme = localStorage.getItem('valiflow-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
     } catch(e) {}
   })();
 `;
@@ -62,8 +67,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-gray-900`}
-        style={{ backgroundColor: '#ffffff', color: '#111827' }}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <Providers>
           {children}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -20,8 +20,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  Loader2,
 } from 'lucide-react'
 import { ScoreRing } from '@/components/ui/score-ring'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ── Types ──
 
@@ -33,29 +35,22 @@ interface ComplianceContact {
   cumplimiento: number
 }
 
+interface ComplianceMetrics {
+  consentimientos: number
+  registrosAuditables: number
+  sellados: number
+  cumplimiento: number
+  totalContactos: number
+  contactosActivos: number
+  contactosBloqueados: number
+  leadsCalificados: number
+  leadsCalientes: number
+  ingresosSellados: number
+}
+
 interface ValiGuardViewProps {
   workspaceId: string
 }
-
-// ── Mock Data ──
-
-const mockMetrics = {
-  consentimientos: 87,
-  registrosAuditables: 1247,
-  sellados: 934,
-  cumplimiento: 82,
-}
-
-const mockContacts: ComplianceContact[] = [
-  { id: '1', nombre: 'Carlos Mendoza Rivera', consentimiento: 95, estatusSellado: 'sellado', cumplimiento: 97 },
-  { id: '2', nombre: 'María Guadalupe Hernández', consentimiento: 88, estatusSellado: 'sellado', cumplimiento: 91 },
-  { id: '3', nombre: 'José Antonio Ramírez', consentimiento: 72, estatusSellado: 'pendiente', cumplimiento: 78 },
-  { id: '4', nombre: 'Ana Patricia López García', consentimiento: 91, estatusSellado: 'sellado', cumplimiento: 93 },
-  { id: '5', nombre: 'Roberto Sánchez Torres', consentimiento: 45, estatusSellado: 'vencido', cumplimiento: 52 },
-  { id: '6', nombre: 'Diana Laura Martínez Ruiz', consentimiento: 83, estatusSellado: 'sellado', cumplimiento: 85 },
-  { id: '7', nombre: 'Fernando Jesús Díaz Vega', consentimiento: 67, estatusSellado: 'pendiente', cumplimiento: 71 },
-  { id: '8', nombre: 'Gabriela Ortiz Castillo', consentimiento: 100, estatusSellado: 'sellado', cumplimiento: 100 },
-]
 
 // ── Helpers ──
 
@@ -112,13 +107,46 @@ function getCumplimientoBadge(pct: number) {
 // ── Component ──
 
 export function ValiGuardView({ workspaceId }: ValiGuardViewProps) {
-  const [metrics] = useState(mockMetrics)
-  const [contacts] = useState(mockContacts)
+  const [metrics, setMetrics] = useState<ComplianceMetrics | null>(null)
+  const [contacts, setContacts] = useState<ComplianceContact[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const fetchData = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      setIsLoading(true)
+      const res = await fetch(`/api/valiguard?workspaceId=${workspaceId}`)
+      if (!res.ok) throw new Error('Error al cargar datos')
+      const data = await res.json()
+      setMetrics(data.metrics)
+      setContacts(data.contacts || [])
+    } catch {
+      // Use fallback zeros
+      setMetrics({
+        consentimientos: 0,
+        registrosAuditables: 0,
+        sellados: 0,
+        cumplimiento: 0,
+        totalContactos: 0,
+        contactosActivos: 0,
+        contactosBloqueados: 0,
+        leadsCalificados: 0,
+        leadsCalientes: 0,
+        ingresosSellados: 0,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   const metricCards = [
     {
       title: 'Consentimientos',
-      value: `${metrics.consentimientos}%`,
+      value: `${metrics?.consentimientos ?? 0}%`,
       description: 'Tasa de consentimiento de datos',
       icon: <ShieldCheck className="h-4 w-4" />,
       color: 'text-emerald-600',
@@ -126,7 +154,7 @@ export function ValiGuardView({ workspaceId }: ValiGuardViewProps) {
     },
     {
       title: 'Registros Auditables',
-      value: metrics.registrosAuditables.toLocaleString('es-MX'),
+      value: (metrics?.registrosAuditables ?? 0).toLocaleString('es-MX'),
       description: 'Total de registros con bitácora',
       icon: <FileCheck className="h-4 w-4" />,
       color: 'text-emerald-600',
@@ -134,15 +162,15 @@ export function ValiGuardView({ workspaceId }: ValiGuardViewProps) {
     },
     {
       title: 'Sellados',
-      value: metrics.sellados.toLocaleString('es-MX'),
-      description: 'Documentos sellados criptográficamente',
+      value: (metrics?.sellados ?? 0).toLocaleString('es-MX'),
+      description: 'Deals cerrados exitosamente',
       icon: <Lock className="h-4 w-4" />,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
     },
     {
       title: 'Cumplimiento',
-      value: `${metrics.cumplimiento}%`,
+      value: `${metrics?.cumplimiento ?? 0}%`,
       description: 'Nivel general LFPDPPP',
       icon: <Shield className="h-4 w-4" />,
       color: 'text-emerald-600',
@@ -174,22 +202,36 @@ export function ValiGuardView({ workspaceId }: ValiGuardViewProps) {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metricCards.map((metric) => (
-          <Card key={metric.title} className="border-border/60">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className={cn('p-2 rounded-lg', metric.bg)}>
-                  <span className={metric.color}>{metric.icon}</span>
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border-border/60">
+              <CardContent className="p-5">
+                <Skeleton className="h-8 w-8 rounded-lg mb-3" />
+                <Skeleton className="h-6 w-20 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {metricCards.map((metric) => (
+            <Card key={metric.title} className="border-border/60">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={cn('p-2 rounded-lg', metric.bg)}>
+                    <span className={metric.color}>{metric.icon}</span>
+                  </div>
                 </div>
-              </div>
-              <p className="text-xl font-bold text-foreground">{metric.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{metric.title}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{metric.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <p className="text-xl font-bold text-foreground">{metric.value}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{metric.title}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{metric.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Compliance Table */}
       <Card className="border-border/60">
@@ -200,57 +242,69 @@ export function ValiGuardView({ workspaceId }: ValiGuardViewProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/60">
-                  <TableHead className="text-xs font-semibold text-muted-foreground">
-                    Nombre
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-muted-foreground text-center">
-                    Consentimiento %
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-muted-foreground text-center">
-                    Estatus Sellado
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-muted-foreground text-center">
-                    Cumplimiento
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="divide-y divide-border/40">
-                {contacts.map((contact) => (
-                  <TableRow key={contact.id} className="hover:bg-muted/30">
-                    <TableCell className="py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {contact.nombre
-                            .split(' ')
-                            .slice(0, 2)
-                            .map((n) => n[0])
-                            .join('')}
-                        </div>
-                        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
-                          {contact.nombre}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-3 text-center">
-                      <div className="flex items-center justify-center">
-                        <ScoreRing score={contact.consentimiento} size={40} strokeWidth={3} />
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-3 text-center">
-                      {getSelladoBadge(contact.estatusSellado)}
-                    </TableCell>
-                    <TableCell className="py-3 text-center">
-                      {getCumplimientoBadge(contact.cumplimiento)}
-                    </TableCell>
+          {isLoading ? (
+            <div className="space-y-3 py-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full rounded" />
+              ))}
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted-foreground">No hay contactos para mostrar</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border/60">
+                    <TableHead className="text-xs font-semibold text-muted-foreground">
+                      Nombre
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-muted-foreground text-center">
+                      Consentimiento %
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-muted-foreground text-center">
+                      Estatus Sellado
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-muted-foreground text-center">
+                      Cumplimiento
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody className="divide-y divide-border/40">
+                  {contacts.map((contact) => (
+                    <TableRow key={contact.id} className="hover:bg-muted/30">
+                      <TableCell className="py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {contact.nombre
+                              .split(' ')
+                              .slice(0, 2)
+                              .map((n) => n[0])
+                              .join('')}
+                          </div>
+                          <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
+                            {contact.nombre}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 text-center">
+                        <div className="flex items-center justify-center">
+                          <ScoreRing score={contact.consentimiento} size={40} strokeWidth={3} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 text-center">
+                        {getSelladoBadge(contact.estatusSellado)}
+                      </TableCell>
+                      <TableCell className="py-3 text-center">
+                        {getCumplimientoBadge(contact.cumplimiento)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

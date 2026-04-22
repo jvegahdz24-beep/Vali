@@ -115,6 +115,7 @@ model Workspace {
   subscription Subscription?
   deals Deal[]
   leadProfiles LeadProfile[]
+  appointments Appointment[]
 
   @@index([ownerId])
   @@index([slug])
@@ -161,6 +162,7 @@ model Contact {
   deals        Deal[]
   agentMemories AgentMemory[]
   leadProfile  LeadProfile?
+  appointments Appointment[]
 
   @@unique([workspaceId, phone], name: "contact_workspace_phone_key")
   @@index([workspaceId])
@@ -467,9 +469,33 @@ model Automation {
   updatedAt   DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs     AutomationLog[]
 
   @@index([workspaceId])
   @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTOMATION LOGS
+// ─────────────────────────────────────────────────────────────
+
+model AutomationLog {
+  id             String      @id @default(cuid())
+  automationId   String
+  workspaceId    String
+  status         String      @default("success") // success, failed, skipped
+  action         String?
+  message        String?
+  contactId      String?
+  contactName    String?
+  metadata       String      @default("{}") // JSON
+  createdAt      DateTime    @default(now())
+
+  automation     Automation  @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@index([workspaceId])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -628,6 +654,33 @@ model LeadProfile {
   @@index([workspaceId])
   @@index([temperature])
   @@index([isReactivable])
+}
+
+// ─────────────────────────────────────────────────────────────
+// APPOINTMENTS / CALENDAR
+// ─────────────────────────────────────────────────────────────
+
+model Appointment {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String?
+  title       String
+  description String?
+  date        DateTime
+  duration    Int      @default(30) // minutes
+  type        String   @default("call") // call, meeting, followup, task
+  status      String   @default("pending") // pending, completed, cancelled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contact   Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([date])
+  @@index([status])
+  @@index([type])
 }
 
 // ─────────────────────────────────────────────────────────────

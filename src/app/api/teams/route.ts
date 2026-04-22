@@ -18,11 +18,37 @@ export async function GET(request: NextRequest) {
             name: true,
             email: true,
             image: true,
+            updatedAt: true,
           },
         },
       },
       orderBy: { joinedAt: 'asc' },
     })) as Array<any>
+
+    // Get message counts per user for activity tracking
+    const workspaceConversations = await db.conversation.findMany({
+      where: { workspaceId: workspaceId! },
+      select: { id: true },
+    })
+    const convIds = workspaceConversations.map((c) => c.id)
+
+    const messageCounts: Record<string, number> = {}
+    if (convIds.length > 0) {
+      const senderStats = await db.message.groupBy({
+        by: ['senderId'],
+        where: {
+          conversationId: { in: convIds },
+          direction: 'outbound',
+          senderId: { not: null },
+        },
+        _count: { id: true },
+      })
+      for (const stat of senderStats) {
+        if (stat.senderId) {
+          messageCounts[stat.senderId] = stat._count.id
+        }
+      }
+    }
 
     // Also get the workspace owner
     const workspace = (await db.workspace.findUnique({
@@ -46,6 +72,8 @@ export async function GET(request: NextRequest) {
       workspaceId: string
       role: string
       joinedAt: string
+      lastActivity?: string | null
+      messagesSent?: number
       user: { id: string; name: string | null; email: string; image?: string | null }
     }> = []
 
@@ -58,6 +86,8 @@ export async function GET(request: NextRequest) {
         workspaceId: workspaceId!,
         role: 'owner',
         joinedAt: workspace.createdAt.toISOString(),
+        lastActivity: workspace.owner.updatedAt?.toISOString() || null,
+        messagesSent: messageCounts[workspace.ownerId!] || 0,
         user: workspace.owner,
       })
 
@@ -75,6 +105,8 @@ export async function GET(request: NextRequest) {
         workspaceId: member.workspaceId!,
         role: member.role,
         joinedAt: member.joinedAt.toISOString(),
+        lastActivity: member.user.updatedAt?.toISOString() || null,
+        messagesSent: messageCounts[member.userId] || 0,
         user: member.user,
       })
     }
@@ -153,6 +185,39 @@ export async function DELETE(request: NextRequest) {
     })
 
     return Response.json({ success: true, message: 'Miembro eliminado' })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await requireAuth(request)
+    const body = await request.json()
+    const { memberId, role, workspaceId } = body
+
+    if (!memberId || !role || !workspaceId) {
+      return Response.json({ success: false, error: 'memberId, role y workspaceId requeridos' }, { status: 400 })
+    }
+
+    await requireWorkspace(workspaceId, session.userId)
+
+    const validRoles = ['owner', 'admin', 'member', 'viewer']
+    if (!validRoles.includes(role)) {
+      return Response.json({ success: false, error: `Rol inválido. Valores permitidos: ${validRoles.join(', ')}` }, { status: 400 })
+    }
+
+    const member = await db.workspaceMember.update({
+      where: { id: memberId },
+      data: { role },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
+    })
+
+    return Response.json({ success: true, member })
   } catch (error) {
     return errorResponse(error)
   }

@@ -17,11 +17,14 @@ import { DeveloperView } from '@/components/dashboard/developer-view'
 import { SettingsView } from '@/components/dashboard/settings-view'
 import { ValiGuardView } from '@/components/dashboard/valiguard-view'
 import { AdminView } from '@/components/dashboard/admin-view'
+import { AgentPlayground } from '@/components/dashboard/agent-playground'
+import { ReportsView } from '@/components/dashboard/reports-view'
+import { CalendarView } from '@/components/dashboard/calendar-view'
 import { OnboardingWizard } from '@/components/dashboard/onboarding-wizard'
 import { Loader2, Database, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin'
+export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin' | 'playground' | 'reports' | 'calendar'
 
 // Map URL paths to dashboard views
 const pathToView: Record<string, ViewType> = {
@@ -37,6 +40,9 @@ const pathToView: Record<string, ViewType> = {
   '/valiguard': 'valiguard',
   '/admin': 'admin',
   '/chat-demo': 'chat-demo',
+  '/playground': 'playground',
+  '/reports': 'reports',
+  '/calendar': 'calendar',
 }
 
 // Helper: fetch with timeout
@@ -228,6 +234,9 @@ export default function Home() {
       {activeView === 'valiguard' && <ValiGuardView workspaceId={workspaceId} />}
       {activeView === 'admin' && <AdminView workspaceId={workspaceId} />}
       {activeView === 'settings' && <SettingsView workspaceId={workspaceId} />}
+      {activeView === 'playground' && <AgentPlayground workspaceId={workspaceId} />}
+      {activeView === 'reports' && <ReportsView workspaceId={workspaceId} />}
+      {activeView === 'calendar' && <CalendarView workspaceId={workspaceId} />}
 
       {/* Onboarding Wizard Overlay */}
       {showOnboarding && workspaceId && (

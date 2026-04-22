@@ -36,6 +36,11 @@ import {
   Volume2,
   Sticker,
   Contact,
+  Circle,
+  ArrowUpRight,
+  Copy,
+  Bookmark,
+  PenLine,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatPhoneNumber, timeAgo, getInitials, getChannelIcon, getChannelColor, truncate } from '@/lib/utils'
@@ -66,6 +71,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 // ── Types ──
 
@@ -115,6 +127,14 @@ interface Message {
   metadata?: string | null
   createdAt: string
   mediaFiles?: MediaFileData[]
+  isStarred?: boolean
+}
+
+const statusLabels: Record<string, { label: string; color: string }> = {
+  active: { label: 'Activa', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  pending: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  closed: { label: 'Cerrada', color: 'bg-zinc-100 text-zinc-500 border-zinc-200' },
+  bot: { label: 'Bot', color: 'bg-blue-100 text-blue-600 border-blue-200' },
 }
 
 interface InboxProps {
@@ -171,6 +191,34 @@ function getStarredConversations(): string[] {
 function setStarredConversations(ids: string[]) {
   if (typeof window === 'undefined') return
   localStorage.setItem('valiflow_starred_conversations', JSON.stringify(ids))
+}
+
+function getStarredMessages(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem('valiflow_starred_messages')
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function setStarredMessages(data: Record<string, boolean>) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('valiflow_starred_messages', JSON.stringify(data))
+}
+
+function getMessageReactions(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem('valiflow_message_reactions')
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function setMessageReaction(msgId: string, emoji: string) {
+  if (typeof window === 'undefined') return
+  const reactions = getMessageReactions()
+ reactions[msgId] = reactions[msgId] === emoji ? '' : emoji
+  localStorage.setItem('valiflow_message_reactions', JSON.stringify(reactions))
 }
 
 // ── Media Message Components ──
@@ -592,8 +640,16 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
   const [starredIds, setStarredIds] = useState<string[]>([])
   const [creatingDeal, setCreatingDeal] = useState(false)
   const [transferring, setTransferring] = useState(false)
+  const [messageSearchQuery, setMessageSearchQuery] = useState('')
+  const [showMessageSearch, setShowMessageSearch] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [typingIndicator, setTypingIndicator] = useState(false)
+  const [statusChangeConv, setStatusChangeConv] = useState<string | null>(null)
+  const [starredMessages, setStarredMessages] = useState<Record<string, boolean>>(getStarredMessages)
+  const [messageReactions, setMessageReactionsState] = useState<Record<string, string>>(getMessageReactions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   // Load starred from localStorage
   useEffect(() => {
@@ -693,9 +749,11 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
     setShowEmojiPicker(false)
     setIsSending(true)
 
+    // Show typing indicator in AI mode
+    if (sendMode === 'ai') setTypingIndicator(true)
+
     try {
       if (sendMode === 'ai') {
-        // Send through AI chat endpoint for real AI response
         const res = await fetch('/api/ai/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -709,7 +767,6 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
 
         if (!res.ok) throw new Error('Error al enviar mensaje')
       } else {
-        // Manual mode: send directly without AI
         const res = await fetch(`/api/conversations/${selectedConversation}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -723,13 +780,13 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
         if (!res.ok) throw new Error('Error al enviar mensaje')
       }
 
-      // Refresh messages to show the new ones
       await fetchMessages()
       await fetchConversations()
     } catch (err) {
       console.error('Error sending message:', err)
     } finally {
       setIsSending(false)
+      setTypingIndicator(false)
     }
   }
 
@@ -746,6 +803,94 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
       setStarredConversations(next)
       return next
     })
+  }
+
+  const toggleMessageStar = async (msgId: string) => {
+    const isCurrentlyStarred = starredMessages[msgId]
+    // Optimistic update
+    setStarredMessages((prev) => {
+      const next = { ...prev, [msgId]: !prev[msgId] }
+      setStarredMessages(next)
+      return next
+    })
+    try {
+      await fetch(`/api/messages/${msgId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isStarred: !isCurrentlyStarred }),
+      })
+    } catch {
+      // Revert on error
+      setStarredMessages((prev) => {
+        const next = { ...prev, [msgId]: isCurrentlyStarred }
+        setStarredMessages(next)
+        return next
+      })
+    }
+  }
+
+  const handleReaction = async (msgId: string, emoji: string) => {
+    // Optimistic update
+    setMessageReaction(msgId, emoji)
+    setMessageReactionsState(getMessageReactions())
+    try {
+      await fetch(`/api/messages/${msgId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reaction: emoji }),
+      })
+    } catch {
+      // Revert on error — remove the reaction
+      setMessageReaction(msgId, emoji) // toggles it back
+      setMessageReactionsState(getMessageReactions())
+    }
+  }
+
+  const handleCopyMessage = (content: string) => {
+    navigator.clipboard.writeText(content)
+    toast.success('Mensaje copiado al portapapeles')
+  }
+
+  const handleChangeStatus = async (convId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${convId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Error al cambiar estado')
+      toast.success(`Estado cambiado a ${statusLabels[newStatus]?.label || newStatus}`)
+      setStatusChangeConv(null)
+      fetchConversations()
+    } catch {
+      toast.error('Error al cambiar estado de la conversación')
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingFile(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('conversationId', selectedConversation)
+    formData.append('workspaceId', workspaceId)
+    try {
+      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        toast.success(`Archivo "${file.name}" adjuntado`)
+        await fetchMessages()
+        await fetchConversations()
+      } else {
+        toast.error('Error al adjuntar archivo')
+      }
+    } catch {
+      toast.error('Error al adjuntar archivo')
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
   }
 
   const handleCloseConversation = (convId: string) => {
@@ -932,6 +1077,12 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                     <p className="text-xs text-muted-foreground mt-1 truncate">
                       {truncate(conv.lastMessagePreview || 'Sin mensajes', 45)}
                     </p>
+                    {/* Status badge */}
+                    <div className="mt-1">
+                      <Badge className={cn('text-[9px] px-1.5 border h-4 font-medium', statusLabels[conv.status]?.color || 'bg-zinc-100 text-zinc-500 border-zinc-200')}>
+                        {statusLabels[conv.status]?.label || conv.status}
+                      </Badge>
+                    </div>
                   </div>
                   {/* Reactivation dot for cold leads */}
                   {(() => {
@@ -978,6 +1129,21 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                       {currentConv.contact ? `${currentConv.contact.firstName} ${currentConv.contact.lastName}` : 'Sin contacto'}
                     </h3>
                     <span className="text-xs">{getChannelIcon(currentConv.channel)}</span>
+                    <Badge className={cn('text-[9px] px-1.5 border font-medium cursor-pointer', statusLabels[currentConv.status]?.color || 'bg-zinc-100 text-zinc-500 border-zinc-200')} onClick={() => setStatusChangeConv(currentConv.id)}>
+                      {statusLabels[currentConv.status]?.label || currentConv.status}
+                    </Badge>
+                    {statusChangeConv === currentConv.id && (
+                      <div className="flex items-center gap-1">
+                        {Object.entries(statusLabels).filter(([key]) => key !== currentConv.status).map(([key, val]) => (
+                          <button key={key} className="text-[9px] px-1.5 py-0.5 rounded border hover:bg-muted transition-colors" onClick={() => handleChangeStatus(currentConv.id, key)}>
+                            {val.label}
+                          </button>
+                        ))}
+                        <button className="text-[9px] px-1 py-0.5 text-muted-foreground hover:text-foreground" onClick={() => setStatusChangeConv(null)}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     {currentConv.contact.phone && (
@@ -1145,6 +1311,24 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
 
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
+              {/* Message search bar */}
+              <div className="max-w-2xl mx-auto mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar en mensajes..."
+                      className="pl-8 h-8 text-xs"
+                      value={messageSearchQuery}
+                      onChange={(e) => setMessageSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setShowMessageSearch(!showMessageSearch); setMessageSearchQuery('') }}>
+                    <X className={cn('h-3 w-3 mr-1', showMessageSearch ? '' : 'hidden')} />
+                    {showMessageSearch ? 'Cerrar' : 'Buscar'}
+                  </Button>
+                </div>
+              </div>
               {isLoadingMessages ? (
                 <div className="max-w-2xl mx-auto space-y-4 py-4">
                   {Array.from({ length: 4 }).map((_, i) => (
@@ -1196,11 +1380,23 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                       </div>
                     )
                   })()}
-                  {messages.map((msg) => (
+                  {messages.map((msg) => {
+                    const isMatch = messageSearchQuery && msg.content.toLowerCase().includes(messageSearchQuery.toLowerCase())
+                    // Check if message has DB-persisted reaction/star from metadata
+                    let dbReaction = ''
+                    let dbStarred = false
+                    try {
+                      const meta = msg.metadata ? JSON.parse(msg.metadata) : {}
+                      dbReaction = meta.reaction || ''
+                      dbStarred = !!meta.isStarred
+                    } catch { /* ignore */ }
+                    const effectiveReaction = messageReactions[msg.id] || dbReaction
+                    const effectiveStarred = starredMessages[msg.id] !== undefined ? starredMessages[msg.id] : dbStarred
+                    return (
                     <div
                       key={msg.id}
                       className={cn(
-                        'flex gap-2',
+                        'flex gap-2 group',
                         msg.direction === 'inbound' ? 'justify-start' : 'justify-end'
                       )}
                     >
@@ -1223,7 +1419,6 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                             )}
                           >
                             <MediaRenderer msg={msg} />
-                            {/* Show text content if it's not just the type prefix */}
                             {msg.content && !msg.content.startsWith(`[${msg.type === 'audio' ? 'Nota de voz' : msg.type.charAt(0).toUpperCase() + msg.type.slice(1)}]`) && (
                               <p className={cn(
                                 'text-sm mt-1',
@@ -1232,16 +1427,44 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                             )}
                           </div>
                         ) : (
-                          <div
-                            className={cn(
-                              'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line',
-                              msg.direction === 'inbound'
-                                ? 'bg-background rounded-bl-md border border-border/60'
-                                : 'bg-emerald-600 text-white rounded-br-md'
-                            )}
-                          >
-                            {msg.content}
-                          </div>
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <div
+                                className={cn(
+                                  'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line cursor-default',
+                                  msg.direction === 'inbound'
+                                    ? 'bg-background rounded-bl-md border border-border/60'
+                                    : 'bg-emerald-600 text-white rounded-br-md',
+                                  isMatch && 'ring-2 ring-amber-400'
+                                )}
+                              >
+                                {msg.content}
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-48">
+                              <ContextMenuItem className="gap-2" onClick={() => toggleMessageStar(msg.id)}>
+                                <Bookmark className={cn('h-4 w-4', effectiveStarred ? 'fill-amber-400 text-amber-400' : '')} />
+                                {effectiveStarred ? 'Quitar favorito' : 'Marcar importante'}
+                              </ContextMenuItem>
+                              <ContextMenuItem className="gap-2" onClick={() => handleCopyMessage(msg.content)}>
+                                <Copy className="h-4 w-4" />
+                                Copiar texto
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem className="gap-2 text-emerald-600" onClick={() => handleReaction(msg.id, '👍')}>
+                                👍 Me gusta
+                              </ContextMenuItem>
+                              <ContextMenuItem className="gap-2 text-emerald-600" onClick={() => handleReaction(msg.id, '❤️')}>
+                                ❤️ Me encanta
+                              </ContextMenuItem>
+                              <ContextMenuItem className="gap-2 text-emerald-600" onClick={() => handleReaction(msg.id, '🎉')}>
+                                🎉 Genial
+                              </ContextMenuItem>
+                              <ContextMenuItem className="gap-2 text-emerald-600" onClick={() => handleReaction(msg.id, '🙏')}>
+                                🙏 Gracias
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
                         )}
                         <div className={cn(
                           'flex items-center gap-1.5 mt-1 px-1',
@@ -1250,6 +1473,12 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                           <span className="text-[10px] text-muted-foreground">
                             {timeAgo(new Date(msg.createdAt))}
                           </span>
+                          {effectiveStarred && (
+                            <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                          )}
+                          {effectiveReaction && (
+                            <span className="text-xs bg-muted rounded-full px-1.5 py-0.5">{effectiveReaction}</span>
+                          )}
                           {msg.isAiGenerated && (
                             <Badge variant="secondary" className="h-4 text-[9px] px-1 bg-emerald-50 text-emerald-600 border-0 gap-0.5">
                               <Bot className="h-2.5 w-2.5" />
@@ -1263,6 +1492,30 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                               <Check className="h-3 w-3 text-muted-foreground" />
                             )
                           )}
+                          {/* Quick action buttons on hover */}
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              className="p-0.5 rounded hover:bg-muted transition-colors"
+                              onClick={() => toggleMessageStar(msg.id)}
+                              title={effectiveStarred ? 'Quitar importante' : 'Marcar importante'}
+                            >
+                              <Bookmark className={cn('h-3 w-3', effectiveStarred ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground')} />
+                            </button>
+                            <button
+                              className="p-0.5 rounded hover:bg-muted transition-colors"
+                              onClick={() => handleCopyMessage(msg.content)}
+                              title="Copiar texto"
+                            >
+                              <Copy className="h-3 w-3 text-muted-foreground" />
+                            </button>
+                            <button
+                              className="p-0.5 rounded hover:bg-muted transition-colors"
+                              onClick={() => handleReaction(msg.id, '👍')}
+                              title="Reaccionar"
+                            >
+                              <Smile className="h-3 w-3 text-muted-foreground" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                       {msg.direction === 'outbound' && msg.isAiGenerated && (
@@ -1273,7 +1526,26 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                         </Avatar>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
+                  {/* Typing indicator */}
+                  {typingIndicator && (
+                    <div className="flex justify-start gap-2">
+                      <Avatar className="h-7 w-7 shrink-0 mt-auto">
+                        <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[9px]">
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="bg-background rounded-2xl rounded-bl-md border border-border/60 px-4 py-3 flex items-center gap-1.5">
+                        <div className="flex gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground ml-1">IA está escribiendo...</span>
+                      </div>
+                    </div>
+                  )}
                   {isSending && (
                     <div className="flex justify-end gap-2">
                       <div className="max-w-[75%]">
@@ -1327,48 +1599,7 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                     ref={fileInputRef}
                     className="hidden"
                     accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.3gp,.ogg,.mp3,.m4a,.pdf,.doc,.docx,.xls,.xlsx,.csv"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      formData.append('conversationId', selectedConversation)
-                      try {
-                        const res = await fetch('/api/upload', { method: 'POST', body: formData })
-                        if (res.ok) {
-                          const data = await res.json()
-                          toast.success(`Archivo "${file.name}" adjuntado`)
-                          // If WhatsApp connected, offer to send
-                          if (waConnected && currentConv?.contact?.phone) {
-                            try {
-                              const sendRes = await fetch('/api/whatsapp/send-media', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  phone: currentConv.contact.phone,
-                                  mediaId: data.mediaId,
-                                  conversationId: selectedConversation,
-                                }),
-                              })
-                              if (sendRes.ok) {
-                                toast.success('Archivo enviado por WhatsApp')
-                                await fetchMessages()
-                                await fetchConversations()
-                              } else {
-                                toast.info('Archivo guardado pero no enviado por WhatsApp')
-                              }
-                            } catch {
-                              toast.info('Archivo guardado localmente')
-                            }
-                          }
-                        } else {
-                          toast.error('Error al adjuntar archivo')
-                        }
-                      } catch {
-                        toast.error('Error al adjuntar archivo')
-                      }
-                      e.target.value = ''
-                    }}
+                    onChange={handleFileUpload}
                   />
                 </div>
                 <div className="flex-1 relative">
@@ -1415,7 +1646,7 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
                       : 'bg-zinc-700 hover:bg-zinc-800 text-white'
                   )}
                   onClick={handleSend}
-                  disabled={isSending || !messageInput.trim()}
+                  disabled={isSending || uploadingFile || !messageInput.trim()}
                 >
                   {isSending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

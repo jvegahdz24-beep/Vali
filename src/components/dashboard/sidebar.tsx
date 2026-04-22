@@ -19,6 +19,10 @@ import {
   Zap,
   Code2,
   MessageSquareCode,
+  Sun,
+  Moon,
+  FileText,
+  CalendarDays,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -34,6 +38,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/use-auth'
+import { useTheme } from 'next-themes'
 import { getInitials } from '@/lib/utils'
 import type { ViewType } from './dashboard-layout'
 
@@ -53,7 +58,10 @@ const navItems: NavItem[] = [
   { id: 'agents', label: 'Agentes IA', icon: <Bot className="h-5 w-5" /> },
   { id: 'automations', label: 'Automatizaciones', icon: <Zap className="h-5 w-5" /> },
   { id: 'analytics', label: 'Analíticas', icon: <BarChart3 className="h-5 w-5" /> },
+  { id: 'reports', label: 'Reportes', icon: <FileText className="h-5 w-5" /> },
+  { id: 'calendar', label: 'Calendario', icon: <CalendarDays className="h-5 w-5" /> },
   { id: 'team', label: 'Equipo', icon: <UserCog className="h-5 w-5" /> },
+  { id: 'playground', label: 'Playground IA', icon: <MessageSquareCode className="h-5 w-5" /> },
   { id: 'developer', label: 'Desarrollador', icon: <Code2 className="h-5 w-5" /> },
   { id: 'valiguard', label: 'ValiGuard', icon: <Shield className="h-5 w-5" /> },
   { id: 'admin', label: 'Admin', icon: <Building2 className="h-5 w-5" /> },
@@ -74,7 +82,13 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
   collapsed?: boolean
 }) {
   const { user } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [waConnected, setWaConnected] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const check = async () => {
@@ -181,6 +195,19 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
       <div className={cn('shrink-0 border-t border-zinc-800/60', collapsed ? 'p-3' : 'p-4 space-y-3')}>
         {!collapsed ? (
           <>
+            {/* Theme Toggle */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/70 transition-smooth"
+            >
+              {mounted && (theme === 'dark' ? (
+                <Sun className="h-4 w-4 text-amber-400" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              ))}
+              <span className="text-sm">{mounted && theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
+            </button>
+
             {/* User Section */}
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -213,6 +240,17 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
           </>
         ) : (
           <div className="flex flex-col items-center gap-3 py-2">
+            {/* Theme Toggle (collapsed) */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/70 transition-smooth"
+            >
+              {mounted && (theme === 'dark' ? (
+                <Sun className="h-4 w-4 text-amber-400" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              ))}
+            </button>
             <div className="relative">
               <Avatar className="h-8 w-8">
                 {userImage && <AvatarImage src={userImage} alt={userName} />}

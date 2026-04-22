@@ -101,7 +101,7 @@ interface AutomationsViewProps {
   workspaceId: string
 }
 
-// ── Execution Log Types (Mock) ──
+// ── Execution Log Types (Real) ──
 
 interface ExecutionLog {
   id: string
@@ -111,6 +111,8 @@ interface ExecutionLog {
   startedAt: string
   completedAt?: string
   message: string
+  contactName?: string | null
+  action?: string | null
 }
 
 // ── Icon Mapping ──
@@ -252,6 +254,8 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
 
   // Execution history
   const [showHistory, setShowHistory] = useState(false)
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
 
   // Form state
   const [newName, setNewName] = useState('')
@@ -467,27 +471,42 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
     }
   }
 
-  // Mock execution history
-  const mockExecutionLogs: ExecutionLog[] = (() => {
-    const logs: ExecutionLog[] = []
-    automations.forEach((a) => {
-      if (a.runCount && a.runCount > 0) {
-        const successCount = Math.ceil(a.runCount * 0.85)
-        for (let i = 0; i < Math.min(3, a.runCount); i++) {
-          logs.push({
-            id: `log-${a.id}-${i}`,
-            automationId: a.id,
-            automationName: a.name,
-            status: i < successCount ? 'success' : 'error',
-            startedAt: new Date(Date.now() - (i + 1) * 3600000 * (Math.random() * 24 + 1)).toISOString(),
-            completedAt: new Date(Date.now() - (i + 1) * 3600000 * (Math.random() * 24 + 1) + 2000).toISOString(),
-            message: i < successCount ? 'Ejecutada correctamente' : 'Error en la ejecución',
-          })
-        }
-      }
-    })
-    return logs.sort((a: ExecutionLog, b: ExecutionLog) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()).slice(0, 15)
-  })()
+  // Fetch real execution logs from all automations
+  const fetchExecutionLogs = useCallback(async () => {
+    if (!showHistory || automations.length === 0) return
+    setLoadingLogs(true)
+    try {
+      const allLogs: ExecutionLog[] = []
+      const promises = automations.map(async (a) => {
+        try {
+          const res = await fetch(`/api/automations/${a.id}/logs?limit=10`)
+          if (res.ok) {
+            const data = await res.json()
+            const autoLogs = (data.logs || []).map((log: Record<string, unknown>) => ({
+              id: log.id as string,
+              automationId: a.id,
+              automationName: a.name,
+              status: (log.status === 'failed' ? 'error' : log.status) as 'success' | 'error' | 'running',
+              startedAt: log.createdAt as string,
+              message: (log.message || log.action || 'Sin detalle') as string,
+              contactName: (log.contactName as string) || null,
+              action: (log.action as string) || null,
+            }))
+            allLogs.push(...autoLogs)
+          }
+        } catch { /* skip failed fetch */ }
+      })
+      await Promise.all(promises)
+      allLogs.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      setExecutionLogs(allLogs.slice(0, 50))
+    } finally {
+      setLoadingLogs(false)
+    }
+  }, [showHistory, automations])
+
+  useEffect(() => {
+    if (showHistory) fetchExecutionLogs()
+  }, [showHistory, fetchExecutionLogs])
 
   const filteredTemplates = selectedCategory === 'all'
     ? automationTemplates
@@ -695,12 +714,16 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
                 <h4 className="text-sm font-semibold">Historial de Ejecuciones</h4>
               </div>
               <Badge variant="secondary" className="text-[10px] bg-muted border-0">
-                {mockExecutionLogs.length} registros
+                {executionLogs.length} registros
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="pt-0 px-4 pb-3">
-            {mockExecutionLogs.length === 0 ? (
+            {loadingLogs ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : executionLogs.length === 0 ? (
               <div className="text-center py-6">
                 <Clock className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
                 <p className="text-xs text-muted-foreground">Sin ejecuciones registradas</p>
@@ -708,7 +731,7 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
             ) : (
               <ScrollArea className="max-h-64">
                 <div className="space-y-1.5">
-                  {mockExecutionLogs.map((log) => (
+                  {executionLogs.map((log) => (
                     <div
                       key={log.id}
                       className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
@@ -722,7 +745,14 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{log.automationName}</p>
-                        <p className="text-[10px] text-muted-foreground">{log.message}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[10px] text-muted-foreground truncate">{log.message}</p>
+                          {log.contactName && (
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 shrink-0">
+                              {log.contactName}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <span className="text-[10px] text-muted-foreground shrink-0">
                         {timeAgo(new Date(log.startedAt))}

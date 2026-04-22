@@ -22,6 +22,9 @@ export async function GET(req: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1)
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 100)
+    const leadScoreMin = searchParams.get('leadScoreMin') ? parseInt(searchParams.get('leadScoreMin')!, 10) : undefined
+    const leadScoreMax = searchParams.get('leadScoreMax') ? parseInt(searchParams.get('leadScoreMax')!, 10) : undefined
+    const tagsParam = searchParams.get('tags') || undefined
 
     const where: Record<string, unknown> = {
       workspaceId,
@@ -37,6 +40,22 @@ export async function GET(req: NextRequest) {
             ],
           }
         : {}),
+    }
+
+    // Handle lead score range filter
+    if (leadScoreMin !== undefined || leadScoreMax !== undefined) {
+      const scoreFilter: Record<string, unknown> = {}
+      if (leadScoreMin !== undefined) scoreFilter.gte = leadScoreMin
+      if (leadScoreMax !== undefined) scoreFilter.lte = leadScoreMax
+      ;(where as any).leadScore = scoreFilter
+    }
+
+    // Handle tags filter
+    if (tagsParam) {
+      const tagList = tagsParam.split(',').map(t => t.trim()).filter(Boolean)
+      if (tagList.length > 0) {
+        (where as any).tags = { contains: tagList[0] }
+      }
     }
 
     const [contacts, total] = await Promise.all([

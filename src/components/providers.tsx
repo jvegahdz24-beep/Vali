@@ -1,7 +1,7 @@
 'use client'
 
 import { AuthProvider } from '@/hooks/use-auth'
-import { ThemeProvider } from 'next-themes'
+import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { ReactNode, useEffect } from 'react'
 
 // Keepalive: ping server every 30s to prevent process from being killed by platform
@@ -17,17 +17,17 @@ function Keepalive() {
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider
+    <NextThemesProvider
       attribute="class"
       defaultTheme="light"
-      forcedTheme="light"
-      enableSystem={false}
+      enableSystem
       disableTransitionOnChange
+      storageKey="valiflow-theme"
     >
       <AuthProvider>
         <Keepalive />
         {children}
       </AuthProvider>
-    </ThemeProvider>
+    </NextThemesProvider>
   )
 }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 
-export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin'
+export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin' | 'reports' | 'calendar' | 'playground'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -17,7 +17,7 @@ export function DashboardLayout({ children, activeView, onViewChange, workspaceI
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background" style={{ backgroundColor: '#fafafa' }}>
+    <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
         activeView={activeView}
         onViewChange={(view) => {
@@ -34,7 +34,7 @@ export function DashboardLayout({ children, activeView, onViewChange, workspaceI
           onViewChange={onViewChange}
           workspaceId={workspaceId || ''}
         />
-        <main className="flex-1 overflow-y-auto bg-muted/30" style={{ backgroundColor: '#fafafa' }}>
+        <main className="flex-1 overflow-y-auto bg-muted/30 dark:bg-slate-950/50">
           {children}
         </main>
       </div>

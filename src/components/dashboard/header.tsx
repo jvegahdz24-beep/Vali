@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   CheckCheck,
   Command,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -40,6 +42,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/use-auth'
+import { useTheme } from 'next-themes'
 import { getInitials } from '@/lib/utils'
 import type { ViewType } from './dashboard-layout'
 
@@ -57,6 +60,9 @@ const viewTitles: Record<ViewType, string> = {
   valiguard: 'ValiGuard',
   admin: 'Admin',
   settings: 'Configuración',
+  playground: 'Playground IA',
+  reports: 'Reportes',
+  calendar: 'Calendario',
 }
 
 interface Notification {
@@ -100,6 +106,8 @@ function timeAgo(dateStr: string): string {
 
 export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: HeaderProps) {
   const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -108,6 +116,10 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifLoading, setNotifLoading] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Fetch WhatsApp status on mount
   useEffect(() => {
@@ -191,7 +203,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
   const userImage = user?.image
 
   return (
-    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6 shrink-0" style={{ backgroundColor: '#ffffff' }}>
+    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left side */}
       <div className="flex items-center gap-3">
         <Button
@@ -247,7 +259,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
             {channelStatuses.map((ch) => (
               <Tooltip key={ch.name}>
                 <TooltipTrigger asChild>
-                  <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-smooth', ch.connected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-zinc-100 text-zinc-500 border border-zinc-200')}>
+                  <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-smooth', ch.connected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700')}>
                     <div className={cn('w-1.5 h-1.5 rounded-full', ch.connected ? 'bg-emerald-500 animate-pulse-dot' : 'bg-zinc-400')} />
                     <span>{ch.name}</span>
                   </div>
@@ -259,6 +271,31 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
             ))}
           </TooltipProvider>
         </div>
+
+        {/* Theme Toggle */}
+        {mounted && (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="h-4 w-4 text-amber-400" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {/* Notifications */}
         <DropdownMenu>
@@ -292,7 +329,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
                   {unreadCount} nueva{unreadCount > 1 ? 's' : ''}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="h-5 text-[10px] bg-zinc-100 text-zinc-500 border-0">
+                <Badge variant="secondary" className="h-5 text-[10px] bg-zinc-100 text-zinc-500 border-0 dark:bg-zinc-800 dark:text-zinc-400">
                   Al día
                 </Badge>
               )}
@@ -307,7 +344,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
 
             {!notifLoading && notifications.length === 0 && (
               <div className="flex flex-col items-center py-8 gap-2">
-                <Bell className="h-8 w-8 text-zinc-300" />
+                <Bell className="h-8 w-8 text-zinc-300 dark:text-zinc-600" />
                 <p className="text-sm text-zinc-500">Sin notificaciones</p>
                 <p className="text-xs text-zinc-400">Las notificaciones aparecerán aquí</p>
               </div>
@@ -333,7 +370,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
                   {unreadCount > 0 && (
                     <button
                       onClick={handleMarkAllRead}
-                      className="text-xs text-zinc-500 hover:text-zinc-700 transition-colors flex items-center gap-1 py-1.5 px-2 rounded hover:bg-zinc-50"
+                      className="text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors flex items-center gap-1 py-1.5 px-2 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800"
                     >
                       <CheckCheck className="h-3 w-3" />
                       Marcar todas como leídas
@@ -341,7 +378,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
                   )}
                   <button
                     onClick={handleViewNotifications}
-                    className="text-xs text-emerald-600 font-medium flex items-center gap-1 py-1.5 px-2 rounded hover:bg-emerald-50 ml-auto transition-colors"
+                    className="text-xs text-emerald-600 font-medium flex items-center gap-1 py-1.5 px-2 rounded hover:bg-emerald-50 dark:hover:bg-emerald-500/10 ml-auto transition-colors"
                   >
                     Ver todas
                   </button>
