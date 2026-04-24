@@ -703,8 +703,13 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
 
   useEffect(() => {
     fetchConversations()
-    // Poll for new conversations/messages every 10s
-    const pollInterval = setInterval(fetchConversations, 10000)
+    // Poll for new conversations — 30s interval with visibility detection
+    const POLL_INTERVAL = 30000
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchConversations()
+      }
+    }, POLL_INTERVAL)
     return () => clearInterval(pollInterval)
   }, [fetchConversations])
 
@@ -731,8 +736,13 @@ export function Inbox({ workspaceId, onViewChange }: InboxProps) {
 
   useEffect(() => {
     fetchMessages()
-    // Poll for new messages every 8s when a conversation is selected
-    const pollInterval = setInterval(fetchMessages, 8000)
+    // Poll for new messages — 15s interval with visibility detection
+    const POLL_INTERVAL = 15000
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible' && selectedConversation) {
+        fetchMessages()
+      }
+    }, POLL_INTERVAL)
     return () => clearInterval(pollInterval)
   }, [fetchMessages])
 

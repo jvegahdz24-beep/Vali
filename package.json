@@ -5,8 +5,12 @@
   "scripts": {
     "dev": "next dev -p 3000 --webpack",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "NODE_ENV=production bun .next/standalone/server.js",
+    "start": "NODE_ENV=production NODE_OPTIONS='--max-old-space-size=4096' node .next/standalone/server.js",
+    "start:bun": "NODE_ENV=production bun .next/standalone/server.js",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -54,6 +58,7 @@
     "@swc/helpers": "^0.5.21",
     "@tanstack/react-query": "^5.82.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.24",
     "@types/pg": "^8.20.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "bcryptjs": "^3.0.3",
@@ -100,11 +105,14 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "bun-types": "^1.3.4",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }

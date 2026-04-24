@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
 import crypto from 'crypto'
+import { randomPick, randomInt, randomDaysBack } from '@/lib/seeded-random'
 
 // SHA-256 password hashing (bcrypt OOM-kills in low-memory environments)
 function hashPassword(plain: string): string {
@@ -136,17 +137,13 @@ const TAGS_OPTIONS = [
   'servicio: marketing', 'servicio: datos', 'servicio: soporte',
 ]
 
-function randomPick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
-}
+// randomPick and randomInt are imported from @/lib/seeded-random
+// randomBetween is aliased to randomInt for backward compatibility
+const randomBetween = randomInt
 
-function randomBetween(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
+/** Backward-compatible wrapper */
 function randomDate(daysBack: number): Date {
-  const now = new Date()
-  return new Date(now.getTime() - Math.random() * daysBack * 24 * 60 * 60 * 1000)
+  return randomDaysBack(daysBack)
 }
 
 function randomPhone(): string {
@@ -155,7 +152,7 @@ function randomPhone(): string {
 
 function randomEmail(name: string): string {
   const domains = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com']
-  return `${name.toLowerCase().replace(/\s/g, '')}${randomBetween(1, 99)}@${randomPick(domains)}`
+  return `${name.toLowerCase().replace(/\s/g, '')}${randomInt(1, 99)}@${randomPick(domains)}`
 }
 
 // ─── Seed Endpoint ────────────────────────────────────────────
@@ -266,7 +263,7 @@ export async function POST(req: NextRequest) {
               status: 'active',
               provider: 'stripe',
               currentPeriodStart: new Date(),
-              currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              currentPeriodEnd: new Date('2026-05-25T12:00:00.000Z'),
               amount: 999,
               currency: 'MXN',
               interval: 'monthly',

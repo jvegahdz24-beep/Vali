@@ -146,3 +146,32 @@ Stage Summary:
 - Top 5 problemas criticos: fragilidad concurrencia, seed no determinista, 0 tests, sin lazy loading, health check basico
 - Top 5 deuda tecnica: componentes monoliticos, polling agresivo, sin rate limiting, migraciones no versionadas, tablas vacias
 - Plan de accion 4 fases: estabilizacion 48h, frontend 1 semana, tests 2 semanas, produccion 1 mes
+---
+Task ID: 2
+Agent: Main Agent
+Task: FASE 1-4 Plan de Accion - Ejecucion completa
+
+Work Log:
+- FASE 0: Build exitoso, servidor standalone levantado, login HTTP 200, health HTTP 200
+- FASE 1.1: Creado src/lib/seeded-random.ts (PRNG Xorshift32 semilla 20260425)
+- FASE 1.1: Modificados seed/route.ts (import PRNG, eliminado Math.random) y seed-jvega.ts
+- FASE 1.2: Agregado foreign_keys=ON via DATABASE_URL pragma en .env
+- FASE 1.3: Reescrito /api/health con DB check (SELECT 1 + latencia) + memoria (heapUsedMB + rssMB)
+- FASE 1.4: NODE_OPTIONS=--max-old-space-size=4096 en package.json start script
+- FASE 1.4: Swap 2GB no creado (requiere root, container limit)
+- FASE 2.1: Verificado que 16 componentes ya usan React.lazy() (ya estaba implementado)
+- FASE 2.2: Instalado @tanstack/react-virtual para uso futuro (20 items = prematuro)
+- FASE 2.3: inbox.tsx polling reducido: conversaciones 30s + visibility, mensajes 15s + visibility
+- FASE 3.1: Instalado vitest, @vitest/coverage-v8, @vitejs/plugin-react
+- FASE 3.2: Creado 4 archivos de test: seeded-random.test.ts, utils.test.ts, auth.test.ts, api-routes.test.ts
+- FASE 3.3: Verificado rate limiting ya existente en middleware.ts (/api/auth/login 20 req/min)
+- FASE 4.1: Build final exitoso, 0 TS errors, 15/15 requests OK
+- FASE 4.4: Creado .github/workflows/ci-cd.yml (lint, test, build, deploy pipeline)
+- Health check verificado: DB true, memory true, dbLatencyMs 5, heapUsedMB 37.9, rssMB 134.8
+
+Stage Summary:
+- 7 archivos nuevos creados (seeded-random + 4 tests + vitest config + CI/CD workflow)
+- 6 archivos modificados (seed/route.ts, seed-jvega.ts, health/route.ts, inbox.tsx, .env, package.json)
+- 32 tests pasando (6 PRNG + 10 utils + 1 auth + 15 API routes)
+- 0 TypeScript errors confirmado
+- RADIOGRAFIA y build files generados en /download/

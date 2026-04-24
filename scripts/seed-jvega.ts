@@ -1,11 +1,8 @@
 import { PrismaClient } from '@prisma/client'
+import { randomPick, randomInt, randomDaysBack } from '../src/lib/seeded-random'
 
 const db = new PrismaClient()
 const WORKSPACE_ID = 'cmo5xwehf0002qvte94snjv6d'
-
-function randomPick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
-function randomBetween(min: number, max: number): number { return Math.floor(Math.random() * (max - min + 1)) + min }
-function randomDate(daysBack: number): Date { return new Date(Date.now() - Math.random() * daysBack * 86400000) }
 
 async function seed() {
   // Get existing data
@@ -25,7 +22,7 @@ async function seed() {
 
   const conversations = await db.conversation.findMany({ where: { workspaceId: WORKSPACE_ID } })
 
-  // Create deals
+  // Create deals (deterministic)
   const SERVICES = ['Automatización', 'Consultoría IA', 'CRM', 'Desarrollo Web', 'Marketing Digital', 'Análisis de Datos']
 
   let dealCount = 0
@@ -34,10 +31,10 @@ async function seed() {
     if (!contact) continue
     const service = randomPick(SERVICES)
     let stageIdx: number, dealStatus: string
-    if (contact.leadScore >= 85) { stageIdx = randomBetween(0, 1) === 0 ? 5 : 4; dealStatus = stageIdx === 5 ? 'won' : 'active' }
-    else if (contact.leadScore >= 60) { stageIdx = randomBetween(3, 4); dealStatus = 'active' }
-    else if (contact.leadScore >= 40) { stageIdx = randomBetween(2, 3); dealStatus = 'active' }
-    else { stageIdx = randomBetween(0, 1); dealStatus = 'active' }
+    if (contact.leadScore >= 85) { stageIdx = randomInt(0, 1) === 0 ? 5 : 4; dealStatus = stageIdx === 5 ? 'won' : 'active' }
+    else if (contact.leadScore >= 60) { stageIdx = randomInt(3, 4); dealStatus = 'active' }
+    else if (contact.leadScore >= 40) { stageIdx = randomInt(2, 3); dealStatus = 'active' }
+    else { stageIdx = randomInt(0, 1); dealStatus = 'active' }
 
     await db.deal.create({
       data: {
@@ -46,22 +43,22 @@ async function seed() {
         stageId: stages[stageIdx].id,
         contactId: contact.id,
         title: `${contact.firstName} ${contact.lastName} — ${service}`,
-        value: randomBetween(5000, 50000),
+        value: randomInt(5000, 50000),
         currency: 'MXN',
         description: `Interés en ${service}`,
         source: randomPick(['whatsapp', 'facebook', 'google', 'manual']),
         status: dealStatus,
-        wonAt: dealStatus === 'won' ? randomDate(15) : null,
-        expectedCloseDate: randomDate(30),
-        order: randomBetween(0, 5),
-        createdAt: randomDate(25),
+        wonAt: dealStatus === 'won' ? randomDaysBack(15) : null,
+        expectedCloseDate: randomDaysBack(30),
+        order: randomInt(0, 5),
+        createdAt: randomDaysBack(25),
       },
     })
     dealCount++
   }
   console.log(`${dealCount} deals created`)
 
-  // Create agent logs
+  // Create agent logs (deterministic)
   for (let i = 0; i < 20; i++) {
     await db.agentLog.create({
       data: {
@@ -70,12 +67,12 @@ async function seed() {
         inputMessage: 'Necesito información',
         outputMessage: 'Con gusto te ayudo',
         model: 'llama-3.3-70b-versatile',
-        tokensUsed: randomBetween(200, 1500),
-        latencyMs: randomBetween(500, 3000),
-        confidence: randomBetween(60, 99) / 100,
+        tokensUsed: randomInt(200, 1500),
+        latencyMs: randomInt(500, 3000),
+        confidence: randomInt(60, 99) / 100,
         intent: randomPick(['greeting', 'question', 'buy_signal', 'objection']),
         action: randomPick(['question', 'educate', 'follow_up', 'close']),
-        createdAt: randomDate(10),
+        createdAt: randomDaysBack(10),
       },
     })
   }
