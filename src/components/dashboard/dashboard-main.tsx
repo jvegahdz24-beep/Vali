@@ -103,6 +103,7 @@ interface JhonPanelData {
     confidenceScore: number
     score: number
     temperature: string
+    deadline?: number
   } | null
   prioritizedLeads: JhonLeadCard[]
   totalActiveLeads: number
@@ -1152,7 +1153,7 @@ function GlobalPriorityBanner({
               )}
               {priority.actionLabel}
             </Button>
-            {priority.deadline > 0 && (
+            {(priority.deadline ?? 0) > 0 && (
               <p className="text-[10px] text-muted-foreground">
                 Si no responde en {formatTimeToDecay(priority.timeToDecay)}, Jhon actuará automáticamente
               </p>

@@ -1,15 +1,15 @@
 #!/bin/bash
-while true; do
-  # Always cd to a known-good directory before each start
-  cd /tmp 2>/dev/null
-  cd /home/z/my-project 2>/dev/null || { sleep 10; continue; }
-  
-  echo "$(date '+%Y-%m-%d %H:%M:%S') Starting server..." >> /tmp/valiflow-server.log
-  
-  # Use cd in a subshell to avoid CWD pollution
-  (cd /home/z/my-project && exec node --require /home/z/my-project/.next/standalone/_env-fix.js /home/z/my-project/.next/standalone/server.js) >> /tmp/valiflow-server.log 2>&1
-  
-  EXIT=$?
-  echo "$(date '+%Y-%m-%d %H:%M:%S') Server exited ($EXIT), restarting in 5s..." >> /tmp/valiflow-server.log
-  sleep 5
-done
+# ValiAutoFlow — Quick restart script
+cd /home/z/my-project || exit 1
+
+echo "Killing existing processes..."
+pkill -f "next" 2>/dev/null
+pkill -f "standalone/server" 2>/dev/null
+sleep 2
+
+echo "Building production..."
+NODE_OPTIONS="--max-old-space-size=2048" npx next build 2>&1 | tail -5
+
+echo "Starting production server..."
+bash start-server.sh &
+echo "Server starting on port 3000..."

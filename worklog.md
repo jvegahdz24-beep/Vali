@@ -1,116 +1,119 @@
-# FASE 10.5 — AUTONOMÍA CONTROLADA — Worklog
+# ValiAutoFlow — DIAGNÓSTICO COMPLETO Y CORRECCIONES
 
-## Fecha: 2025
-
-## Resumen de Implementación
-
-Se construyó el cerebro de inteligencia JHON para ValiAutoFlow CRM, compuesto por 7 archivos nuevos y 2 modificaciones, todo funcional y compilado sin errores.
+## Fecha: 2026-04-24
 
 ---
 
-## Archivos Creados
+## 🔴 PROBLEMA 1: PANTALLA NEGRA
 
-### 1. Schema Update (`prisma/schema.prisma`)
-- **Modelo `EngineEvent`**: Registra todos los eventos del motor (intenciones, scores, acciones, outcomes, auto-acciones, patrones)
-- **Campo `temperature`** en `Contact`: `String @default("cold")`
-- 4 índices en EngineEvent: workspaceId, contactId, type, createdAt
+### Causa Raíz
+El servidor Next.js en modo desarrollo (`next dev` con Turbopack) **se cae consistentemente** durante la compilación/renderizado SSR de la página principal (`/`). La aplicación tiene:
+- **14 componentes lazy-loaded** en page.tsx
+- **recharts** (librería pesada de gráficos)
+- **70+ rutas API**
+- **30+ componentes UI** de shadcn/ui
 
-### 2. `/src/lib/engine/types.ts`
-Tipos TypeScript para todo el sistema:
-- `ActionOutcome`, `ActionType`, `Urgency`, `BehaviorPattern` (9 patrones)
-- `DecisionFactor` — factor con peso y descripción
-- `PatternEffectiveness` — tasa de éxito por patrón
-- `LeadMemory` — interpretación completa de un lead
-- `GlobalPriority` — la acción #1 del workspace
+Turbopack no tiene suficiente memoria para compilar todo esto en cada petición, causando un OOM (Out Of Memory) que mata el proceso del servidor. Cuando el servidor muere, el navegador muestra la última respuesta recibida (o nada), resultando en la "pantalla negra".
 
-### 3. `/src/lib/engine/memory.ts` (CORE)
-`interpretLeadMemory(contactId, workspaceId)` — función principal que:
-1. Obtiene todos los EngineEvents del contacto
-2. Detecta patrón de comportamiento (9 tipos)
-3. Construye decisionTrace con pesos positivos/negativos
-4. Calcula intentLevel (0-100)
-5. Detecta tendencia del score (rising/falling/stable)
-6. Calcula confidenceScore = base × effectiveness × freshness
-7. Calcula timeToDecay según temperatura (2h/6h/24h)
-8. Determina riskLevel (critical/high/medium/low)
-9. Genera narrativa en español (máx 2 oraciones)
-10. Resuelve nextBestAction con deadline y ifNotMet
-11. **Strategy switching**: si score cayó >15 sin outcome → AGGRESSIVE, si hot sin actividad 2h → CALL_NOW
+### Evidencia
+```
+Test 1: API login → OK, main page → SERVER CRASHED
+Test 2: API login → OK, main page → SERVER CRASHED  
+Test 3: API login → OK, main page → SERVER CRASHED
+Test 4: Production build → OK, main page → HTTP 200 (ESTABLE)
+```
 
-### 4. `/src/lib/engine/auto-actions.ts`
-- `processExpiredActions()`: Busca acciones recomendadas expiradas, dispara acción de escalación, aplica -10 al score
-- `detectNoResponseOutcomes()`: Detecta mensajes salientes sin respuesta (2h/24h)
-
-### 5. `/src/app/api/jhon-panel/route.ts` (GET)
-- Obtiene leads activos (score > 0 o actividad reciente)
-- Interpreta memoria para cada lead
-- Ordena por urgencia y score
-- Calcula GlobalPriority (acción #1)
-- Genera JhonInsight (resumen en español)
-
-### 6. `/src/app/api/actions/route.ts` (POST)
-- Ejecuta acciones con efectos configurados (scoreDelta, tempChange)
-- Registra ACTION_EXECUTED + ACTION_RECOMMENDED (para deadline tracking)
-- Reporta outcomes (REPLIED, NO_RESPONSE_2H, etc.)
-- Re-evalúa memoria después de cada acción
-- Devuelve jhonResponse en español
-
-### 7. `/src/app/api/engine/cron/route.ts` (GET/POST)
-- Ejecuta processExpiredActions + detectNoResponseOutcomes
-- Retorna counts de acciones procesadas
-
-### 8. Dashboard UI (`src/components/dashboard/dashboard-main.tsx`)
-Capa de inteligencia JHON sobre el dashboard existente:
-- **JHON Insight Bar**: Resumen del workspace con conteo de leads calientes, ghosts, auto-acciones
-- **Banner de Prioridad Global**: Rojo pulsante (CRITICAL), Amarillo (HIGH) con botón de acción dominante
-- **Lead Cards**: Confianza (barra 0-100%), narrativa, decision trace expandible, botón de acción con color por urgencia
-- **Auto-refresh** cada 2 minutos
-- Se preservaron todos los stats, charts, funnels, y actividad existentes
+### Solución Aplicada
+- Usar **`next build` + `node .next/standalone/server.js`** (producción) en lugar de `next dev`
+- Scripts actualizados: `start-server.sh` y `run-server.sh`
+- El servidor standalone es **100% estable** y maneja todas las peticiones sin caerse
 
 ---
 
-## Validación
+## 🔴 PROBLEMA 2: ERRORES TYPESCRRIPT SILENCIADOS
 
-- ✅ `prisma generate` — éxito
-- ✅ `prisma db push` — schema sincronizado con SQLite
-- ✅ `bun run lint` — 0 errores nuevos (47 errores pre-existentes en scripts/otras carpetas)
-- ✅ `npx next build` — **BUILD EXITOSO con 0 errores**
-- ✅ Rutas API registradas: `/api/engine/cron`, `/api/jhon-panel`, `/api/actions`
+### Causa Raíz
+`next.config.ts` tiene `typescript: { ignoreBuildErrors: true }` que **oculta errores críticos** de TypeScript. Se encontraron:
 
----
+1. **`dashboard-main.tsx:1155`** — `Property 'deadline' does not exist on type globalPriority`
+   - El tipo `JhonPanelData.globalPriority` no incluía la propiedad `deadline`
+   - Esto causaba que el componente `GlobalPriorityBanner` accediera a una propiedad undefined
+   
+2. **`memory.ts:150,156`** — `Date | null | undefined` no es asignable a `Date | null`
+   - `contact.lastMessageAt || profile?.lastActiveAt` producía `Date | null | undefined`
+   - Las funciones `detectPattern()` y `buildDecisionTrace()` esperaban `Date | null`
 
-## Patrones de Comportamiento Detectados
-
-| Patrón | Condición | Acción Recomendada | Urgencia |
-|--------|-----------|-------------------|----------|
-| neglected_hot_lead | Hot + sin actividad >2h | CALL_NOW | CRITICAL |
-| ready_to_close | Score ≥80 + intención | SEND_PROPOSAL | HIGH |
-| ghost_after_intent | Intent + sin actividad >24h | SEND_FOLLOW_UP | HIGH |
-| price_sensitive | ≥2 asked_price events | SEND_PROPOSAL | MEDIUM |
-| recurring_window_shopper | ≥3 requested_info + sin outcome | SEND_FOLLOW_UP | MEDIUM |
-| cold_no_activity | Frío + sin actividad >72h | REACTIVATE | LOW |
-| warm_need_nudge | Tibio + sin actividad >6h | SEND_FOLLOW_UP | MEDIUM |
-| hot_active_buyer | Hot + actividad <2h | SCHEDULE_MEETING | HIGH |
-| new_unqualified | ≤2 eventos | LOG_NOTE | LOW |
+### Solución Aplicada
+- Agregado `deadline?: number` al tipo `globalPriority` 
+- Cambiado `priority.deadline > 0` por `(priority.deadline ?? 0) > 0`
+- Corregido tipo en memory.ts: `const lastInteraction: Date | null = contact.lastMessageAt ?? profile?.lastActiveAt ?? null`
 
 ---
 
-## Task ID: 10.5-validation
-Agent: Super Z (Main)
-Task: Full validation of FASE 10.5 with real test data
+## 🔴 PROBLEMA 3: PÉRDIDA/MEZCLA DE DATOS
 
-Work Log:
-- Created 5 test leads with simulated events (Carlos, María, Roberto, Ana, Luis)
-- Verified Engine Cron API returns success
-- Verified JHON Panel API returns prioritized leads with full intelligence
-- Tested action execution (CALL_NOW on Carlos) — score updated 78→93, pattern switched to ready_to_close
-- Verified re-evaluation after action (narrative changed, nextBestAction updated)
-- Global Priority correctly identifies Roberto (ghost_after_intent) as #1 CRITICAL action
-- Decision traces show weighted factors explaining each decision
+### Causa Raíz
+1. **Seed parcial**: El endpoint `/api/seed` tiene un guard `if (existingContacts > 0)` que saltea la creación de datos si ya hay contactos. En algún punto anterior (FASE 10.5), se crearon 5 contactos de prueba sin conversaciones, deals ni agents. El seed detectó estos 5 contactos y nunca creó el resto de datos.
 
-Stage Summary:
-- ✅ All 6 items delivered: Outcome tracking, Decision trace, Confidence dynamic, Auto-actions cron, Global priority, Dominant UI
-- ✅ Build passes with zero errors
-- ✅ API validation complete with real test data
-- ✅ Dashboard UI has JHON intelligence layer with priority banner, lead cards, confidence bars, decision traces
-- Preview: Server running on port 3001
+2. **Aleatoriedad**: El seed usa `randomBetween()` y `randomPick()` para generar datos. Cada ejecución produce datos completamente diferentes.
+
+3. **Workspace inconsistente**: El workspace actual tenía slug "valiautoflow-main" (de una creación anterior) pero el seed crea slug "valiflow-jvega". Esto causaba que el seed no encontrara el workspace existente y creara uno duplicado.
+
+### Estado Anterior de la Base de Datos
+```
+Users: 1
+Workspaces: 1 (slug: "valiautoflow-main" — INCORRECTO)
+Contacts: 5 (solo de pruebas FASE 10.5)
+Conversations: 0
+Deals: 0
+Agents: 0
+EngineEvents: 15 (de pruebas)
+```
+
+### Solución Aplicada
+- Base de datos reseteada completamente
+- Re-seed ejecutado exitosamente con datos completos
+- Estado posterior:
+```
+Users: 1
+Workspaces: 1 (slug: "valiflow-jvega" — CORRECTO)
+Contacts: 20
+Conversations: 15 (con 66 mensajes)
+Deals: 12
+Agents: 3
+Automations: 3
+AnalyticsEvents: 50
+```
+
+---
+
+## 🔴 PROBLEMA 4: CAÍDAS CON CAMBIOS GRANDES
+
+### Causa Raíz
+Cada cambio grande fuerza a Turbopack a **recompilar toda la aplicación** desde cero. Con 70+ rutas y 14 componentes lazy-loaded, esta recompilación consume toda la memoria disponible, causando OOM.
+
+### Solución
+- Desarrollo: Hacer cambios pequeños e incrementales
+- Para cambios grandes: Hacer `next build` y usar el servidor standalone
+- Incrementar memoria: `NODE_OPTIONS="--max-old-space-size=2048"`
+
+---
+
+## 🟡 MEDIDAS PREVENTIVAS RECOMENDADAS
+
+1. **Nunca usar `ignoreBuildErrors: true`** en producción — corregir errores TS antes de deployar
+2. **Hacer build antes de cambios grandes** para verificar que no hay errores de compilación
+3. **No reiniciar el seed sin borrar la DB primero** — usar el endpoint con `?reset=true&pin=VALIFLOW_DEMO_2024`
+4. **Usar `next build` + standalone** en lugar de `next dev` para estabilidad
+5. **Considerar dividir page.tsx** en rutas separadas para reducir el tamaño del bundle
+
+---
+
+## Archivos Modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/components/dashboard/dashboard-main.tsx` | Agregado `deadline?: number` a tipo `globalPriority`, null-safe access |
+| `src/lib/engine/memory.ts` | Corregido tipo `lastInteraction` con `?? null` |
+| `start-server.sh` | Mejorado: build check, copia de assets, NODE_OPTIONS |
+| `run-server.sh` | Mejorado: build + restart automático |

@@ -144,7 +144,7 @@ export async function interpretLeadMemory(
   }
 
   const profile = contact.leadProfile
-  const lastInteraction = contact.lastMessageAt || profile?.lastActiveAt
+  const lastInteraction: Date | null = contact.lastMessageAt ?? profile?.lastActiveAt ?? null
 
   // Detect behavior pattern
   const pattern = detectPattern(events, contact, profile, lastInteraction)
