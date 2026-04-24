@@ -1,28 +1,40 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
-import { DashboardMain } from '@/components/dashboard/dashboard-main'
-import { ChatDemo } from '@/components/dashboard/chat-demo'
-import { Inbox } from '@/components/dashboard/inbox'
-import { CrmPipeline } from '@/components/dashboard/crm-pipeline'
-import { ContactsView } from '@/components/dashboard/contacts-view'
-import { AgentsView } from '@/components/dashboard/agents-view'
-import { TeamView } from '@/components/dashboard/team-view'
-import { AnalyticsView } from '@/components/dashboard/analytics-view'
-import { AutomationsView } from '@/components/dashboard/automations-view'
-import { DeveloperView } from '@/components/dashboard/developer-view'
-import { SettingsView } from '@/components/dashboard/settings-view'
-import { ValiGuardView } from '@/components/dashboard/valiguard-view'
-import { AdminView } from '@/components/dashboard/admin-view'
-import { AgentPlayground } from '@/components/dashboard/agent-playground'
-import { ReportsView } from '@/components/dashboard/reports-view'
-import { CalendarView } from '@/components/dashboard/calendar-view'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { OnboardingWizard } from '@/components/dashboard/onboarding-wizard'
 import { Loader2, Database, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+
+// ─── Lazy-loaded views (reduces initial bundle size & Turbopack memory) ───
+const DashboardMain = lazy(() => import('@/components/dashboard/dashboard-main').then(m => ({ default: m.DashboardMain })))
+const ChatDemo = lazy(() => import('@/components/dashboard/chat-demo').then(m => ({ default: m.ChatDemo })))
+const Inbox = lazy(() => import('@/components/dashboard/inbox').then(m => ({ default: m.Inbox })))
+const CrmPipeline = lazy(() => import('@/components/dashboard/crm-pipeline').then(m => ({ default: m.CrmPipeline })))
+const ContactsView = lazy(() => import('@/components/dashboard/contacts-view').then(m => ({ default: m.ContactsView })))
+const AgentsView = lazy(() => import('@/components/dashboard/agents-view').then(m => ({ default: m.AgentsView })))
+const TeamView = lazy(() => import('@/components/dashboard/team-view').then(m => ({ default: m.TeamView })))
+const AnalyticsView = lazy(() => import('@/components/dashboard/analytics-view').then(m => ({ default: m.AnalyticsView })))
+const AutomationsView = lazy(() => import('@/components/dashboard/automations-view').then(m => ({ default: m.AutomationsView })))
+const DeveloperView = lazy(() => import('@/components/dashboard/developer-view').then(m => ({ default: m.DeveloperView })))
+const SettingsView = lazy(() => import('@/components/dashboard/settings-view').then(m => ({ default: m.SettingsView })))
+const ValiGuardView = lazy(() => import('@/components/dashboard/valiguard-view').then(m => ({ default: m.ValiGuardView })))
+const AdminView = lazy(() => import('@/components/dashboard/admin-view').then(m => ({ default: m.AdminView })))
+const AgentPlayground = lazy(() => import('@/components/dashboard/agent-playground').then(m => ({ default: m.AgentPlayground })))
+const ReportsView = lazy(() => import('@/components/dashboard/reports-view').then(m => ({ default: m.ReportsView })))
+const CalendarView = lazy(() => import('@/components/dashboard/calendar-view').then(m => ({ default: m.CalendarView })))
+
+// Fallback for lazy-loaded views
+function ViewLoader() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+    </div>
+  )
+}
 
 export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin' | 'playground' | 'reports' | 'calendar'
 
@@ -220,31 +232,35 @@ export default function Home() {
   }
 
   return (
-    <DashboardLayout activeView={activeView} onViewChange={setActiveView} workspaceId={workspaceId}>
-      {activeView === 'dashboard' && <DashboardMain workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
-      {activeView === 'chat-demo' && <ChatDemo workspaceId={workspaceId} />}
-      {activeView === 'inbox' && <Inbox workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
-      {activeView === 'pipeline' && <CrmPipeline workspaceId={workspaceId} />}
-      {activeView === 'contacts' && <ContactsView workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
-      {activeView === 'agents' && <AgentsView workspaceId={workspaceId} />}
-      {activeView === 'team' && <TeamView workspaceId={workspaceId} />}
-      {activeView === 'analytics' && <AnalyticsView workspaceId={workspaceId} />}
-      {activeView === 'automations' && <AutomationsView workspaceId={workspaceId} />}
-      {activeView === 'developer' && <DeveloperView workspaceId={workspaceId} />}
-      {activeView === 'valiguard' && <ValiGuardView workspaceId={workspaceId} />}
-      {activeView === 'admin' && <AdminView workspaceId={workspaceId} />}
-      {activeView === 'settings' && <SettingsView workspaceId={workspaceId} />}
-      {activeView === 'playground' && <AgentPlayground workspaceId={workspaceId} />}
-      {activeView === 'reports' && <ReportsView workspaceId={workspaceId} />}
-      {activeView === 'calendar' && <CalendarView workspaceId={workspaceId} />}
+    <ErrorBoundary>
+      <DashboardLayout activeView={activeView} onViewChange={setActiveView} workspaceId={workspaceId}>
+        <Suspense fallback={<ViewLoader />}>
+          {activeView === 'dashboard' && <DashboardMain workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
+          {activeView === 'chat-demo' && <ChatDemo workspaceId={workspaceId} />}
+          {activeView === 'inbox' && <Inbox workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
+          {activeView === 'pipeline' && <CrmPipeline workspaceId={workspaceId} />}
+          {activeView === 'contacts' && <ContactsView workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
+          {activeView === 'agents' && <AgentsView workspaceId={workspaceId} />}
+          {activeView === 'team' && <TeamView workspaceId={workspaceId} />}
+          {activeView === 'analytics' && <AnalyticsView workspaceId={workspaceId} />}
+          {activeView === 'automations' && <AutomationsView workspaceId={workspaceId} />}
+          {activeView === 'developer' && <DeveloperView workspaceId={workspaceId} />}
+          {activeView === 'valiguard' && <ValiGuardView workspaceId={workspaceId} />}
+          {activeView === 'admin' && <AdminView workspaceId={workspaceId} />}
+          {activeView === 'settings' && <SettingsView workspaceId={workspaceId} />}
+          {activeView === 'playground' && <AgentPlayground workspaceId={workspaceId} />}
+          {activeView === 'reports' && <ReportsView workspaceId={workspaceId} />}
+          {activeView === 'calendar' && <CalendarView workspaceId={workspaceId} />}
+        </Suspense>
 
-      {/* Onboarding Wizard Overlay */}
-      {showOnboarding && workspaceId && (
-        <OnboardingWizard
-          workspaceId={workspaceId}
-          onComplete={handleOnboardingComplete}
-        />
-      )}
-    </DashboardLayout>
+        {/* Onboarding Wizard Overlay */}
+        {showOnboarding && workspaceId && (
+          <OnboardingWizard
+            workspaceId={workspaceId}
+            onComplete={handleOnboardingComplete}
+          />
+        )}
+      </DashboardLayout>
+    </ErrorBoundary>
   )
 }
