@@ -152,6 +152,7 @@ model Contact {
   customFields String  @default("{}") // JSON object
   status      String   @default("active") // active, inactive, archived, blocked
   leadScore   Int      @default(0)
+  temperature String   @default("cold")
   notes       String?
   lastMessageAt DateTime?
   createdAt   DateTime @default(now())
@@ -693,4 +694,25 @@ model WhatsAppAuth {
   authData  String   // JSON: { "creds.json": {...}, "app-state-sync-key-1.json": {...}, ... }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// JHON ENGINE — Events, Memory & Autonomy
+// ─────────────────────────────────────────────────────────────
+
+model EngineEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String
+  type        String   // INTENT_DETECTED, SCORE_UPDATED, TEMPERATURE_CHANGED, ACTION_RECOMMENDED, ACTION_EXECUTED, ACTION_OUTCOME, AUTO_ACTION_TRIGGERED, DECAY_APPLIED, PATTERN_IDENTIFIED
+  subType     String?  // For ACTION_OUTCOME: REPLIED, NO_RESPONSE_2H, NO_RESPONSE_24H, INTEREST_CONFIRMED, MEETING_BOOKED, GHOSTED, CLOSED_WON, CLOSED_LOST. For patterns: asked_price, requested_info, etc.
+  metadata    String   @default("{}") // JSON: { action, expectedOutcome, deadline, ifNotMet, decisionTrace, patternEffectiveness, scoreDelta, ... }
+  score       Int?     // Score at time of event
+  temperature String?  // Temperature at time of event
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([type])
+  @@index([createdAt])
 }
