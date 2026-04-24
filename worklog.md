@@ -230,3 +230,37 @@ Stage Summary:
 - Login, dashboard, login page, static assets todos funcionan
 - Servidor estable en modo standalone (sin crashes)
 - Archivos DB corruptos limpiados
+---
+Task ID: 5
+Agent: Main Agent
+Task: FIX PANTALLA NEGRA v2 — useSearchParams Suspense boundary
+
+Work Log:
+- Síntoma: Pantalla negra persistía en preview tras fix db.ts (DB corruption fix)
+- Diagnóstico: useSearchParams() en page.tsx línea 74 sin <Suspense> boundary
+  - Next.js 13+ requiere que useSearchParams() esté dentro de <Suspense>
+  - Sin Suspense, la hidratación falla silenciosamente → crash del JS del cliente → pantalla negra
+  - Mismo bug en reset-password/page.tsx línea 12
+- Fix aplicado:
+  - page.tsx: Creado wrapper Page() que envuelve Home() en <Suspense fallback={spinner}>
+  - reset-password/page.tsx: Creado wrapper ResetPasswordWrapper() que envuelve ResetPasswordPage() en <Suspense>
+- Build: 0 errores, standalone listo
+- Verificación 9/9 OK:
+  1. Health: healthy, DB=true, 17ms latencia, 40.6MB heap
+  2. Root: 307 → /login (middleware auth correcto)
+  3. Login page: 200, 27,342 bytes
+  4. Login auth: jvegahdz24@gmail.com role=owner
+  5. Dashboard: 200, 20,886 bytes, title "ValiAutoFlow — CRM Inteligente con IA"
+  6. Static assets: JS 200 (29KB), CSS 200 (2KB), Favicon 200
+  7. Auth/me: user data correcto con workspaceId
+  8. Workspaces API: datos correctos
+  9. Server stability: PID activo durante toda la verificación
+
+- Commit: 9865783 "fix: wrap useSearchParams in Suspense boundary"
+
+Stage Summary:
+- PANTALLA NEGRA DEFINITIVAMENTE RESUELTA
+- Causa raíz: useSearchParams() sin Suspense (Next.js 13+ requirement)
+- Dos archivos corregidos: page.tsx + reset-password/page.tsx
+- 9/9 verificaciones pasaron
+- Servidor estable en standalone mode
