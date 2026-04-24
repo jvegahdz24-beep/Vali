@@ -198,3 +198,35 @@ Stage Summary:
 - Umbral real: 3 concurrent OK, 5+ concurrent CRASH (SQLite limitation)
 - Entregables: RADIOGRAFIA.docx + INFORME_CIERRE.docx en /download/
 - Git: rama production-ready + tag v5.0.0 listos para push
+---
+Task ID: 4
+Agent: Constructor (Main Agent)
+Task: FIX PANTALLA NEGRA — Causa raíz y solución
+
+Work Log:
+- Sintoma: Pantalla negra / 404 al acceder al preview y localhost
+- Diagnóstico: curl mostraba /login = 200 OK con HTML completo (27KB), pero login POST devolvía 500
+- Error crítico: "The table `main.User` does not exist in the current database"
+- Causa raíz: db.ts (Tarea B) añadía &connection_limit=1&pool_timeout=10 al DATABASE_URL
+  - URL original: file:/home/z/my-project/db/custom.db?pragma=foreign_keys%3D1
+  - URL corrupta: file:/home/z/my-project/db/custom.db&connection_limit=1&pool_timeout=10
+  - Esto creó un archivo vacío custom.db&connection_limit=1&pool_timeout=10 sin tablas
+  - health check (SELECT 1) funcionaba en DB vacía → falso positivo
+  - login (prisma.user.findUnique) fallaba → 500 → pantalla negra
+- Fix: Revertido db.ts a singleton Prisma simple (sin WAL, sin datasources override)
+- Limpiados archivos basura: db/custom.db&connection_limit=1&pool_timeout=10*
+- Verificación E2E completa (6/6 pruebas pasaron):
+  1. Health: healthy, DB OK, 0ms latencia, 41.8MB heap
+  2. Login: OK, jvegahdz24@gmail.com, role=owner
+  3. Dashboard: 200, 21,738 bytes, DOCTYPE + ValiAutoFlow + CSS + 19 JS scripts
+  4. Login page: 200, 27,275 bytes, formulario + Google login
+  5. Static assets: Favicon 200, JS 200, CSS 200
+  6. Root redirect: 307 → /login?callbackUrl=%2F
+- Commit: 1f47b38 "fix: revertir db.ts - eliminar WAL corruptía DATABASE_URL"
+- Build: 0 errores TypeScript, standalone listo
+
+Stage Summary:
+- PANTALLA NEGRA RESUELTA: causa raíz era db.ts corruptía DATABASE_URL
+- Login, dashboard, login page, static assets todos funcionan
+- Servidor estable en modo standalone (sin crashes)
+- Archivos DB corruptos limpiados
