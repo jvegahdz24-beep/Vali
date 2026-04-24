@@ -69,7 +69,23 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
-export default function Home() {
+// Wrapper: useSearchParams needs Suspense boundary (Next.js 13+ requirement)
+// Without this, hydration crashes silently → black screen
+export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-white">
+          <Loader2 className="h-8 w-8 text-emerald-600 animate-spin" />
+        </div>
+      }
+    >
+      <Home />
+    </Suspense>
+  )
+}
+
+function Home() {
   const { user, isLoading: authLoading, isAuthenticated } = useAuth()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get('redirect') || ''
