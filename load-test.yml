@@ -1,0 +1,26 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - name: "Ramp up"
+      duration: 10
+      arrivalRate: 2
+    - name: "Sustained load"
+      duration: 30
+      arrivalRate: 5
+    - name: "Peak"
+      duration: 10
+      arrivalRate: 10
+scenarios:
+  - name: "Health check"
+    flow:
+      - get:
+          url: "/api/health"
+  - name: "Dashboard stats"
+    weight: 2
+    flow:
+      - get:
+          url: "/api/dashboard/stats"
+  - name: "Login page"
+    flow:
+      - get:
+          url: "/login"

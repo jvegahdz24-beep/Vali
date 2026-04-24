@@ -1,0 +1,31 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - name: "Warmup 1 rps"
+      duration: 15
+      arrivalRate: 1
+    - name: "Light load 2 rps"
+      duration: 15
+      arrivalRate: 2
+    - name: "Moderate 3 rps"
+      duration: 15
+      arrivalRate: 3
+    - name: "Heavy 5 rps"
+      duration: 15
+      arrivalRate: 5
+scenarios:
+  - name: "Health check"
+    weight: 3
+    flow:
+      - get:
+          url: "/api/health"
+  - name: "Dashboard stats"
+    weight: 2
+    flow:
+      - get:
+          url: "/api/dashboard/stats"
+  - name: "Login page"
+    weight: 1
+    flow:
+      - get:
+          url: "/login"

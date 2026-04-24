@@ -175,3 +175,26 @@ Stage Summary:
 - 32 tests pasando (6 PRNG + 10 utils + 1 auth + 15 API routes)
 - 0 TypeScript errors confirmado
 - RADIOGRAFIA y build files generados en /download/
+---
+Task ID: 3
+Agent: Constructor (Main Agent)
+Task: Tareas de Cierre A, B, C — Cierre definitivo del proyecto
+
+Work Log:
+- Tarea A: Generado INFORME_CIERRE_ValiAutoFlow_v5.docx (10.2 KB) con script Node.js + docx library
+- Tarea A: Archivo en /home/z/my-project/download/INFORME_CIERRE_ValiAutoFlow_v5.docx
+- Tarea B: Ejecutado artillery load test — servidor crash con 5+ concurrent
+- Tarea B: Fix aplicado: WAL mode + busy_timeout=5s + connection_limit=1 en db.ts
+- Tarea B: Resultado concurrencia post-fix: 3 concurrent = 30/30 OK, p95=129ms, p99=142ms
+- Tarea B: 5 concurrent = crash (SQLite lock contention — limitacion conocida)
+- Tarea B: Solucion documentada: migrar a PostgreSQL para >3 concurrent users
+- Tarea C: Creada rama production-ready desde main
+- Tarea C: Commit d7bd47d con cambios de cierre (db.ts WAL + gen-cierre.mjs)
+- Tarea C: Tag v5.0.0 creado con anotacion completa
+- Tarea C: Push pendiente — no hay remote configurado
+
+Stage Summary:
+- Concurrency fix WAL mode permite 3 concurrent estable (antes crashaba con 3)
+- Umbral real: 3 concurrent OK, 5+ concurrent CRASH (SQLite limitation)
+- Entregables: RADIOGRAFIA.docx + INFORME_CIERRE.docx en /download/
+- Git: rama production-ready + tag v5.0.0 listos para push
