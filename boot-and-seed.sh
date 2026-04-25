@@ -26,10 +26,9 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# Seed the database
-echo "Seeding database..."
-SEED_RESULT=$(curl -s -X POST "http://localhost:3000/api/seed?pin=valiflow2026" 2>/dev/null)
-echo "Seed result: $SEED_RESULT"
+# Seed DISABLED — Real leads come from WhatsApp only
+# Demo data has been removed. Do NOT re-enable seed in production.
+echo "Skipping seed (disabled — real contacts via WhatsApp only)"
 
 # Keep server alive by waiting
 wait $SERVER_PID

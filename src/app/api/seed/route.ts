@@ -159,10 +159,11 @@ function randomEmail(name: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── Production guard ───────────────────────────────────
-    if (process.env.NODE_ENV === 'production' && !process.env.SEED_PIN) {
+    // ─── Production guard: ALWAYS disabled in production ────
+    // Demo seed is permanently disabled. Real leads come from WhatsApp only.
+    if (process.env.NODE_ENV === 'production') {
       return NextResponse.json(
-        { error: 'Seed endpoint is disabled in production' },
+        { error: 'Seed endpoint is permanently disabled in production. Real contacts are created via WhatsApp.', code: 'SEED_DISABLED' },
         { status: 404 }
       )
     }

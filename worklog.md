@@ -303,3 +303,25 @@ Stage Summary:
 - Login credentials: jvegahdz24@gmail.com / valiflow2026
 - AgentMemory entries include conversation_state_v2 for Jonathan and Sonya (v5.1.1 feature)
 - v5.1.1 dashboard optimizations are frontend-only (compact cards, 7:5 grid, etc.)
+
+---
+Task ID: 2
+Agent: main
+Task: Delete demo data, keep only Jonathan Vega and Sonya RnSl
+
+Work Log:
+- Deleted demo contacts (Roberto Méndez, María Delgado, Carlos Estrada) and all their related data
+- Disabled seed scripts: seed-jvega.ts.disabled, seed-real-data.ts.disabled, seed-config.ts.disabled
+- Hardened /api/seed endpoint: permanently disabled in production (removed SEED_PIN bypass)
+- Disabled seed in boot-and-seed.sh (commented out POST /api/seed call)
+- Rebuilt production with all changes
+- Verified seed is blocked: returns 404 with "SEED_DISABLED"
+- Verified no postinstall/prestart in package.json
+
+Stage Summary:
+- Database now has ONLY: Jonathan Vega (score 85, hot) and Sonya RnSl (score 72, warm)
+- 2 Deals: Jonathan ($18.5k Automatización), Sonya ($12k Reactivación)
+- 2 Conversations, 19 Messages
+- 3 AgentMemory entries (conversation_state_v2 for both contacts)
+- /api/seed permanently blocked in production
+- Real leads will only come from WhatsApp webhook
