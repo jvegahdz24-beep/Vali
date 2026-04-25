@@ -380,3 +380,25 @@ Stage Summary:
 - WhatsApp JID 5219214112340@... normalizes to 529214112340 → matches Sonia
 - No more duplicate contacts from different WhatsApp prefix formats
 - All real data preserved (67 messages, 2 deals, 2 agent memories)
+
+---
+Task ID: 1-8
+Agent: Super Z (main)
+Task: Análisis exhaustivo de causas raíz de ValiAutoFlow CRM - v5.1.2
+
+Work Log:
+- Paso 0: Verificado entorno - servidor no está corriendo, BD SQLite existe (632KB), 28 tablas
+- Paso 1: Inspección completa de BD - 2 contactos (Jonathan, Sonia), 67 mensajes, 2 deals, datos huerfanos detectados
+- Paso 2: Rastreo de datos demo - única fuente activa: /api/seed (protegido en producción), scripts deshabilitados, developer panel hardcodea nombres demo
+- Paso 3: Flujo WhatsApp completo trazado - webhook → normalizePhone → upsert → processMessageCore → RevenueEngine → humanizer → send
+- Paso 4: Verificación de fixes v5.1.2 - IDENTIDAD FIJA ✅, history 30 ✅, dedup ✅, penalties parciales ⚠️, enforceIdentity NO EXISTE ❌
+- Paso 5: Protecciones verificadas - seed deshabilitado en producción ✅, frontend auto-trigger riesgo medio, SEED_PIN no configurado
+- Paso 6: Simulación de reinicio - conversation-state.ts pierde TODO al reiniciar (solo RAM), stage-tracker.ts persiste correctamente
+- Paso 7: Informe generado como Markdown completo en /home/z/my-project/download/
+
+Stage Summary:
+- Hallazgo ROJO #1: conversation-state.ts no persiste en BD - causa directa de pérdida de contexto
+- Hallazgo ROJO #2: enforceIdentity() no existe en humanizer.ts - Jhon puede llamarse Carlos
+- Hallazgo ROJO #3: 3 AnalyticsEvents + 12 EngineEvents huerfanos de contactos eliminados
+- Hallazgo NARANJA: DeepSeek/OpenAI sin penalties, frontend auto-seed, datos demo residuales
+- Informe entregado: /home/z/my-project/download/analisis-causa-raiz-valiautoflow-crm.md
