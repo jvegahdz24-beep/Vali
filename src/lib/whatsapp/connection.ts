@@ -14,6 +14,7 @@ import { processMessageCore } from '@/lib/ai/message-processor'
 import { DbAuthState } from './db-auth-state'
 import { detectMedia, downloadAndSaveMedia } from './media-handler'
 import { isDuplicateMessage } from './shared-dedup'
+import { normalizePhone } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -364,7 +365,7 @@ class WhatsAppManager {
           const messageId = msg.key.id
           if (messageId && isDuplicateMessage(messageId)) return
 
-          const phone = remoteJid.split('@')[0]
+          const phone = normalizePhone(remoteJid.split('@')[0])
           const pushName = msg.pushName || undefined
 
           // ─── MEDIA DETECTION ──────────────────────────────

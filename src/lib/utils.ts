@@ -26,6 +26,52 @@ export function formatPhoneNumber(phone: string | null | undefined): string {
   return phone
 }
 
+/**
+ * Normalizes a phone number to canonical format for DB storage and matching.
+ * 
+ * Rules:
+ * 1. Strip ALL non-digit characters (+, spaces, dashes, parentheses)
+ * 2. For Mexican numbers: normalize 521→52, 044→52, 045→52 prefixes
+ * 3. For 10-digit Mexican numbers: prepend 52
+ * 4. For numbers with + prefix: strip it
+ * 5. Result: digits only (e.g. "529844498785" for Jonathan)
+ * 
+ * This ensures consistent phone matching between WhatsApp JID extraction,
+ * CSV import, manual creation, and webhook inbound.
+ */
+export function normalizePhone(phone: string | null | undefined): string {
+  if (!phone) return ''
+
+  // Step 1: Strip everything except digits
+  let digits = phone.replace(/[^\d]/g, '')
+
+  if (!digits || digits.length < 10) return digits
+
+  // Step 2: Handle Mexican prefixes
+  // WhatsApp JID for Mexican mobile: 521XXXXXXXXXX (52 + 1 + 10-digit)
+  // WhatsApp JID for Mexican landline: 52XXXXXXXXXX (52 + 10-digit)
+  // Mexican local dialing: 044/045XXXXXXXXXX (cell) or 01XXXXXXXXXX (LD)
+
+  if (digits.length === 13 && digits.startsWith('521')) {
+    // 521XXXXXXXXXX → 52XXXXXXXXXX (strip the mobile prefix 1)
+    digits = '52' + digits.slice(3)
+  } else if (digits.length === 13 && digits.startsWith('044')) {
+    // 044XXXXXXXXXX → 52XXXXXXXXXX
+    digits = '52' + digits.slice(3)
+  } else if (digits.length === 13 && digits.startsWith('045')) {
+    // 045XXXXXXXXXX → 52XXXXXXXXXX
+    digits = '52' + digits.slice(3)
+  } else if (digits.length === 12 && digits.startsWith('01')) {
+    // 01XXXXXXXXXX → 52XXXXXXXXXX
+    digits = '52' + digits.slice(2)
+  } else if (digits.length === 10) {
+    // 10-digit Mexican number → prepend country code 52
+    digits = '52' + digits
+  }
+
+  return digits
+}
+
 export function getChannelIcon(channel: string): string {
   const icons: Record<string, string> = {
     whatsapp: '💬',

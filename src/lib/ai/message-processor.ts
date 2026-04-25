@@ -22,6 +22,7 @@ import { RevenueEngine } from '@/lib/ai'
 import { preProcess, postProcess, injectContext } from '@/lib/ai/conversation-middleware'
 import { autoCreateOrUpdateDeal } from '@/lib/crm/auto-deal'
 import { leadProfiler } from '@/lib/ai/lead-profiler'
+import { normalizePhone } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -106,6 +107,15 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   console.log(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
   console.log(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
 
+  // ── FIX: Normalize phone number BEFORE any DB operation ──
+  // This ensures consistent format regardless of how the phone arrives
+  // (WhatsApp JID, webhook, manual input, CSV import, etc.)
+  const normalizedPhone = normalizePhone(phone)
+  if (normalizedPhone !== phone) {
+    console.log(`[Core:1] Phone normalized: "${phone}" → "${normalizedPhone}"`)
+  }
+  const safePhone = normalizedPhone
+
   // ── 1. Find workspace ──
   let workspace
   if (forcedWorkspaceId) {
@@ -134,10 +144,10 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   let contact
   if (forcedContactId) {
     contact = await db.contact.findUnique({ where: { id: forcedContactId } })
-  } else if (phone) {
+  } else if (safePhone) {
     contact = await db.contact.upsert({
       where: {
-        contact_workspace_phone_key: { workspaceId: workspace.id, phone },
+        contact_workspace_phone_key: { workspaceId: workspace.id, phone: safePhone },
       },
       update: {
         lastMessageAt: new Date(),
@@ -151,7 +161,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       create: {
         workspaceId: workspace.id,
         firstName: pushName || 'Contacto WhatsApp',
-        phone,
+        phone: safePhone,
         source: channel,
         tags: JSON.stringify(['whatsapp_incoming']),
       },

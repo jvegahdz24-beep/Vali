@@ -355,3 +355,28 @@ Stage Summary:
 - Jhon AI identity locked to "Jhon del equipo de ValiAutoFlow"
 - Conversation history now 30 messages (was 10) to prevent amnesia
 - Repetitive response penalties active on all AI providers
+
+---
+Task ID: 4
+Agent: main
+Task: Phone normalization + complete system verification
+
+Work Log:
+- Updated Sonia phone to +52 921 411 2340 (real number)
+- Created normalizePhone() in src/lib/utils.ts — canonical format: digits only
+  - Strips +, spaces, dashes
+  - Mexican 521→52, 044→52, 045→52, 01→52 prefix normalization
+  - 10-digit → prepend 52
+- Applied normalizePhone at ALL 3 phone extraction points:
+  - webhook route.ts: extractPhoneFromJid() 
+  - connection.ts: Baileys message handler (line 368)
+  - message-processor.ts: safety net before upsert (line 113)
+- Normalized existing DB phones: Jonathan +52 984...→529844498785, Sonia +52 921...→529214112340
+- Rebuilt and restarted production server
+
+Stage Summary:
+- Phone format: canonical digits-only (e.g. 529844498785)
+- WhatsApp JID 5219844498785@... normalizes to 529844498785 → matches Jonathan
+- WhatsApp JID 5219214112340@... normalizes to 529214112340 → matches Sonia
+- No more duplicate contacts from different WhatsApp prefix formats
+- All real data preserved (67 messages, 2 deals, 2 agent memories)

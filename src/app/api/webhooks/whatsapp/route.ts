@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processMessageCore } from '@/lib/ai/message-processor'
 import { isDuplicateMessage } from '@/lib/whatsapp/shared-dedup'
+import { normalizePhone } from '@/lib/utils'
 
 // Evolution API message format
 interface EvolutionMessage {
@@ -37,7 +38,8 @@ interface EvolutionMessage {
 }
 
 function extractPhoneFromJid(jid: string): string {
-  return jid.split('@')[0]
+  const rawPhone = jid.split('@')[0]
+  return normalizePhone(rawPhone)
 }
 
 function extractMessageText(data: EvolutionMessage['data']): string | null {
