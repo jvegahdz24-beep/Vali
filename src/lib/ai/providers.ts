@@ -166,8 +166,8 @@ export class GLMProvider implements AIProviderInstance {
           temperature: options?.temperature ?? 0.7,
           max_tokens: targetMaxTokens,
           top_p: options?.topP,
-          frequency_penalty: options?.frequencyPenalty,
-          presence_penalty: options?.presencePenalty,
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('SDK timeout')), GLM_SDK_TIMEOUT)
@@ -229,8 +229,8 @@ export class GroqProvider implements AIProviderInstance {
           temperature: options?.temperature ?? 0.7,
           max_tokens: targetMaxTokens,
           top_p: options?.topP,
-          frequency_penalty: options?.frequencyPenalty,
-          presence_penalty: options?.presencePenalty,
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('SDK timeout')), GLM_SDK_TIMEOUT)
@@ -275,8 +275,8 @@ export class DeepSeekProvider implements AIProviderInstance {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 4096,
       top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty,
-      presence_penalty: options?.presencePenalty,
+      frequency_penalty: options?.frequencyPenalty ?? 0.5,
+      presence_penalty: options?.presencePenalty ?? 0.3,
     })
 
     const content = extractGLMContent(completion)
@@ -345,8 +345,8 @@ export class OpenAIProvider implements AIProviderInstance {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 4096,
       top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty,
-      presence_penalty: options?.presencePenalty,
+      frequency_penalty: options?.frequencyPenalty ?? 0.5,
+      presence_penalty: options?.presencePenalty ?? 0.3,
     })
 
     const content = extractGLMContent(completion)

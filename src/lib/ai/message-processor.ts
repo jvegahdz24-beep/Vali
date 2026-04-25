@@ -20,6 +20,7 @@ const PERSONALITY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 import { db } from '@/lib/db'
 import { RevenueEngine } from '@/lib/ai'
 import { preProcess, postProcess, injectContext } from '@/lib/ai/conversation-middleware'
+import { ensureStateLoaded, persistState } from '@/lib/ai/conversation-state'
 import { autoCreateOrUpdateDeal } from '@/lib/crm/auto-deal'
 import { leadProfiler } from '@/lib/ai/lead-profiler'
 import { normalizePhone } from '@/lib/utils'
@@ -236,6 +237,12 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 7. Middleware: pre-process ──
   console.log(`[Core:5] 🔄 Pre-processing...`)
+  
+  // FIX P0.1: Load conversation state from DB (L2) into L1 cache before processing
+  if (contact?.id) {
+    await ensureStateLoaded(phone, contact.id)
+  }
+  
   const middlewareResult = preProcess({
     phone,
     text,
@@ -388,6 +395,13 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
         console.log(`[Core] Response post-processed (${rawResponse.length} → ${aiReplyText.length} chars)`)
       }
     }
+  }
+
+  // ── 9.5 FIX P0.1: Persist conversation state to L2 (AgentMemory) ──
+  if (contact?.id) {
+    await persistState(phone).catch(() => {
+      // Non-fatal: L1 cache still works
+    })
   }
 
   // ── 10. Save outbound AI message to DB ──

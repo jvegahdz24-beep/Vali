@@ -64,12 +64,12 @@ interface TableInfo {
 
 // ─── In-memory log store reference ─────────────────────
 const DEV_LOGS: LogEntry[] = [
-  { id: '1', timestamp: new Date(Date.now() - 120000).toISOString(), level: 'info', source: 'whatsapp', message: 'Conexión establecida - 5212345678' },
-  { id: '2', timestamp: new Date(Date.now() - 90000).toISOString(), level: 'info', source: 'ai-engine', message: 'Revenue Engine procesó mensaje - Conversation #c4jn3' },
-  { id: '3', timestamp: new Date(Date.now() - 60000).toISOString(), level: 'warn', source: 'rate-limit', message: 'Rate limit alcanzado para Groq API - 429' },
-  { id: '4', timestamp: new Date(Date.now() - 30000).toISOString(), level: 'info', source: 'crm', message: 'Lead calificado: María García - Score: 85' },
-  { id: '5', timestamp: new Date(Date.now() - 15000).toISOString(), level: 'error', source: 'ai-engine', message: 'Timeout al conectar con DeepSeek API - 30000ms' },
-  { id: '6', timestamp: new Date(Date.now() - 5000).toISOString(), level: 'info', source: 'automation', message: 'Follow-up rule triggered - Day 3 inactivity' },
+  { id: '1', timestamp: new Date(Date.now() - 120000).toISOString(), level: 'info', source: 'whatsapp', message: 'Conexión establecida - WhatsApp Business API' },
+  { id: '2', timestamp: new Date(Date.now() - 90000).toISOString(), level: 'info', source: 'ai-engine', message: 'Revenue Engine procesó mensaje - Conversación activa' },
+  { id: '3', timestamp: new Date(Date.now() - 60000).toISOString(), level: 'warn', source: 'rate-limit', message: 'Rate limit alcanzado para API de IA - 429' },
+  { id: '4', timestamp: new Date(Date.now() - 30000).toISOString(), level: 'info', source: 'crm', message: 'Lead calificado: Jonathan Vega - Score: 95 - Cierre' },
+  { id: '5', timestamp: new Date(Date.now() - 15000).toISOString(), level: 'error', source: 'ai-engine', message: 'Timeout al conectar con API de IA - 30000ms' },
+  { id: '6', timestamp: new Date(Date.now() - 5000).toISOString(), level: 'info', source: 'conv-state', message: 'Estado de conversación restaurado desde BD (L2)' },
 ]
 
 // ─── Component ─────────────────────────────────────────
