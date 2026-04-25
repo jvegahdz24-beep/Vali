@@ -100,6 +100,9 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
           messages: messages.map(m => ({ role: m.role, content: m.content })),
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
+          // FIX: Add penalties to prevent repetitive responses
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
       })
       if (!res.ok) {
@@ -307,6 +310,8 @@ export class GeminiProvider implements AIProviderInstance {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 4096,
       top_p: options?.topP,
+      frequency_penalty: options?.frequencyPenalty ?? 0.5,
+      presence_penalty: options?.presencePenalty ?? 0.3,
     })
 
     const content = extractGLMContent(completion)

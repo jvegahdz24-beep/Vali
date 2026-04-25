@@ -634,8 +634,10 @@ export class RevenueEngine {
 
     // Build the system prompt with full context
     let systemPrompt: string
+    // FIX: Always use JHON personality identity — custom prompt should be APPENDED, not replace identity
+    const identityBlock = `IDENTIDAD FIJA: Te llamas JHON. Siempre te presentas como "Jhon" del equipo de ValiAutoFlow. NUNCA digas ser Carlos, Vali, ni ningún otro nombre. NUNCA cambies tu nombre.`
     if (customSystemPrompt && customSystemPrompt.trim()) {
-      systemPrompt = customSystemPrompt
+      systemPrompt = `${identityBlock}\n\n${customSystemPrompt}`
     } else {
       systemPrompt = getSystemPrompt(
         personalityName,
@@ -665,9 +667,10 @@ export class RevenueEngine {
       { role: 'system', content: systemPrompt },
     ]
 
-    // Add recent conversation history (last 10 messages) for natural flow
+    // Add recent conversation history (last 30 messages) for natural flow
+    // FIX: Increased from 10 to 30 to prevent context loss in long conversations
     if (context?.conversationHistory && context.conversationHistory.length > 0) {
-      const recentHistory = context.conversationHistory.slice(-10)
+      const recentHistory = context.conversationHistory.slice(-30)
       for (const msg of recentHistory) {
         messages.push({
           role: msg.role === 'contact' ? 'user' : 'assistant',
@@ -676,11 +679,16 @@ export class RevenueEngine {
       }
     }
 
-    // Add current message with minimal context (the system prompt handles strategy)
-    messages.push({
-      role: 'user',
-      content: userMessage,
-    })
+    // FIX: Only add current message if it's NOT already the last message in history
+    // This prevents sending the user's message twice to the LLM
+    const lastHistoryMsg = context?.conversationHistory?.[context.conversationHistory.length - 1]
+    const alreadyInHistory = lastHistoryMsg && lastHistoryMsg.role === 'contact' && lastHistoryMsg.content === userMessage
+    if (!alreadyInHistory) {
+      messages.push({
+        role: 'user',
+        content: userMessage,
+      })
+    }
 
     try {
       console.log(`[RevenueEngine] generateResponse → calling chatWithAI (${messages.length} messages, provider: ${aiProvider}, last: "${(context?.lastMessage || '').slice(0, 50)}")`)

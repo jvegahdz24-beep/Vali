@@ -325,3 +325,33 @@ Stage Summary:
 - 3 AgentMemory entries (conversation_state_v2 for both contacts)
 - /api/seed permanently blocked in production
 - Real leads will only come from WhatsApp webhook
+
+---
+Task ID: 3
+Agent: main
+Task: Update contacts with REAL WhatsApp data + Fix Jhon AI issues
+
+Work Log:
+- Investigated DB data vs real WhatsApp conversations — found all seed data was fabricated
+- Updated Jonathan Vega: phone +52 984 449 8785, city Coatzacoalcos, real needs (automatizar WhatsApp + citas)
+- Updated Sonya RnSl → Sonia Rendón: real name, organization de eventos (fiestas infantiles, comuniones)
+- Deleted all 19 seeded messages, 3 agent logs, 3 agent memories, 2 deals
+- Inserted 43 real messages from Jonathan Vega conversation (24/4 5:44-6:01pm)
+- Inserted 24 real messages from Sonia Rendón conversation (24/4 6:03-6:13pm)
+- Created real AgentMemory with full conversation context for both contacts
+- Created 2 real deals: Jonathan ($18.5k Automatización WhatsApp), Sonia ($8.5k Marketing)
+- Created 6 real agent logs
+
+AI Fixes (Jhon v5.1.2):
+- FIXED: Identity inconsistency — added IDENTITY BLOCK forcing "Jhon" name, never "Carlos"/"Vali"
+- FIXED: History truncation 10→30 messages (prevents context loss after 10 messages)
+- FIXED: Duplicate last user message (was sending same message twice to LLM)
+- FIXED: Added frequency_penalty (0.5) and presence_penalty (0.3) to ALL providers
+- FIXED: Custom system prompt now APPENDS to identity instead of replacing it
+
+Stage Summary:
+- Database has ONLY real data from Jonathan and Sonia
+- 67 real WhatsApp messages in DB
+- Jhon AI identity locked to "Jhon del equipo de ValiAutoFlow"
+- Conversation history now 30 messages (was 10) to prevent amnesia
+- Repetitive response penalties active on all AI providers
