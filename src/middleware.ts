@@ -19,7 +19,8 @@ const publicApiRoutes = [
   '/api/seed',
   '/api/health',
   '/api/billing/webhook',
-  '/api/debug/system',        // System diagnostic (no auth needed)
+  // FIX C6: /api/debug/system REMOVED from public — now requires auth
+  // FIX C7: /api/download/project and /api/sql-migration REMOVED from public — now require auth
   '/api/whatsapp/status',     // QR polling needs no auth
   '/api/whatsapp/connect',    // Connection trigger
   '/api/whatsapp/qr-standalone', // QR image

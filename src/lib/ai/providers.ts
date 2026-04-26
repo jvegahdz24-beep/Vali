@@ -269,15 +269,21 @@ export class DeepSeekProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty ?? 0.5,
-      presence_penalty: options?.presencePenalty ?? 0.3,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DeepSeek timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start
@@ -304,15 +310,21 @@ export class GeminiProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty ?? 0.5,
-      presence_penalty: options?.presencePenalty ?? 0.3,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start
@@ -339,15 +351,21 @@ export class OpenAIProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty ?? 0.5,
-      presence_penalty: options?.presencePenalty ?? 0.3,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('OpenAI timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start

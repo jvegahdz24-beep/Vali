@@ -50,18 +50,17 @@ export async function GET() {
   }
 
   // ─── 2. ENVIRONMENT ──────────────────────────────────────
-  const requiredEnvs = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'ZAI_API_KEY']
+  // FIX C6: Only report set/not-set, NEVER expose partial values
+  const requiredEnvs = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL']
   const envStatus = requiredEnvs.map(key => ({
     key,
     set: !!process.env[key],
-    value: process.env[key] ? `${process.env[key]!.substring(0, 8)}...` : 'MISSING',
   }))
   const missingEnvs = envStatus.filter(e => !e.set).map(e => e.key)
   results.environment = {
     ok: missingEnvs.length === 0,
     detail: missingEnvs.length > 0 ? `Missing: ${missingEnvs.join(', ')}` : 'All required env vars present',
     variables: envStatus,
-    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
   }
 
   // ─── 3. DATABASE ─────────────────────────────────────────
@@ -165,16 +164,13 @@ export async function GET() {
   }
 
   // ─── 6. AI ───────────────────────────────────────────────
+  // FIX C6: Never expose partial API keys
   try {
-    const aiKey = process.env.ZAI_API_KEY
-    const hasKey = !!aiKey && aiKey.length > 10
+    const hasKey = !!process.env.ZAI_API_KEY && process.env.ZAI_API_KEY.length > 10
     results.ai = {
       ok: hasKey,
-      detail: hasKey
-        ? `ZAI API Key configured (${aiKey!.substring(0, 8)}...)`
-        : 'ZAI_API_KEY not configured — AI features disabled',
+      detail: hasKey ? 'ZAI API Key configured' : 'ZAI_API_KEY not configured — AI features disabled',
       provider: 'z-ai-web-dev-sdk (GLM)',
-      apiKeySet: hasKey,
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)

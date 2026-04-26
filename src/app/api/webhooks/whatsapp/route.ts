@@ -51,9 +51,10 @@ function extractMessageText(data: EvolutionMessage['data']): string | null {
 }
 
 // ─── Webhook Secret Verification ─────────────────────────────
+// FIX L10: If no secret configured, REJECT all (not allow all)
 function verifyWebhookSecret(req: NextRequest): boolean {
   const configuredSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.WHATSAPP_WEBHOOK_SECRET
-  if (!configuredSecret) return true
+  if (!configuredSecret) return false // FIX: deny by default when no secret set
   const incomingSecret = req.headers.get('x-webhook-secret')
   if (!incomingSecret) return false
   const a = Buffer.from(configuredSecret)
