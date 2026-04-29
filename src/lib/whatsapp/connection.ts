@@ -8,6 +8,7 @@ import pino from 'pino'
 import path from 'path'
 import fs from 'fs'
 import QRCode from 'qrcode'
+import { debug } from '@/lib/logger'
 import { humanizeResponse, getRandomDelay } from '@/lib/ai/humanizer'
 import { enqueueMessage } from '@/lib/ai/conversation-middleware'
 import { processMessageCore } from '@/lib/ai/message-processor'
@@ -112,7 +113,7 @@ class WhatsAppManager {
 
   private async acquireProcessingLock(phone: string): Promise<boolean> {
     if (this._processingLocks.get(phone)) {
-      console.log(`[WhatsApp] Processing lock held for ${phone}, skipping`)
+      debug(`[WhatsApp] Processing lock held for ${phone}, skipping`)
       return false
     }
     this._processingLocks.set(phone, true)
@@ -212,18 +213,18 @@ class WhatsAppManager {
         DisconnectReason,
       } = await loadBaileys()
 
-      console.log('[WhatsApp] Baileys loaded, creating socket...')
+      debug('[WhatsApp] Baileys loaded, creating socket...')
 
       // ─── DB Auth: Load credentials from DB → tmpdir ───
       dbAuth = new DbAuthState(_WORKSPACE_ID)
       const authDir = await dbAuth.load()
-      console.log('[WhatsApp] Auth dir:', authDir)
+      debug('[WhatsApp] Auth dir:', authDir)
 
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Baileys function, not React
       const { state, saveCreds } = await useMultiFileAuthState(authDir)
       const { version } = await fetchLatestBaileysVersion()
 
-      console.log('[WhatsApp] Baileys version:', version)
+      debug('[WhatsApp] Baileys version:', version)
 
       const logger = pino({ level: 'silent' })
 
@@ -256,15 +257,15 @@ class WhatsAppManager {
       this.sock.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update
 
-        console.log('[WhatsApp] STATUS:', connection || update)
+        debug('[WhatsApp] STATUS:', connection || update)
 
         // QR code received — convert raw QR string to base64 PNG
         if (qr) {
-          console.log('═══════════════════════════════════════════════')
-          console.log('📱 ESCANEA ESTE QR CON WHATSAPP:')
-          console.log('═══════════════════════════════════════════════')
-          console.log(qr)
-          console.log('═══════════════════════════════════════════════')
+          debug('═══════════════════════════════════════════════')
+          debug('📱 ESCANEA ESTE QR CON WHATSAPP:')
+          debug('═══════════════════════════════════════════════')
+          debug(qr)
+          debug('═══════════════════════════════════════════════')
           try {
             const qrPngDataUrl = await QRCode.toDataURL(qr, {
               width: 300,
@@ -277,7 +278,7 @@ class WhatsAppManager {
               code: base64Png,
               timestamp: Date.now(),
             }
-            console.log('[WhatsApp] QR code received and converted to PNG')
+            debug('[WhatsApp] QR code received and converted to PNG')
             this.emitQR(base64Png)
             this.emitStatus()
           } catch (err) {
@@ -294,9 +295,9 @@ class WhatsAppManager {
 
         // Connection established
         if (connection === 'open') {
-          console.log('═══════════════════════════════════════════════')
-          console.log('✅ WHATSAPP CONECTADO')
-          console.log('═══════════════════════════════════════════════')
+          debug('═══════════════════════════════════════════════')
+          debug('✅ WHATSAPP CONECTADO')
+          debug('═══════════════════════════════════════════════')
           this._connected = true
           this._connecting = false
           this._reconnectAttempts = 0
@@ -311,7 +312,7 @@ class WhatsAppManager {
             this._phone = 'connected'
           }
 
-          console.log('[WhatsApp] Connected! Phone:', this._phone)
+          debug('[WhatsApp] Connected! Phone:', this._phone)
           this.emitStatus()
         }
 
@@ -324,18 +325,18 @@ class WhatsAppManager {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
 
           if (statusCode === DisconnectReason.loggedOut) {
-            console.log('[WhatsApp] Logged out, need new QR scan')
+            debug('[WhatsApp] Logged out, need new QR scan')
             this.qrData = null
             this._phone = null
             this._reconnectAttempts = 0
           } else if (statusCode === DisconnectReason.connectionClosed) {
-            console.log('[WhatsApp] Connection closed, reconnecting...')
+            debug('[WhatsApp] Connection closed, reconnecting...')
             this.scheduleReconnect(3000)
           } else if (statusCode === DisconnectReason.connectionLost) {
-            console.log('[WhatsApp] Connection lost, reconnecting...')
+            debug('[WhatsApp] Connection lost, reconnecting...')
             this.scheduleReconnect(2000)
           } else {
-            console.log('[WhatsApp] Connection closed with code:', statusCode)
+            debug('[WhatsApp] Connection closed with code:', statusCode)
             if (statusCode !== DisconnectReason.loggedOut) {
               this.scheduleReconnect(5000)
             }
@@ -375,7 +376,7 @@ class WhatsAppManager {
           if (!text && !mediaInfo) return
 
           const displayText = text || `[${mediaInfo?.type || 'media'}]`
-          console.log(`[WhatsApp] Message from ${phone}: ${displayText.slice(0, 80)}...${mediaInfo ? ` [MEDIA: ${mediaInfo.type}]` : ''}`)
+          debug(`[WhatsApp] Message from ${phone}: ${displayText.slice(0, 80)}...${mediaInfo ? ` [MEDIA: ${mediaInfo.type}]` : ''}`)
           this._lastActivity = new Date().toISOString()
 
           this.emitMessage({ from: phone, message: displayText, pushName })
@@ -384,7 +385,7 @@ class WhatsAppManager {
           if (mediaInfo && this.sock) {
             downloadAndSaveMedia(this.sock, msg, mediaInfo)
               .then((id) => {
-                if (id) console.log(`[WhatsApp] Media downloaded: ${id} (${mediaInfo.type})`)
+                if (id) debug(`[WhatsApp] Media downloaded: ${id} (${mediaInfo.type})`)
               })
               .catch((err) => {
                 console.warn('[WhatsApp] Media download failed (non-critical):', err)
@@ -419,7 +420,7 @@ class WhatsAppManager {
         }
       })
 
-      console.log('[WhatsApp] Socket created, waiting for QR or connection...')
+      debug('[WhatsApp] Socket created, waiting for QR or connection...')
       // Socket events handle the rest (QR generation, connection, messages)
       // No return needed — events drive the lifecycle
 
@@ -483,7 +484,7 @@ class WhatsAppManager {
       }
 
       ensureAuthDir()
-      console.log('[WhatsApp] Disconnected and auth cleared')
+      debug('[WhatsApp] Disconnected and auth cleared')
       this.emitStatus()
       return true
     } catch (error) {
@@ -508,7 +509,7 @@ class WhatsAppManager {
       const result = await this.sock.sendMessage(jid, { text })
 
       this._lastActivity = new Date().toISOString()
-      console.log(`[WhatsApp] Message sent to ${phone}, id: ${result?.key?.id}`)
+      debug(`[WhatsApp] Message sent to ${phone}, id: ${result?.key?.id}`)
 
       return {
         success: true,
@@ -629,7 +630,7 @@ class WhatsAppManager {
     try {
       const result = await this.sock.sendMessage(jid, content)
       this._lastActivity = new Date().toISOString()
-      console.log(`[WhatsApp] Raw message sent to ${jid}, id: ${result?.key?.id}`)
+      debug(`[WhatsApp] Raw message sent to ${jid}, id: ${result?.key?.id}`)
       return { success: true, id: result?.key?.id ?? undefined }
     } catch (error) {
       console.error(`[WhatsApp] Failed to send raw message:`, error)
@@ -671,7 +672,7 @@ class WhatsAppManager {
 
       // ── WHATSAPP-SPECIFIC: Humanize + send via socket ──
       const { aiReplyText } = coreResult
-      console.log(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
+      debug(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
 
       if (aiReplyText && this.sock && this._connected) {
         const humanizedText = humanizeResponse(aiReplyText)
@@ -692,7 +693,7 @@ class WhatsAppManager {
         try {
           const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
           sentMessageId = sendResult?.key?.id ?? undefined
-          console.log(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
+          debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
         } catch (sendErr) {
           console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
         }
@@ -721,11 +722,11 @@ let whatsAppManager: WhatsAppManager
 if (globalForWhatsApp.whatsAppManager?.isSocketAlive()) {
   // Reuse existing instance only if the underlying WebSocket is truly OPEN
   whatsAppManager = globalForWhatsApp.whatsAppManager
-  console.log('[WhatsApp] Reusing live instance from hot-reload')
+  debug('[WhatsApp] Reusing live instance from hot-reload')
 } else {
   // Stale or dead instance — create fresh
   if (globalForWhatsApp.whatsAppManager) {
-    console.log('[WhatsApp] Discarding stale instance (socket dead or not connected)')
+    debug('[WhatsApp] Discarding stale instance (socket dead or not connected)')
   }
   whatsAppManager = new WhatsAppManager()
 }

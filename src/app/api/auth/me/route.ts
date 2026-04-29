@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
             id: true,
             name: true,
             slug: true,
+            plan: true,
             isActive: true,
           },
         },
@@ -81,6 +82,7 @@ export async function GET(req: NextRequest) {
         workspaceId: member?.workspace.id,
         workspaceName: member?.workspace.name,
         workspaceSlug: member?.workspace.slug,
+        workspacePlan: member?.workspace.plan,
       },
     })
   } catch (error) {

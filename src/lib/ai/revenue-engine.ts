@@ -4,6 +4,7 @@
 // Generate → Follow-up → CRM → Route → Deliver
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import type {
   LeadAnalysis,
   RevenueEngineDecision,
@@ -691,14 +692,14 @@ export class RevenueEngine {
     }
 
     try {
-      console.log(`[RevenueEngine] generateResponse → calling chatWithAI (${messages.length} messages, provider: ${aiProvider}, last: "${(context?.lastMessage || '').slice(0, 50)}")`)
+      debug(`[RevenueEngine] generateResponse → calling chatWithAI (${messages.length} messages, provider: ${aiProvider}, last: "${(context?.lastMessage || '').slice(0, 50)}")`)
 
       const result = await chatWithAI(messages, aiProvider, undefined, {
         temperature: dynamicTemperature,
         maxTokens: 2048,
       })
 
-      console.log(`[RevenueEngine] generateResponse → got ${result.content.length} chars from ${result.model} (${result.latencyMs}ms)`)
+      debug(`[RevenueEngine] generateResponse → got ${result.content.length} chars from ${result.model} (${result.latencyMs}ms)`)
 
       return this.parseJHONResponse(result.content, analysis)
     } catch (error) {
@@ -1026,17 +1027,17 @@ export class RevenueEngine {
 
     // Step 1: Analyze lead
     const analysis = this.analyzeLead(messages, contactData)
-    console.log(`[RevenueEngine] Lead analysis: score=${analysis.score}, stage=${analysis.stage}, temperature=${analysis.temperature}`)
+    debug(`[RevenueEngine] Lead analysis: score=${analysis.score}, stage=${analysis.stage}, temperature=${analysis.temperature}`)
 
     // Step 2: Detect triggers
     const trigger = this.detectTrigger(analysis)
     if (trigger.isActive) {
-      console.log(`[RevenueEngine] Trigger active: ${trigger.triggerType} (${trigger.confidence})`)
+      debug(`[RevenueEngine] Trigger active: ${trigger.triggerType} (${trigger.confidence})`)
     }
 
     // Step 3: Make decision
     const decision = this.makeDecision(analysis, trigger)
-    console.log(`[RevenueEngine] Decision: ${decision.action} — ${decision.strategy.slice(0, 80)}`)
+    debug(`[RevenueEngine] Decision: ${decision.action} — ${decision.strategy.slice(0, 80)}`)
 
     // Step 4: Handle objection (if applicable)
     let response: JHONResponse
@@ -1087,7 +1088,7 @@ export class RevenueEngine {
     // Step 8: Route to agent
     const agentRouting = this.routeToAgent(analysis, messages)
 
-    console.log(`[RevenueEngine] Agent routing: ${agentRouting.agentType} (confidence: ${agentRouting.confidence})`)
+    debug(`[RevenueEngine] Agent routing: ${agentRouting.agentType} (confidence: ${agentRouting.confidence})`)
 
     return {
       action: decision.action as RevenueEngineDecision['action'],

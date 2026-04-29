@@ -17,6 +17,7 @@ interface PersonalityCacheEntry {
 const _personalityCache = new Map<string, PersonalityCacheEntry>()
 const PERSONALITY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 import { RevenueEngine } from '@/lib/ai'
 import { preProcess, postProcess, injectContext } from '@/lib/ai/conversation-middleware'
@@ -104,16 +105,16 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     skipAI = false,
   } = input
 
-  console.log(`[CORE 1] Iniciando procesamiento`)
-  console.log(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
-  console.log(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
+  debug(`[CORE 1] Iniciando procesamiento`)
+  debug(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
+  debug(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
 
   // ── FIX: Normalize phone number BEFORE any DB operation ──
   // This ensures consistent format regardless of how the phone arrives
   // (WhatsApp JID, webhook, manual input, CSV import, etc.)
   const normalizedPhone = normalizePhone(phone)
   if (normalizedPhone !== phone) {
-    console.log(`[Core:1] Phone normalized: "${phone}" → "${normalizedPhone}"`)
+    debug(`[Core:1] Phone normalized: "${phone}" → "${normalizedPhone}"`)
   }
   const safePhone = normalizedPhone
 
@@ -136,7 +137,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   if (!workspace) {
     throw new Error('No workspace found')
   }
-  console.log(`[Core:2] ✅ Workspace: ${workspace.name}`)
+  debug(`[Core:2] ✅ Workspace: ${workspace.name}`)
 
   // ── 2. Find or create contact (FIX P0: atomic upsert) ──
   // Uses DB-level unique constraint on (workspaceId, phone) to prevent
@@ -224,7 +225,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 6. Skip AI for media-only messages ──
   if (skipAI) {
-    console.log(`[Core] skipAI=true, skipping AI pipeline for media message`)
+    debug(`[Core] skipAI=true, skipping AI pipeline for media message`)
     return {
       success: true,
       conversationId: conversation.id,
@@ -236,7 +237,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 7. Middleware: pre-process ──
-  console.log(`[Core:5] 🔄 Pre-processing...`)
+  debug(`[Core:5] 🔄 Pre-processing...`)
   
   // FIX P0.1: Load conversation state from DB (L2) into L1 cache before processing
   if (contact?.id) {
@@ -296,7 +297,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
       if (profile) {
         leadProfileContext = leadProfiler.buildProfileContext(profile)
-        console.log(`[Core:DIB] Profile built: archetype=${profile.archetype} temp=${profile.temperature}`)
+        debug(`[Core:DIB] Profile built: archetype=${profile.archetype} temp=${profile.temperature}`)
       }
     } catch (profileErr) {
       console.warn('[Core:DIB] Lead profiling failed (non-critical):', profileErr instanceof Error ? profileErr.message : profileErr)
@@ -304,8 +305,8 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 8. Revenue Engine (AI pipeline) ──
-  console.log(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
-  console.log(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
+  debug(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
+  debug(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
 
   // Read workspace AI settings — FIX P1: Use personality cache to avoid
   // personality flip during hot-reloads. Cache persists across requests for 5 min.
@@ -326,7 +327,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       aiProvider = cached.provider
       customSystemPrompt = cached.customPrompt
       dynamicContext = cached.dynamicContext
-      console.log(`[AI] Using cached personality: ${personalityName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
+      debug(`[AI] Using cached personality: ${personalityName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
     } else {
       // Cache miss or expired — read from workspace settings
       const wsSettings = typeof workspace.settings === 'string'
@@ -349,7 +350,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
         workspaceId: workspace.id,
         timestamp: now,
       })
-      console.log(`[AI] Personality loaded and cached: ${personalityName}`)
+      debug(`[AI] Personality loaded and cached: ${personalityName}`)
     }
   } catch (e) {
     console.warn('[AI] Could not parse workspace settings:', e)
@@ -379,7 +380,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   })
 
   // ── 9. Extract + post-process AI response ──
-  console.log(`[Core:7] 📤 Extracting response...`)
+  debug(`[Core:7] 📤 Extracting response...`)
   let aiReplyText: string | null = null
   if (engineResult.response) {
     const rawResponse =
@@ -392,7 +393,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       const postResult = postProcess(rawResponse, middlewareResult.state)
       aiReplyText = postResult.filteredResponse
       if (postResult.wasModified) {
-        console.log(`[Core] Response post-processed (${rawResponse.length} → ${aiReplyText.length} chars)`)
+        debug(`[Core] Response post-processed (${rawResponse.length} → ${aiReplyText.length} chars)`)
       }
     }
   }
@@ -508,7 +509,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     console.warn('[Core:13] ⚠️ analyticsEvent.create failed (non-critical):', analyticsErr instanceof Error ? analyticsErr.message : analyticsErr)
   }
 
-  console.log(`[Core:✅] Done in ${Date.now() - start}ms | Reply: ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'}`)
+  debug(`[Core:✅] Done in ${Date.now() - start}ms | Reply: ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'}`)
 
   return {
     success: true,

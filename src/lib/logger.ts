@@ -4,6 +4,11 @@
 // Tags: [AUTH] [CORE] [AI] [WHATSAPP] [DB] [ERROR] [MIDDLEWARE] [FLOW]
 // ═══════════════════════════════════════════════════════════════
 
+/** Debug logger — only outputs when DEBUG env var is set */
+export const debug = process.env.DEBUG === 'true'
+  ? (...args: unknown[]) => console.log('[DEBUG]', ...args)
+  : () => {}
+
 export type LogTag =
   | 'AUTH'
   | 'CORE'

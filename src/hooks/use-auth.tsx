@@ -28,6 +28,7 @@ export interface AuthUser {
   workspaceId?: string
   workspaceName?: string
   workspaceSlug?: string
+  workspacePlan?: string
 }
 
 interface AuthContextValue {

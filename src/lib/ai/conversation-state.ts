@@ -7,6 +7,7 @@
 //   Read-miss: loads from DB if not in L1
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 
 // ─── Types ──────────────────────────────────────────────────
@@ -181,7 +182,7 @@ export async function ensureStateLoaded(phone: string, contactId: string): Promi
   const dbState = await loadFromDB(contactId)
   if (dbState) {
     states.set(phone, dbState)
-    console.log(`[ConvState] L2 cache hit for ${phone} — etapa: ${dbState.etapa}, nombre: ${dbState.nombre || 'N/A'}`)
+    debug(`[ConvState] L2 cache hit for ${phone} — etapa: ${dbState.etapa}, nombre: ${dbState.nombre || 'N/A'}`)
   } else {
     // Create empty state in L1 only
     states.set(phone, createEmptyState())
@@ -552,7 +553,7 @@ export function filterRepetitions(response: string, state: ConversationState): s
         if (sentenceNorm.includes(preguntaNorm) || 
             preguntaNorm.includes(sentenceNorm.trim()) ||
             similarity(sentenceNorm, preguntaNorm) > 0.7) {
-          console.log(`[Middleware] Anti-repetición: eliminada pregunta sobre "${campo}"`)
+          debug(`[Middleware] Anti-repetición: eliminada pregunta sobre "${campo}"`)
           continue
         }
         filteredSentences.push(sentence)
@@ -693,7 +694,7 @@ export function detectarCorreccion(state: ConversationState, text: string): bool
 
   for (const pattern of correccionPatterns) {
     if (pattern.test(text)) {
-      console.log(`[Middleware] Corrección detectada en: "${text.slice(0, 60)}"`)
+      debug(`[Middleware] Corrección detectada en: "${text.slice(0, 60)}"`)
       return true
     }
   }

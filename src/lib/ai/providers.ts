@@ -3,6 +3,7 @@
 // All providers route through z-ai-web-dev-sdk
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import ZAI from 'z-ai-web-dev-sdk'
 import crypto from 'crypto'
 import { AI_PROVIDERS } from '@/lib/constants'
@@ -91,7 +92,7 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
 
   for (const model of GLM_DIRECT_MODELS) {
     try {
-      console.log(`[AI 1] Llamando modelo GLM: ${model}...`)
+      debug(`[AI 1] Llamando modelo GLM: ${model}...`)
       const res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -110,10 +111,10 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
         continue
       }
       const data = await res.json()
-      console.log(`[AI 2] Response RAW (${model}):`, JSON.stringify(data, null, 2))
+      debug(`[AI 2] Response RAW (${model}):`, JSON.stringify(data, null, 2))
       const content = extractGLMContent(data)
       if (content && content.trim()) {
-        console.log(`[AI] GLM direct ${model} success (${Date.now() - start}ms, ${content.length} chars)`)
+        debug(`[AI] GLM direct ${model} success (${Date.now() - start}ms, ${content.length} chars)`)
         return {
           content,
           model,
@@ -145,9 +146,9 @@ export class GLMProvider implements AIProviderInstance {
 
     // PRIMARY: Call GLM API directly
     try {
-      console.log('[AI] GLMProvider → trying GLM direct (primary)...')
+      debug('[AI] GLMProvider → trying GLM direct (primary)...')
       const result = await callGLMDirect(messages, { ...options, maxTokens: targetMaxTokens })
-      console.log(`[AI] GLMProvider → GLM direct success in ${Date.now() - start}ms`)
+      debug(`[AI] GLMProvider → GLM direct success in ${Date.now() - start}ms`)
       return result
     } catch (glmErr) {
       const msg = glmErr instanceof Error ? glmErr.message : String(glmErr)
@@ -176,7 +177,7 @@ export class GLMProvider implements AIProviderInstance {
 
       const content = extractGLMContent(completion)
       if (content && content.trim()) {
-        console.log(`[AI] SDK fallback success in ${Date.now() - start}ms`)
+        debug(`[AI] SDK fallback success in ${Date.now() - start}ms`)
         return {
           content,
           model,
@@ -207,9 +208,9 @@ export class GroqProvider implements AIProviderInstance {
 
     // PRIMARY: Call GLM API directly (free models, reliable, no proxy dependency)
     try {
-      console.log('[AI] GroqProvider → trying GLM direct (primary)...')
+      debug('[AI] GroqProvider → trying GLM direct (primary)...')
       const result = await callGLMDirect(messages, { ...options, maxTokens: targetMaxTokens })
-      console.log(`[AI] GroqProvider → GLM direct success in ${Date.now() - start}ms`)
+      debug(`[AI] GroqProvider → GLM direct success in ${Date.now() - start}ms`)
       return result
     } catch (glmErr) {
       const msg = glmErr instanceof Error ? glmErr.message : String(glmErr)
@@ -239,7 +240,7 @@ export class GroqProvider implements AIProviderInstance {
 
       const content = extractGLMContent(completion)
       if (content && content.trim()) {
-        console.log(`[AI] SDK fallback success in ${Date.now() - start}ms`)
+        debug(`[AI] SDK fallback success in ${Date.now() - start}ms`)
         return {
           content,
           model,

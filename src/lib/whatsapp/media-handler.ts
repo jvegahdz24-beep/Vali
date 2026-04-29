@@ -4,6 +4,7 @@
 // Handles: images, videos, audio, documents, stickers, locations
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
@@ -247,7 +248,7 @@ export async function downloadAndSaveMedia(
       },
     })
 
-    console.log(`[Media] Saved: ${mediaInfo.fileName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
+    debug(`[Media] Saved: ${mediaInfo.fileName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error downloading/saving media:', error)
@@ -311,7 +312,7 @@ async function generateThumbnail(
       .webp({ quality: 70 })
       .toFile(thumbPath)
 
-    console.log(`[Media] Thumbnail created: ${thumbFileName}`)
+    debug(`[Media] Thumbnail created: ${thumbFileName}`)
     return thumbPath
   } catch (error) {
     console.warn('[Media] Thumbnail generation failed:', error)
@@ -386,7 +387,7 @@ async function saveMetadataOnly(
       },
     })
 
-    console.log(`[Media] Metadata saved: ${fileName} (ID: ${mediaRecord.id})`)
+    debug(`[Media] Metadata saved: ${fileName} (ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error saving metadata:', error)
@@ -451,7 +452,7 @@ export async function saveUploadedFile(
       },
     })
 
-    console.log(`[Media] Upload saved: ${safeName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
+    debug(`[Media] Upload saved: ${safeName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error saving uploaded file:', error)
