@@ -8,14 +8,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const { searchParams } = new URL(req.url)
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1)
@@ -43,6 +43,8 @@ export async function GET(
     if (!conversation) {
       return Response.json({ error: 'Conversation not found' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     // Get messages with pagination
     const [messages, total] = await Promise.all([
@@ -93,7 +95,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { content, type = 'text', direction = 'outbound', senderType = 'human', channel } = body
@@ -109,6 +111,8 @@ export async function POST(
     if (!conversation) {
       return Response.json({ error: 'Conversation not found' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     // Save the message
     const message = await db.message.create({
@@ -150,7 +154,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { status, assignedTo, assignedAgentId, channel } = body
@@ -159,6 +163,8 @@ export async function PUT(
     if (!conversation) {
       return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     const updateData: Record<string, unknown> = {}
     if (status !== undefined) updateData.status = status
@@ -182,13 +188,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const conversation = await db.conversation.findUnique({ where: { id } })
     if (!conversation) {
       return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     // Soft-delete: set status to 'closed' and clear assignment
     await db.conversation.update({

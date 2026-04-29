@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const conversationId = searchParams.get('conversationId')
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 200)
@@ -16,12 +16,14 @@ export async function GET(req: NextRequest) {
 
     const conversation = await db.conversation.findUnique({
       where: { id: conversationId },
-      select: { id: true, channel: true },
+      select: { id: true, channel: true, workspaceId: true },
     })
 
     if (!conversation) {
       return NextResponse.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     const [messages, total] = await Promise.all([
       db.message.findMany({

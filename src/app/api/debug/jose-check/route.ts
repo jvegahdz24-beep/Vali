@@ -1,10 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
-export async function GET() {
-  const results: Record<string, string> = {}
+export async function GET(request: NextRequest) {
+  try {
+    await requireAuth(request)
 
-  results['jose'] = 'SKIP: jose not installed (auth-edge uses Web Crypto)'
-  results['bcryptjs'] = 'SKIP: using SHA-256 fallback'
+    const results: Record<string, string> = {}
+    results['jose'] = 'SKIP: jose not installed (auth-edge uses Web Crypto)'
+    results['bcryptjs'] = 'SKIP: using SHA-256 fallback'
 
-  return NextResponse.json(results)
+    return NextResponse.json(results)
+  } catch (error) {
+    return errorResponse(error, 'Error en verificación jose')
+  }
 }

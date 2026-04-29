@@ -5,14 +5,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { status } = body
@@ -29,6 +29,8 @@ export async function PUT(
     if (!conversation) {
       return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
+
+    await requireWorkspace(conversation.workspaceId, session.userId)
 
     const updated = await db.conversation.update({
       where: { id },

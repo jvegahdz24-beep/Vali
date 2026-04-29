@@ -12,7 +12,7 @@ import { whatsAppManager } from '@/lib/whatsapp/connection'
 import { ephemeralManager } from '@/lib/whatsapp/ephemeral-client'
 import { reactivationEngine } from '@/lib/ai/reactivation-engine'
 
-const WORKER_KEY = process.env.WORKER_KEY || 'valiflow-worker-2024'
+const WORKER_KEY = process.env.WORKER_KEY || ''
 
 // FIX M9: Timing-safe worker key comparison
 function verifyWorkerKey(request: NextRequest): boolean {

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 import { interpretLeadMemory } from '@/lib/engine/memory'
 import type { ActionType } from '@/lib/engine/types'
 
@@ -116,6 +116,16 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       )
     }
+
+    // Verify the contact belongs to the provided workspace
+    if (contact.workspaceId !== workspaceId) {
+      return NextResponse.json(
+        { error: 'El contacto no pertenece a este workspace' },
+        { status: 403 }
+      )
+    }
+
+    await requireWorkspace(workspaceId, session.userId)
 
     // ─── CASE 1: Reporting an action outcome ────
     if (outcome) {

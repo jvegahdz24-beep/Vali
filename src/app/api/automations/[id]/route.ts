@@ -7,20 +7,22 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const automation = await db.automation.findUnique({ where: { id } })
     if (!automation) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
+
+    await requireWorkspace(automation.workspaceId, session.userId)
 
     return Response.json({
       ...automation,
@@ -37,7 +39,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { name, description, triggerType, triggerConfig, actions, isActive } = body
@@ -46,6 +48,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
@@ -76,13 +80,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const existing = await db.automation.findUnique({ where: { id } })
     if (!existing) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     await db.automation.delete({ where: { id } })
 

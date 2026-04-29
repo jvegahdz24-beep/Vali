@@ -174,7 +174,13 @@ export async function POST(req: NextRequest) {
 
     if (isReset) {
       const providedPin = searchParams.get('pin')
-      const expectedPin = process.env.SEED_PIN || 'VALIFLOW_DEMO_2024'
+      const expectedPin = process.env.SEED_PIN
+      if (!expectedPin) {
+        return NextResponse.json(
+          { error: 'SEED_PIN no configurado. No se permite reset sin PIN.', code: 'FORBIDDEN' },
+          { status: 403 }
+        )
+      }
       if (providedPin !== expectedPin) {
         return NextResponse.json(
           { error: 'PIN de seguridad requerido para reset. Contacta al administrador.', code: 'FORBIDDEN' },

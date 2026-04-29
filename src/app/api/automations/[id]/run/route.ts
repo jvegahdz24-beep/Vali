@@ -6,14 +6,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const automation = await db.automation.findUnique({
@@ -23,6 +23,8 @@ export async function POST(
     if (!automation) {
       return Response.json({ error: 'Automatización no encontrada' }, { status: 404 })
     }
+
+    await requireWorkspace(automation.workspaceId, session.userId)
 
     const runTimestamp = new Date()
 

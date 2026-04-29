@@ -1,13 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — System Diagnostic Endpoint
 // GET /api/debug/system — Full system health check in 1 request
-// No auth required — designed for rapid debugging
 // ═══════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { cookies } from 'next/headers'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +35,10 @@ async function checkComponent(name: string, fn: () => Promise<{ ok: boolean; det
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  try {
+    await requireAuth(request)
+
   const startTime = Date.now()
   const results: Record<string, unknown> = {}
 
@@ -219,4 +222,7 @@ export async function GET() {
       ai: (results.ai as { ok: boolean }).ok ? 'ok' : 'warning',
     },
   })
+  } catch (error) {
+    return errorResponse(error, 'Error en diagnóstico del sistema')
+  }
 }

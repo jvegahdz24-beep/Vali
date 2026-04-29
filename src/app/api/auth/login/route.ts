@@ -21,9 +21,9 @@ function verifyPassword(password: string, storedHash: string): boolean {
   return legacyHash === storedHash
 }
 
-// Demo credentials (only available in non-production environments)
-const DEMO_EMAIL = process.env.NODE_ENV !== 'production' ? 'jvegahdz24@gmail.com' : ''
-const DEMO_PASSWORD = process.env.NODE_ENV !== 'production' ? 'valiflow2026' : ''
+// Demo credentials (only available in non-production AND when env vars are explicitly set)
+const DEMO_EMAIL = process.env.DEMO_EMAIL || ''
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || ''
 
 export async function POST(req: NextRequest) {
   try {

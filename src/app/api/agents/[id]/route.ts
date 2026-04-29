@@ -6,14 +6,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
 
@@ -21,6 +21,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Agent not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     const {
       name,
@@ -78,13 +80,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const existing = await db.agent.findUnique({ where: { id } })
     if (!existing) {
       return Response.json({ error: 'Agent not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     // Delete agent and all related records
     await db.agent.delete({ where: { id } })

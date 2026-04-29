@@ -36,16 +36,23 @@ async function runReactivationCycle(workspaceId: string): Promise<{
 // In production, validate via CRON_SECRET header or bearer token
 
 function isAuthorized(req: NextRequest): boolean {
-  // In sandbox/dev: allow all
-  if (process.env.NODE_ENV !== 'production') return true
-
+  // In non-production environments, still require a valid CRON_SECRET if set
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true // No secret configured = open
 
-  const authHeader = req.headers.get('authorization')
-  const cronHeader = req.headers.get('x-cron-secret')
+  // In production, CRON_SECRET must be configured
+  if (process.env.NODE_ENV === 'production') {
+    if (!cronSecret) return false
+  }
 
-  return authHeader === `Bearer ${cronSecret}` || cronHeader === cronSecret
+  // If CRON_SECRET is set (in any environment), it must be valid
+  if (cronSecret) {
+    const authHeader = req.headers.get('authorization')
+    const cronHeader = req.headers.get('x-cron-secret')
+    return authHeader === `Bearer ${cronSecret}` || cronHeader === cronSecret
+  }
+
+  // No CRON_SECRET configured and not in production — allow for local dev only
+  return process.env.NODE_ENV !== 'production'
 }
 
 // ─── Process Pending Follow-Up Tasks ──────────────────────────

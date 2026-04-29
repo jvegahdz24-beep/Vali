@@ -5,22 +5,27 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { metadata, reaction, isStarred } = body
 
-    const message = await db.message.findUnique({ where: { id } })
+    const message = await db.message.findUnique({
+      where: { id },
+      include: { conversation: { select: { workspaceId: true } } },
+    })
     if (!message) {
       return Response.json({ error: 'Mensaje no encontrado' }, { status: 404 })
     }
+
+    await requireWorkspace(message.conversation.workspaceId, session.userId)
 
     // Merge existing metadata with updates
     let currentMeta: Record<string, unknown> = {}
