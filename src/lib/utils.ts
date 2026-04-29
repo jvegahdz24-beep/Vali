@@ -140,6 +140,12 @@ export function timeAgo(date: Date): string {
   return new Date(date).toLocaleDateString('es-MX')
 }
 
+/** timeAgo variant that accepts an ISO string (or null/undefined) */
+export function timeAgoStr(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Sin actividad'
+  return timeAgo(new Date(dateStr))
+}
+
 export function formatNumber(num: number): string {
   return new Intl.NumberFormat('es-MX').format(num)
 }

@@ -106,9 +106,11 @@ export async function GET(req: NextRequest) {
 
     const contactCompliance = contacts.map((c) => {
       // Consent: active = full consent, inactive = partial, blocked/archived = none
-      const consentScore = c.status === 'active' ? 95 + Math.floor(Math.random() * 6)
-        : c.status === 'inactive' ? 60 + Math.floor(Math.random() * 20)
-        : 10 + Math.floor(Math.random() * 30)
+      // Deterministic based on status, conversation count, and deal count
+      const engagementScore = Math.min((c._count.conversations + c._count.deals) * 5, 20)
+      const consentScore = c.status === 'active' ? 90 + Math.min(engagementScore, 10)
+        : c.status === 'inactive' ? 50 + Math.min(engagementScore, 30)
+        : 5 + Math.min(Math.floor(engagementScore / 2), 25)
 
       // Sealing status based on lead profile existence and score
       const hasProfile = !!c.leadProfile

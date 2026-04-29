@@ -9,8 +9,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "sqlite"
-  url       = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -70,52 +70,52 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  workspaces    WorkspaceMember[]
-  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  accounts        Account[]
+  sessions        Session[]
+  workspaces      WorkspaceMember[]
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
 
   @@index([email])
 }
 
 model Workspace {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  logo        String?
-  industry    String   @default("automotive") // automotive, freelance, real-estate, etc
-  plan        String   @default("free")       // free, starter, pro, enterprise
-  whatsappPhoneId  String?
-  whatsappToken    String?
-  telegramBotToken String?
-  instagramToken   String?
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  logo                  String?
+  industry              String   @default("automotive") // automotive, freelance, real-estate, etc
+  plan                  String   @default("free") // free, starter, pro, enterprise
+  whatsappPhoneId       String?
+  whatsappToken         String?
+  telegramBotToken      String?
+  instagramToken        String?
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
   mercadoPagoCustomerId String?
-  isActive    Boolean  @default(true)
-  settings    String   @default("{}") // JSON settings
-  maxContacts     Int @default(100)
-  maxAgents       Int @default(2)
-  maxConversations Int @default(50)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive              Boolean  @default(true)
+  settings              String   @default("{}") // JSON settings
+  maxContacts           Int      @default(100)
+  maxAgents             Int      @default(2)
+  maxConversations      Int      @default(50)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  owner   User             @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  ownerId String
-  members WorkspaceMember[]
-  contacts    Contact[]
-  conversations Conversation[]
-  pipelines   Pipeline[]
-  agents      Agent[]
-  automations Automation[]
-  followUpRules FollowUpRule[]
-  agentPersonas AgentPersona[]
-  webhookConfigs WebhookConfig[]
+  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  ownerId         String
+  members         WorkspaceMember[]
+  contacts        Contact[]
+  conversations   Conversation[]
+  pipelines       Pipeline[]
+  agents          Agent[]
+  automations     Automation[]
+  followUpRules   FollowUpRule[]
+  agentPersonas   AgentPersona[]
+  webhookConfigs  WebhookConfig[]
   analyticsEvents AnalyticsEvent[]
-  subscription Subscription?
-  deals Deal[]
-  leadProfiles LeadProfile[]
-  appointments Appointment[]
+  subscription    Subscription?
+  deals           Deal[]
+  leadProfiles    LeadProfile[]
+  appointments    Appointment[]
 
   @@index([ownerId])
   @@index([slug])
@@ -140,30 +140,30 @@ model WorkspaceMember {
 // ─────────────────────────────────────────────────────────────
 
 model Contact {
-  id          String   @id @default(cuid())
-  workspaceId String
-  firstName   String
-  lastName    String?
-  phone       String?
-  email       String?
-  avatar      String?
-  source      String   @default("whatsapp") // whatsapp, telegram, instagram, manual, webform
-  tags        String   @default("[]") // JSON array
-  customFields String  @default("{}") // JSON object
-  status      String   @default("active") // active, inactive, archived, blocked
-  leadScore   Int      @default(0)
-  temperature String   @default("cold")
-  notes       String?
+  id            String    @id @default(cuid())
+  workspaceId   String
+  firstName     String
+  lastName      String?
+  phone         String?
+  email         String?
+  avatar        String?
+  source        String    @default("whatsapp") // whatsapp, telegram, instagram, manual, webform
+  tags          String    @default("[]") // JSON array
+  customFields  String    @default("{}") // JSON object
+  status        String    @default("active") // active, inactive, archived, blocked
+  leadScore     Int       @default(0)
+  temperature   String    @default("cold")
+  notes         String?
   lastMessageAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversations Conversation[]
-  deals        Deal[]
+  deals         Deal[]
   agentMemories AgentMemory[]
-  leadProfile  LeadProfile?
-  appointments Appointment[]
+  leadProfile   LeadProfile?
+  appointments  Appointment[]
 
   @@unique([workspaceId, phone], name: "contact_workspace_phone_key")
   @@index([workspaceId])
@@ -177,23 +177,23 @@ model Contact {
 // ─────────────────────────────────────────────────────────────
 
 model Conversation {
-  id          String   @id @default(cuid())
-  workspaceId String
-  contactId   String?
-  channel     String   @default("whatsapp") // whatsapp, telegram, instagram, webchat
-  externalId  String?  // ID from external provider (e.g. WhatsApp Business API)
-  status      String   @default("active") // active, closed, pending, bot
-  assignedTo  String?  // userId
-  assignedAgentId String? // agent id
-  lastMessageAt DateTime @default(now())
+  id                 String   @id @default(cuid())
+  workspaceId        String
+  contactId          String?
+  channel            String   @default("whatsapp") // whatsapp, telegram, instagram, webchat
+  externalId         String? // ID from external provider (e.g. WhatsApp Business API)
+  status             String   @default("active") // active, closed, pending, bot
+  assignedTo         String? // userId
+  assignedAgentId    String? // agent id
+  lastMessageAt      DateTime @default(now())
   lastMessagePreview String?
-  unreadCount Int      @default(0)
-  metadata    String   @default("{}") // JSON
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  unreadCount        Int      @default(0)
+  metadata           String   @default("{}") // JSON
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  contact    Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact    Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
   messages   Message[]
   agentLogs  AgentLog[]
   mediaFiles MediaFile[]
@@ -206,19 +206,19 @@ model Conversation {
 }
 
 model Message {
-  id              String   @id @default(cuid())
-  conversationId  String
-  content         String
-  type            String   @default("text") // text, image, audio, video, document, location, interactive
-  direction       String   @default("inbound") // inbound, outbound
-  senderType      String   @default("contact") // contact, agent, human, system
-  senderId        String?
-  externalId      String?
-  status          String   @default("sent") // sent, delivered, read, failed
-  metadata        String   @default("{}") // JSON (media URL, buttons, etc)
-  isAiGenerated   Boolean  @default(false)
-  agentId         String?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  conversationId String
+  content        String
+  type           String   @default("text") // text, image, audio, video, document, location, interactive
+  direction      String   @default("inbound") // inbound, outbound
+  senderType     String   @default("contact") // contact, agent, human, system
+  senderId       String?
+  externalId     String?
+  status         String   @default("sent") // sent, delivered, read, failed
+  metadata       String   @default("{}") // JSON (media URL, buttons, etc)
+  isAiGenerated  Boolean  @default(false)
+  agentId        String?
+  createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   mediaFiles   MediaFile[]
@@ -233,27 +233,27 @@ model Message {
 // ─────────────────────────────────────────────────────────────
 
 model Agent {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  type        String   @default("qualifier") // qualifier, sales, followup, coach, custom
-  description String?
-  isActive    Boolean  @default(true)
-  model       String   @default("glm") // groq, glm, deepseek, gemini, openai
-  modelName   String   @default("glm-4.5-flash")
-  temperature Float    @default(0.7)
-  maxTokens   Int      @default(4096)
-  systemPrompt String  @default("")
-  personality  String  @default("JHON") // JHON, professional, friendly, aggressive
-  priority    Int      @default(0)
-  config      String   @default("{}") // JSON: hooks, steering, fallback behavior
-  webhookUrl  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  type         String   @default("qualifier") // qualifier, sales, followup, coach, custom
+  description  String?
+  isActive     Boolean  @default(true)
+  model        String   @default("glm") // groq, glm, deepseek, gemini, openai
+  modelName    String   @default("glm-4.5-flash")
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(4096)
+  systemPrompt String   @default("")
+  personality  String   @default("JHON") // JHON, professional, friendly, aggressive
+  priority     Int      @default(0)
+  config       String   @default("{}") // JSON: hooks, steering, fallback behavior
+  webhookUrl   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  logs       AgentLog[]
-  memories   AgentMemory[]
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs          AgentLog[]
+  memories      AgentMemory[]
   followUpRules FollowUpRule[]
 
   @@index([workspaceId])
@@ -262,22 +262,22 @@ model Agent {
 }
 
 model AgentPersona {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  slug        String
-  description String?
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  slug         String
+  description  String?
   systemPrompt String
-  tone        String   @default("professional") // professional, casual, aggressive, empathetic
-  language    String   @default("es")
-  hooks       String   @default("[]") // JSON: pre-processing hooks
-  steering    String   @default("{}") // JSON: conversation steering rules
-  revenueRules String @default("[]") // JSON: revenue engine rules
-  closingRules String @default("[]") // JSON: closing engine rules
-  isActive    Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  tone         String   @default("professional") // professional, casual, aggressive, empathetic
+  language     String   @default("es")
+  hooks        String   @default("[]") // JSON: pre-processing hooks
+  steering     String   @default("{}") // JSON: conversation steering rules
+  revenueRules String   @default("[]") // JSON: revenue engine rules
+  closingRules String   @default("[]") // JSON: closing engine rules
+  isActive     Boolean  @default(true)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -286,22 +286,22 @@ model AgentPersona {
 }
 
 model AgentLog {
-  id              String   @id @default(cuid())
-  agentId         String
-  conversationId  String
-  inputMessage    String
-  outputMessage   String?
-  model           String?
-  tokensUsed      Int      @default(0)
-  latencyMs       Int      @default(0)
-  confidence      Float    @default(0)
-  intent          String?  // detected intent
-  action          String?  // action taken
-  error           String?
-  metadata        String   @default("{}") // JSON
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  agentId        String
+  conversationId String
+  inputMessage   String
+  outputMessage  String?
+  model          String?
+  tokensUsed     Int      @default(0)
+  latencyMs      Int      @default(0)
+  confidence     Float    @default(0)
+  intent         String? // detected intent
+  action         String? // action taken
+  error          String?
+  metadata       String   @default("{}") // JSON
+  createdAt      DateTime @default(now())
 
-  agent       Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([agentId])
@@ -310,16 +310,16 @@ model AgentLog {
 }
 
 model AgentMemory {
-  id          String   @id @default(cuid())
-  agentId     String
-  contactId   String
-  key         String
-  value       String
-  source      String   @default("conversation") // conversation, manual, system
-  confidence  Float    @default(1.0)
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(cuid())
+  agentId    String
+  contactId  String
+  key        String
+  value      String
+  source     String    @default("conversation") // conversation, manual, system
+  confidence Float     @default(1.0)
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -343,7 +343,7 @@ model Pipeline {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   stages    PipelineStage[]
   deals     Deal[]
 
@@ -370,32 +370,32 @@ model PipelineStage {
 }
 
 model Deal {
-  id          String   @id @default(cuid())
-  workspaceId String
-  pipelineId  String
-  stageId     String
-  contactId   String?
-  assignedTo  String?  // userId
-  title       String
-  value       Float    @default(0)
-  currency    String   @default("MXN")
-  description String?
-  source      String   @default("whatsapp") // whatsapp, telegram, instagram, manual
-  status      String   @default("active") // active, won, lost, paused
-  wonAt       DateTime?
-  lostAt      DateTime?
-  lostReason  String?
-  closedBy    String?  // userId or agentId
-  metadata    String   @default("{}") // JSON
-  order       Int      @default(0)
+  id                String    @id @default(cuid())
+  workspaceId       String
+  pipelineId        String
+  stageId           String
+  contactId         String?
+  assignedTo        String? // userId
+  title             String
+  value             Float     @default(0)
+  currency          String    @default("MXN")
+  description       String?
+  source            String    @default("whatsapp") // whatsapp, telegram, instagram, manual
+  status            String    @default("active") // active, won, lost, paused
+  wonAt             DateTime?
+  lostAt            DateTime?
+  lostReason        String?
+  closedBy          String? // userId or agentId
+  metadata          String    @default("{}") // JSON
+  order             Int       @default(0)
   expectedCloseDate DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  stage        PipelineStage @relation(fields: [stageId], references: [id])
-  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pipeline  Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage     PipelineStage @relation(fields: [stageId], references: [id])
+  contact   Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([pipelineId])
@@ -410,21 +410,21 @@ model Deal {
 // ─────────────────────────────────────────────────────────────
 
 model FollowUpRule {
-  id          String   @id @default(cuid())
-  workspaceId String
-  agentId     String?
-  name        String
-  description String?
-  triggerType String   @default("inactivity") // inactivity, scheduled, event-based, deal-stage-change
-  triggerConfig String @default("{}") // JSON
-  channel     String   @default("whatsapp")
-  messageTemplate String @default("")
-  isActive    Boolean  @default(true)
-  maxRetries  Int      @default(3)
-  cooldownHours Int    @default(24)
-  priority    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  workspaceId     String
+  agentId         String?
+  name            String
+  description     String?
+  triggerType     String   @default("inactivity") // inactivity, scheduled, event-based, deal-stage-change
+  triggerConfig   String   @default("{}") // JSON
+  channel         String   @default("whatsapp")
+  messageTemplate String   @default("")
+  isActive        Boolean  @default(true)
+  maxRetries      Int      @default(3)
+  cooldownHours   Int      @default(24)
+  priority        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
@@ -434,17 +434,17 @@ model FollowUpRule {
 }
 
 model FollowUpTask {
-  id          String   @id @default(cuid())
-  workspaceId String
-  ruleId      String
-  contactId   String
+  id             String    @id @default(cuid())
+  workspaceId    String
+  ruleId         String
+  contactId      String
   conversationId String
-  status      String   @default("pending") // pending, sent, failed, cancelled
-  scheduledAt DateTime
-  sentAt      DateTime?
-  retryCount  Int      @default(0)
-  error       String?
-  createdAt   DateTime @default(now())
+  status         String    @default("pending") // pending, sent, failed, cancelled
+  scheduledAt    DateTime
+  sentAt         DateTime?
+  retryCount     Int       @default(0)
+  error          String?
+  createdAt      DateTime  @default(now())
 
   @@index([workspaceId])
   @@index([status])
@@ -456,21 +456,21 @@ model FollowUpTask {
 // ─────────────────────────────────────────────────────────────
 
 model Automation {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  description String?
-  triggerType String   // webhook, schedule, event, message_received, deal_stage_change
-  triggerConfig String @default("{}") // JSON
-  actions     String   @default("[]") // JSON array of actions
-  isActive    Boolean  @default(true)
-  runCount    Int      @default(0)
-  lastRunAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  triggerType   String // webhook, schedule, event, message_received, deal_stage_change
+  triggerConfig String    @default("{}") // JSON
+  actions       String    @default("[]") // JSON array of actions
+  isActive      Boolean   @default(true)
+  runCount      Int       @default(0)
+  lastRunAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  logs     AutomationLog[]
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs      AutomationLog[]
 
   @@index([workspaceId])
   @@index([isActive])
@@ -481,18 +481,18 @@ model Automation {
 // ─────────────────────────────────────────────────────────────
 
 model AutomationLog {
-  id             String      @id @default(cuid())
-  automationId   String
-  workspaceId    String
-  status         String      @default("success") // success, failed, skipped
-  action         String?
-  message        String?
-  contactId      String?
-  contactName    String?
-  metadata       String      @default("{}") // JSON
-  createdAt      DateTime    @default(now())
+  id           String   @id @default(cuid())
+  automationId String
+  workspaceId  String
+  status       String   @default("success") // success, failed, skipped
+  action       String?
+  message      String?
+  contactId    String?
+  contactName  String?
+  metadata     String   @default("{}") // JSON
+  createdAt    DateTime @default(now())
 
-  automation     Automation  @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@index([automationId])
   @@index([workspaceId])
@@ -504,23 +504,23 @@ model AutomationLog {
 // ─────────────────────────────────────────────────────────────
 
 model Subscription {
-  id                String   @id @default(cuid())
-  workspaceId       String   @unique
-  plan              String   @default("free") // free, starter, pro, enterprise
-  status            String   @default("active") // active, past_due, cancelled, trialing
-  provider          String   @default("stripe") // stripe, mercado_pago
-  providerPlanId    String?
-  currentPeriodStart DateTime
-  currentPeriodEnd   DateTime
-  trialEnd          DateTime?
-  cancelAt          DateTime?
-  cancelledAt       DateTime?
-  amount            Float    @default(0)
-  currency          String   @default("MXN")
-  interval          String   @default("monthly") // monthly, yearly
-  metadata          String   @default("{}") // JSON
-  stripeCustomerId      String? // Stripe customer ID
-  stripeSubscriptionId  String? // Stripe subscription ID
+  id                   String    @id @default(cuid())
+  workspaceId          String    @unique
+  plan                 String    @default("free") // free, starter, pro, enterprise
+  status               String    @default("active") // active, past_due, cancelled, trialing
+  provider             String    @default("stripe") // stripe, mercado_pago
+  providerPlanId       String?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  trialEnd             DateTime?
+  cancelAt             DateTime?
+  cancelledAt          DateTime?
+  amount               Float     @default(0)
+  currency             String    @default("MXN")
+  interval             String    @default("monthly") // monthly, yearly
+  metadata             String    @default("{}") // JSON
+  stripeCustomerId     String? // Stripe customer ID
+  stripeSubscriptionId String? // Stripe subscription ID
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -535,7 +535,7 @@ model Subscription {
 model AnalyticsEvent {
   id          String   @id @default(cuid())
   workspaceId String
-  eventType   String   // conversation_created, message_sent, deal_won, agent_used, etc
+  eventType   String // conversation_created, message_sent, deal_won, agent_used, etc
   eventData   String   @default("{}") // JSON
   createdAt   DateTime @default(now())
 
@@ -553,7 +553,7 @@ model AnalyticsEvent {
 model WebhookConfig {
   id          String   @id @default(cuid())
   workspaceId String
-  channel     String   // whatsapp, telegram, instagram, stripe, mercado_pago
+  channel     String // whatsapp, telegram, instagram, stripe, mercado_pago
   webhookUrl  String?
   secret      String?
   isActive    Boolean  @default(true)
@@ -578,19 +578,19 @@ model MediaFile {
   fileName        String
   mimeType        String
   fileSize        Int      @default(0) // bytes
-  filePath        String   // relative path on disk
-  thumbnailPath   String?  // optional thumbnail for images/videos
+  filePath        String // relative path on disk
+  thumbnailPath   String? // optional thumbnail for images/videos
   width           Int?
   height          Int?
-  durationSeconds Int?     // for audio/video
+  durationSeconds Int? // for audio/video
   caption         String?
   source          String   @default("whatsapp") // whatsapp, upload, webhook
-  externalId      String?  // WhatsApp media ID
+  externalId      String? // WhatsApp media ID
   metadata        String   @default("{}") // JSON
   createdAt       DateTime @default(now())
 
-  message       Message?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  conversation  Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  message      Message?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([messageId])
@@ -603,52 +603,52 @@ model MediaFile {
 // ─────────────────────────────────────────────────────────────
 
 model LeadProfile {
-  id          String   @id @default(cuid())
-  contactId   String   @unique
+  id          String @id @default(cuid())
+  contactId   String @unique
   workspaceId String
 
   // Archetype Detection
-  archetype       String   @default("desconocido") // practico, familiar, aspiracional, estrategico, consciente, desconocido
+  archetype           String @default("desconocido") // practico, familiar, aspiracional, estrategico, consciente, desconocido
   archetypeConfidence Float  @default(0)
 
   // Temperature (real-time scoring)
-  temperature  String   @default("cold") // cold, warm, hot
-  score        Int      @default(0)       // 0-100
+  temperature String @default("cold") // cold, warm, hot
+  score       Int    @default(0) // 0-100
 
   // Behavioral signals
-  totalMessages     Int      @default(0)
-  avgResponseTimeMs Int      @default(0)
+  totalMessages     Int       @default(0)
+  avgResponseTimeMs Int       @default(0)
   lastActiveAt      DateTime?
-  firstSeenAt       DateTime @default(now())
+  firstSeenAt       DateTime  @default(now())
 
   // Reactivation tracking
-  reactivateCount    Int      @default(0)   // how many times DIB reactivated this lead
-  lastReactivateAt   DateTime?
-  lastAngleUsed      String?              // which psychological angle was last used
-  reactivationCycle  Int      @default(0)   // current cycle number (1-4)
-  isReactivable      Boolean  @default(true)
+  reactivateCount   Int       @default(0) // how many times DIB reactivated this lead
+  lastReactivateAt  DateTime?
+  lastAngleUsed     String? // which psychological angle was last used
+  reactivationCycle Int       @default(0) // current cycle number (1-4)
+  isReactivable     Boolean   @default(true)
 
   // Extracted data (from conversation parsing)
-  budget           String?               // detected budget range
-  preferredProduct String?               // product/service of interest
-  mainObjection    String?               // primary objection
-  decisionMaker    String?               // who decides (self, partner, boss)
-  timeline         String?               // when they want to buy (now, soon, later, none)
-  communicationStyle String @default("neutral") // direct, cautious, emotional, analytical, neutral
+  budget             String? // detected budget range
+  preferredProduct   String? // product/service of interest
+  mainObjection      String? // primary objection
+  decisionMaker      String? // who decides (self, partner, boss)
+  timeline           String? // when they want to buy (now, soon, later, none)
+  communicationStyle String  @default("neutral") // direct, cautious, emotional, analytical, neutral
 
   // Psychological profile (for reactivation engine)
-  painPoints        String  @default("[]") // JSON array of detected pain points
-  interests         String  @default("[]") // JSON array of detected interests
-  buyingMotivation  String?               // status, comfort, security, savings, excitement
-  priceSensitivity  String  @default("medium") // low, medium, high
-  urgencyLevel      String  @default("low")    // low, medium, high
+  painPoints       String  @default("[]") // JSON array of detected pain points
+  interests        String  @default("[]") // JSON array of detected interests
+  buyingMotivation String? // status, comfort, security, savings, excitement
+  priceSensitivity String  @default("medium") // low, medium, high
+  urgencyLevel     String  @default("low") // low, medium, high
 
   // Metadata
-  metadata    String   @default("{}") // JSON
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
+  metadata  String   @default("{}") // JSON
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 
-  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact   Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([contactId])
@@ -674,7 +674,7 @@ model Appointment {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  contact   Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
@@ -691,7 +691,7 @@ model Appointment {
 model WhatsAppAuth {
   id        String   @id @default(cuid())
   workspace String   @unique
-  authData  String   // JSON: { "creds.json": {...}, "app-state-sync-key-1.json": {...}, ... }
+  authData  String // JSON: { "creds.json": {...}, "app-state-sync-key-1.json": {...}, ... }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -704,11 +704,11 @@ model EngineEvent {
   id          String   @id @default(cuid())
   workspaceId String
   contactId   String
-  type        String   // INTENT_DETECTED, SCORE_UPDATED, TEMPERATURE_CHANGED, ACTION_RECOMMENDED, ACTION_EXECUTED, ACTION_OUTCOME, AUTO_ACTION_TRIGGERED, DECAY_APPLIED, PATTERN_IDENTIFIED
-  subType     String?  // For ACTION_OUTCOME: REPLIED, NO_RESPONSE_2H, NO_RESPONSE_24H, INTEREST_CONFIRMED, MEETING_BOOKED, GHOSTED, CLOSED_WON, CLOSED_LOST. For patterns: asked_price, requested_info, etc.
+  type        String // INTENT_DETECTED, SCORE_UPDATED, TEMPERATURE_CHANGED, ACTION_RECOMMENDED, ACTION_EXECUTED, ACTION_OUTCOME, AUTO_ACTION_TRIGGERED, DECAY_APPLIED, PATTERN_IDENTIFIED
+  subType     String? // For ACTION_OUTCOME: REPLIED, NO_RESPONSE_2H, NO_RESPONSE_24H, INTEREST_CONFIRMED, MEETING_BOOKED, GHOSTED, CLOSED_WON, CLOSED_LOST. For patterns: asked_price, requested_info, etc.
   metadata    String   @default("{}") // JSON: { action, expectedOutcome, deadline, ifNotMet, decisionTrace, patternEffectiveness, scoreDelta, ... }
-  score       Int?     // Score at time of event
-  temperature String?  // Temperature at time of event
+  score       Int? // Score at time of event
+  temperature String? // Temperature at time of event
   createdAt   DateTime @default(now())
 
   @@index([workspaceId])

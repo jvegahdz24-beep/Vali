@@ -114,7 +114,7 @@ export function errorResponse(error: unknown, fallbackMessage = 'Error interno d
   console.error('[API Error]', errMsg, error)
 
   return Response.json(
-    { error: fallbackMessage, code: 'INTERNAL_ERROR', details: errMsg },
+    { error: fallbackMessage, code: 'INTERNAL_ERROR' },
     { status: 500 }
   )
 }

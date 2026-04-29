@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 
-// In-memory log store for developer panel
+// In-memory log store for developer panel — starts empty, populated at runtime
 interface LogEntry {
   id: string
   timestamp: string
@@ -10,64 +10,7 @@ interface LogEntry {
   message: string
 }
 
-const logs: LogEntry[] = [
-  {
-    id: '1',
-    timestamp: new Date(Date.now() - 300000).toISOString(),
-    level: 'info',
-    source: 'whatsapp',
-    message: 'Conexión establecida - WhatsApp Business API',
-  },
-  {
-    id: '2',
-    timestamp: new Date(Date.now() - 240000).toISOString(),
-    level: 'info',
-    source: 'ai-engine',
-    message: 'Revenue Engine procesó mensaje - Conversación activa',
-  },
-  {
-    id: '3',
-    timestamp: new Date(Date.now() - 180000).toISOString(),
-    level: 'warn',
-    source: 'rate-limit',
-    message: 'Rate limit alcanzado para API de IA - 429 Too Many Requests',
-  },
-  {
-    id: '4',
-    timestamp: new Date(Date.now() - 120000).toISOString(),
-    level: 'info',
-    source: 'crm',
-    message: 'Lead calificado: Jonathan Vega - Score: 95 - Etapa: Cierre',
-  },
-  {
-    id: '5',
-    timestamp: new Date(Date.now() - 60000).toISOString(),
-    level: 'error',
-    source: 'ai-engine',
-    message: 'Timeout al conectar con API de IA - 30000ms excedido',
-  },
-  {
-    id: '6',
-    timestamp: new Date(Date.now() - 30000).toISOString(),
-    level: 'info',
-    source: 'automation',
-    message: 'Seguimiento automático - Reactivación para Sonia Rendón',
-  },
-  {
-    id: '7',
-    timestamp: new Date(Date.now() - 15000).toISOString(),
-    level: 'info',
-    source: 'webhook',
-    message: 'Webhook delivery successful - POST https://hooks.example.com/valiflow - 200 OK',
-  },
-  {
-    id: '8',
-    timestamp: new Date(Date.now() - 5000).toISOString(),
-    level: 'info',
-    source: 'conv-state',
-    message: 'Estado de conversación restaurado desde BD (L2 cache hit)',
-  },
-]
+const logs: LogEntry[] = []
 
 // Add a log entry (can be called from other routes)
 export function addDeveloperLog(level: 'info' | 'warn' | 'error', source: string, message: string) {

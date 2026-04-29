@@ -143,7 +143,6 @@ export async function GET(req: NextRequest) {
           nombre: member.user.name || member.user.email || 'Sin nombre',
           leads: assignedConversations,
           conversion: conversionRate,
-          enLinea: true, // We don't track real-time presence
           score,
         }
       })
