@@ -106,7 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!res.ok) {
-        return { success: false, error: (data.error as string) || 'Error al iniciar sesión' }
+        // Include details for debugging internal errors
+        const baseError = (data.error as string) || 'Error al iniciar sesión'
+        const details = data.details as string | undefined
+        const fullError = details && details !== 'undefined' ? `${baseError} (${details.slice(0, 120)})` : baseError
+        return { success: false, error: fullError }
       }
 
       if (data.success) {
