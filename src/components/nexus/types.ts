@@ -79,7 +79,7 @@ export interface User {
   workspaceName?: string
 }
 
-export type ViewType = 'chat' | 'agents' | 'tasks' | 'memories' | 'insights'
+export type ViewType = 'chat' | 'agents' | 'tasks' | 'memories' | 'insights' | 'profile'
 export type AgentType = 'nexus' | 'coder' | 'analyst' | 'writer'
 
 export interface AgentConfig {
@@ -139,6 +139,53 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     textLight: 'text-rose-600',
     textDark: 'text-rose-400',
   },
+}
+
+export interface UserProfile {
+  userId: string
+  age?: number
+  gender?: string
+  occupation?: string
+  company?: string
+  workSchedule: string // JSON string
+  children: number
+  relationshipStatus?: string
+  education?: string
+  location?: string
+  whatsappPhone?: string
+  interests: string // JSON array string
+  goals: string // JSON array string
+  bio?: string
+  coachMode: boolean
+  summaryEnabled: boolean
+  summaryInterval: number
+  temperature: number
+  tempUpdatedAt?: string
+  lastSummarySent?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TemperatureLog {
+  id: string
+  userId: string
+  value: number
+  label?: string
+  source: string
+  metadata: string
+  createdAt: string
+}
+
+export interface WhatsAppLog {
+  id: string
+  userId: string
+  phone: string
+  message: string
+  type: string
+  status: string
+  sentAt?: string
+  error?: string
+  createdAt: string
 }
 
 export const QUICK_ACTIONS = [

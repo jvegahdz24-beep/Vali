@@ -99,3 +99,58 @@ Stage Summary:
 - Complete autonomous assistant UI with 5 functional views
 - Auth flow: session check → login → seed → load data
 - Premium polish with glass morphism, smooth animations, responsive design
+
+---
+Task ID: 1-3-6
+Agent: Backend Agent
+Task: NEXUS AI — Life Coach Profile + Temperature + WhatsApp Auto-Summary
+
+Work Log:
+- Added 3 new Prisma models to schema.prisma: NexusProfile (1:1 with User via userId PK), NexusTemperatureLog, NexusWhatsAppLog
+- Added 3 relation fields to existing User model (nexusProfile, nexusTempLogs, nexusWhatsAppLogs)
+- Fixed relation naming: NexusProfile uses userId as @id (not id), so child models reference [userId] not [id]
+- Used named relations (@relation("TempLogProfile"), @relation("TempLogUser"), etc.) to allow dual User+NexusProfile relations on log models
+- Created 3 API route files under /api/nexus/:
+  - /api/nexus/profile — GET (fetch or auto-create profile), POST (upsert with partial update support)
+  - /api/nexus/temperature — GET (current temp + last 24 logs), POST (AI-calculated temperature via z-ai-web-dev-sdk)
+  - /api/nexus/whatsapp-summary — GET (logs + settings), POST (generate AI summary + log to DB)
+- Temperature AI analysis uses user profile, recent conversations, task counts to calculate 0-100 wellness score
+- WhatsApp summary generates motivational coaching message with Spanish context (max 300 words)
+- Prisma generate + db push completed successfully (SQLite)
+- ESLint: 0 errors in all 3 new API route files
+
+Stage Summary:
+- 4 files modified/created (1 schema update + 3 API routes)
+- DB schema pushed with 3 new tables (NexusProfile, NexusTemperatureLog, NexusWhatsAppLog)
+- All routes authenticated via requireAuth, z-ai-web-dev-sdk used backend-only
+- Temperature categories: critical (0-20), low (21-40), neutral (41-60), good (61-80), excellent (81-100)
+- WhatsApp summaries logged with status "logged" (ready for WhatsApp API integration)
+
+---
+Task ID: 4-5
+Agent: Frontend Agent
+Task: NEXUS AI — Life Coach Profile UI + Temperature Bar + WhatsApp Panel
+
+Work Log:
+- Created 3 new component files under src/components/nexus/:
+  - temperature-bar.tsx — Reusable temperature bar (sm/md/lg sizes), 5-color gradient, animated fill, click-to-refresh
+  - profile-view.tsx — 5-section Life Coach profile: Datos Personales, Trabajo, Contacto, Metas/Intereses, Coach Settings
+  - whatsapp-panel.tsx — WhatsApp status panel with live countdown, send-now button, summary history
+- Updated types.ts: Added UserProfile, TemperatureLog, WhatsAppLog interfaces; ViewType now includes 'profile'
+- Updated nexus-shell.tsx:
+  - Added Thermometer nav item to sidebar
+  - Added TemperatureBar (sm) to header bar (always visible, click to refresh)
+  - Added ProfileView rendering for profile view
+  - Added profile state, temperature state, save/refresh handlers
+  - Added profile API call to loadInitialData
+- Profile view: tag/chip inputs for interests/goals, time inputs for work schedule, toggle switches for coach mode
+- Temperature bar: red(0-20)→orange(21-40)→yellow(41-60)→emerald(61-80)→cyan(81-100) with labels
+- WhatsApp panel: live countdown timer, connected/disconnected indicator, history log
+- ESLint: 0 errors across all files
+
+Stage Summary:
+- 5 files created/modified (3 new components + 2 updates)
+- 6 total views in NEXUS: Chat, Agents, Tasks, Memories, Insights, Profile
+- Temperature bar always visible in header, click to AI-recalculate
+- Full Life Coach profile with WhatsApp auto-summary configuration
+- Cycle perpetuo: summary interval configurable (15min to 12hrs), logged and ready for WhatsApp API

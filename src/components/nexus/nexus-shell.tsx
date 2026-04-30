@@ -22,6 +22,7 @@ import {
   Sun,
   Loader2,
   LogOut,
+  Thermometer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +44,8 @@ import { AgentsView } from './agents-view'
 import { TasksView } from './tasks-view'
 import { MemoriesView } from './memories-view'
 import { InsightsView } from './insights-view'
+import { ProfileView } from './profile-view'
+import { TemperatureBar } from './temperature-bar'
 import {
   AgentType,
   AGENT_CONFIGS,
@@ -54,6 +57,9 @@ import {
   Memory,
   Insight,
   User,
+  UserProfile,
+  type TemperatureLog,
+  type WhatsAppLog,
 } from './types'
 
 // ─── Agent icon for sidebar ───
@@ -73,6 +79,7 @@ const NAV_ITEMS: { key: ViewType; label: string; icon: React.ReactNode }[] = [
   { key: 'tasks', label: 'Tareas', icon: <ListTodo className="w-4 h-4" /> },
   { key: 'memories', label: 'Memoria', icon: <Database className="w-4 h-4" /> },
   { key: 'insights', label: 'Insights', icon: <Lightbulb className="w-4 h-4" /> },
+  { key: 'profile', label: 'Perfil', icon: <Thermometer className="w-4 h-4" /> },
 ]
 
 // ─── Helper: group conversations by date ───
@@ -127,6 +134,11 @@ export function NexusShell() {
   const [memories, setMemories] = useState<Memory[]>([])
   const [insights, setInsights] = useState<Insight[]>([])
 
+  // Profile state
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [temperature, setTemperature] = useState<number>(50)
+  const [tempLabel, setTempLabel] = useState('Estable')
+
   // Loading state
   const [isLoading, setIsLoading] = useState(false)
 
@@ -157,12 +169,13 @@ export function NexusShell() {
       await fetch('/api/nexus/seed', { method: 'POST' }).catch(() => {})
 
       // Load all data in parallel
-      const [convRes, agentRes, taskRes, memRes, insightRes] = await Promise.all([
+      const [convRes, agentRes, taskRes, memRes, insightRes, profileRes] = await Promise.all([
         fetch('/api/nexus/chat'),
         fetch('/api/nexus/agents'),
         fetch('/api/nexus/tasks'),
         fetch('/api/nexus/memories'),
         fetch('/api/nexus/insights'),
+        fetch('/api/nexus/profile'),
       ])
 
       if (convRes.ok) {
@@ -199,6 +212,12 @@ export function NexusShell() {
       if (insightRes.ok) {
         const data = await insightRes.json()
         setInsights(data.insights || [])
+      }
+
+      if (profileRes.ok) {
+        const data = await profileRes.json()
+        setProfile(data.profile)
+        setTemperature(data.profile.temperature ?? 50)
       }
     } catch (err) {
       console.error('Failed to load initial data:', err)
@@ -443,6 +462,37 @@ export function NexusShell() {
       }
     } catch (err) {
       console.error('Failed to load insights:', err)
+    }
+  }, [])
+
+  // ─── Temperature refresh ───
+  const handleRefreshTemperature = useCallback(async () => {
+    try {
+      const res = await fetch('/api/nexus/temperature', { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setTemperature(data.temperature)
+        setTempLabel(data.label || 'Estable')
+      }
+    } catch (err) {
+      console.error('Failed to refresh temperature:', err)
+    }
+  }, [])
+
+  // ─── Profile save ───
+  const handleSaveProfile = useCallback(async (data: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/nexus/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setProfile(result.profile)
+      }
+    } catch (err) {
+      console.error('Failed to save profile:', err)
     }
   }, [])
 
@@ -716,6 +766,8 @@ export function NexusShell() {
                     ? 'Tareas'
                     : currentView === 'memories'
                     ? 'Memoria'
+                    : currentView === 'profile'
+                    ? 'Perfil'
                     : 'Insights'}
                 </h1>
                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
@@ -723,6 +775,11 @@ export function NexusShell() {
                 </p>
               </div>
             </div>
+
+            {/* Temperature bar — always visible in header */}
+            <motion.div whileTap={{ scale: 0.95 }} className="hidden sm:block cursor-pointer" onClick={handleRefreshTemperature}>
+              <TemperatureBar value={temperature} label={tempLabel} size="sm" showValue animated />
+            </motion.div>
           </div>
 
           <div className="flex items-center gap-1">
@@ -812,6 +869,13 @@ export function NexusShell() {
                     insights={insights}
                     onGenerateInsights={handleGenerateInsights}
                     onLoadInsights={handleLoadInsights}
+                  />
+                )}
+                {currentView === 'profile' && (
+                  <ProfileView
+                    profile={profile}
+                    onSave={handleSaveProfile}
+                    onRefreshTemperature={handleRefreshTemperature}
                   />
                 )}
               </motion.div>

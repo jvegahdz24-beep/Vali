@@ -81,6 +81,9 @@ model User {
   nexusAgents        NexusAgent[]
   nexusTasks         NexusTask[]
   nexusInsights      NexusInsight[]
+  nexusProfile       NexusProfile?
+  nexusTempLogs      NexusTemperatureLog[] @relation("TempLogUser")
+  nexusWhatsAppLogs  NexusWhatsAppLog[]   @relation("WhatsAppLogUser")
 
   @@index([email])
 }
@@ -845,5 +848,75 @@ model NexusInsight {
   @@index([userId])
   @@index([type])
   @@index([isRead])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NEXUS AI — Life Coach Profile & Temperature
+// ─────────────────────────────────────────────────────────────
+
+model NexusProfile {
+  userId            String   @id // 1:1 with User, uses userId as PK
+  age               Int?
+  gender            String?  // masculino, femenino, otro, no_especificar
+  occupation        String?
+  company           String?
+  workSchedule      String   @default("{}") // JSON: {workStart:"09:00", workEnd:"18:00", days:["Mon-Fri"]}
+  children          Int      @default(0)
+  relationshipStatus String? // soltero, casado, divorciado, union_libre, viudo
+  education         String?  // secundaria, preparatoria, licenciatura, maestria, doctorado, otro
+  location          String?  // city, state, country
+  whatsappPhone     String?  // WhatsApp number for auto-summary (e.g. "+5215512345678")
+  interests         String   @default("[]") // JSON array of interests
+  goals             String   @default("[]") // JSON array of life goals
+  bio               String?  // short bio about the user
+  coachMode         Boolean  @default(false) // life coach mode enabled
+  summaryEnabled    Boolean  @default(false) // auto WhatsApp summary enabled
+  summaryInterval   Int      @default(15) // minutes between WhatsApp summaries
+  temperature       Float    @default(50.0) // current temperature 0-100
+  tempUpdatedAt     DateTime?
+  lastSummarySent   DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tempLogs      NexusTemperatureLog[] @relation("TempLogProfile")
+  whatsappLogs  NexusWhatsAppLog[]   @relation("WhatsAppLogProfile")
+
+  @@index([userId])
+}
+
+model NexusTemperatureLog {
+  id        String   @id @default(cuid())
+  userId    String
+  value     Float    // 0-100
+  label     String?  // optional label like "Después de conversación", "Checkpoint"
+  source    String   @default("system") // system, conversation, manual, ai_analysis
+  metadata  String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+
+  profile NexusProfile @relation("TempLogProfile", fields: [userId], references: [userId], onDelete: Cascade)
+  user    User          @relation("TempLogUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model NexusWhatsAppLog {
+  id        String   @id @default(cuid())
+  userId    String
+  phone     String
+  message   String
+  type      String   @default("summary") // summary, checkin, alert, test
+  status    String   @default("pending") // pending, sent, failed
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime @default(now())
+
+  profile NexusProfile @relation("WhatsAppLogProfile", fields: [userId], references: [userId], onDelete: Cascade)
+  user    User          @relation("WhatsAppLogUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
   @@index([createdAt])
 }
