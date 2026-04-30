@@ -41,6 +41,7 @@ import { useTheme } from 'next-themes'
 
 import { LoginScreen } from './login-screen'
 import { ChatView } from './chat-view'
+import { ContactsView } from './contacts-view'
 import { AgentsView } from './agents-view'
 import { TasksView } from './tasks-view'
 import { MemoriesView } from './memories-view'
@@ -59,6 +60,7 @@ import {
   Insight,
   User,
   UserProfile,
+  type NexusContact,
   type TemperatureLog,
   type WhatsAppLog,
 } from './types'
@@ -76,6 +78,7 @@ function AgentIconSmall({ type, className = 'w-3.5 h-3.5' }: { type: string; cla
 // ─── Navigation items ───
 const NAV_ITEMS: { key: ViewType; label: string; icon: React.ReactNode }[] = [
   { key: 'chat', label: 'Chat', icon: <MessageSquare className="w-4 h-4" /> },
+  { key: 'contacts', label: 'Personas', icon: <Users className="w-4 h-4" /> },
   { key: 'agents', label: 'Agentes', icon: <Users className="w-4 h-4" /> },
   { key: 'tasks', label: 'Tareas', icon: <ListTodo className="w-4 h-4" /> },
   { key: 'memories', label: 'Memoria', icon: <Database className="w-4 h-4" /> },
@@ -134,6 +137,7 @@ export function NexusShell() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [memories, setMemories] = useState<Memory[]>([])
   const [insights, setInsights] = useState<Insight[]>([])
+  const [contacts, setContacts] = useState<NexusContact[]>([])
 
   // Profile state
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -170,13 +174,14 @@ export function NexusShell() {
       await fetch('/api/nexus/seed', { method: 'POST' }).catch(() => {})
 
       // Load all data in parallel
-      const [convRes, agentRes, taskRes, memRes, insightRes, profileRes] = await Promise.all([
+      const [convRes, agentRes, taskRes, memRes, insightRes, profileRes, contRes] = await Promise.all([
         fetch('/api/nexus/chat'),
         fetch('/api/nexus/agents'),
         fetch('/api/nexus/tasks'),
         fetch('/api/nexus/memories'),
         fetch('/api/nexus/insights'),
         fetch('/api/nexus/profile'),
+        fetch('/api/nexus/contacts'),
       ])
 
       if (convRes.ok) {
@@ -219,6 +224,11 @@ export function NexusShell() {
         const data = await profileRes.json()
         setProfile(data.profile)
         setTemperature(data.profile.temperature ?? 50)
+      }
+
+      if (contRes.ok) {
+        const data = await contRes.json()
+        setContacts(data.contacts || [])
       }
     } catch (err) {
       console.error('Failed to load initial data:', err)
@@ -464,6 +474,26 @@ export function NexusShell() {
     } catch (err) {
       console.error('Failed to load insights:', err)
     }
+  }, [])
+
+  // ─── Contact actions ───
+  const handleCreateContact = useCallback(async (data: { name: string; phone?: string; email?: string; relation: string; company?: string; role?: string; birthday?: string; notes?: string }) => {
+    try {
+      const res = await fetch('/api/nexus/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      if (res.ok) { const result = await res.json(); setContacts(prev => [result.contact, ...prev]) }
+    } catch (err) { console.error('Failed to create contact:', err) }
+  }, [])
+
+  const handleDeleteContact = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/nexus/contacts?id=${id}`, { method: 'DELETE' })
+      setContacts(prev => prev.filter(c => c.id !== id))
+    } catch (err) { console.error('Failed to delete contact:', err) }
+  }, [])
+
+  const handleLoadContacts = useCallback(async () => {
+    try { const res = await fetch('/api/nexus/contacts'); if (res.ok) { const data = await res.json(); setContacts(data.contacts || []) } }
+    catch (err) { console.error('Failed to load contacts:', err) }
   }, [])
 
   // ─── Temperature refresh ───
@@ -761,6 +791,8 @@ export function NexusShell() {
                 <h1 className="text-sm font-semibold leading-none">
                   {currentView === 'chat'
                     ? (currentConv?.title || 'Nuevo chat')
+                    : currentView === 'contacts'
+                    ? 'Personas'
                     : currentView === 'agents'
                     ? 'Agentes IA'
                     : currentView === 'tasks'
@@ -847,6 +879,14 @@ export function NexusShell() {
                     onNewChat={handleNewChat}
                     onSelectAgent={setSelectedAgent}
                     onSendMessage={handleSendMessage}
+                  />
+                )}
+                {currentView === 'contacts' && (
+                  <ContactsView
+                    contacts={contacts}
+                    onCreateContact={handleCreateContact}
+                    onDeleteContact={handleDeleteContact}
+                    onLoadContacts={handleLoadContacts}
                   />
                 )}
                 {currentView === 'agents' && (

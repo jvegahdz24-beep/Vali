@@ -79,7 +79,7 @@ export interface User {
   workspaceName?: string
 }
 
-export type ViewType = 'chat' | 'agents' | 'tasks' | 'memories' | 'insights' | 'profile'
+export type ViewType = 'chat' | 'contacts' | 'agents' | 'tasks' | 'memories' | 'insights' | 'profile'
 export type AgentType = 'nexus' | 'coder' | 'analyst' | 'writer'
 
 export interface AgentConfig {
@@ -200,6 +200,22 @@ export interface CalendarEvent {
   end: string
   description?: string
   link?: string
+}
+
+export interface NexusContact {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  relation: string
+  company: string | null
+  role: string | null
+  birthday: string | null
+  notes: string | null
+  isFavorite: boolean
+  tags: string
+  createdAt: string
+  updatedAt: string
 }
 
 export const QUICK_ACTIONS = [

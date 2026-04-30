@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { db } from '@/lib/db'
 
-// POST /api/nexus/seed — Seed default agents and welcome message
+// POST /api/nexus/seed — Seed default agents only (clean setup)
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request)
@@ -61,38 +61,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create welcome conversation
-    const welcomeConv = await db.nexusConversation.create({
-      data: {
-        userId: session.userId,
-        title: 'Bienvenido a NEXUS AI',
-        agentType: 'nexus',
-      }
-    })
-
-    await db.nexusMessage.create({
-      data: {
-        conversationId: welcomeConv.id,
-        role: 'assistant',
-        content: `¡Hola! Soy **NEXUS**, tu asistente virtual 100% autónomo. 🚀
-
-Estoy aquí para ayudarte en **absolutamente cualquier cosa**. Soy capaz de:
-
-• 💬 **Conversar inteligentemente** — Razono, analizo y comprendo contexto
-• 🧠 **Recordar** — Guardo información importante sobre ti entre conversaciones
-• 🤖 **Actuar autónomamente** — Puedo tomar iniciativa y sugerir acciones
-• 👥 **Múltiples agentes** — Cambia entre NEXUS, CODEX, ANALYTICA o ESCRITOR según necesites
-• 📋 **Gestionar tareas** — Creo, priorizo y rastreo tareas para ti
-• 💡 **Generar insights** — Analizo nuestros patrones de conversación para darte sugerencias
-
-**¿En qué puedo ayudarte hoy?** Escribe cualquier cosa y me adaptaré a ti.`,
-      }
-    })
-
     return Response.json({
       success: true,
-      conversationId: welcomeConv.id,
-      message: 'Agentes iniciales y conversación de bienvenida creados'
+      message: 'Agentes iniciales creados'
     })
   } catch (error) {
     return errorResponse(error)

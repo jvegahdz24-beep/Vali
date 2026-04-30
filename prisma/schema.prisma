@@ -84,6 +84,7 @@ model User {
   nexusProfile       NexusProfile?
   nexusTempLogs      NexusTemperatureLog[] @relation("TempLogUser")
   nexusWhatsAppLogs  NexusWhatsAppLog[]   @relation("WhatsAppLogUser")
+  nexusContacts    NexusContact[]
 
   @@index([email])
 }
@@ -926,4 +927,30 @@ model NexusWhatsAppLog {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NEXUS AI — Personal Contacts
+// ─────────────────────────────────────────────────────────────
+
+model NexusContact {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  phone       String?
+  email       String?
+  relation    String   @default("amigo") // familiar, amigo, companero, jefo, colega, otro
+  company     String?
+  role        String?
+  birthday    String?  // "MM-DD" format
+  notes       String?
+  isFavorite  Boolean  @default(false)
+  tags        String   @default("[]") // JSON array of tags
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([relation])
 }
