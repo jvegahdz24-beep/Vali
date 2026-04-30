@@ -162,6 +162,11 @@ export interface UserProfile {
   temperature: number
   tempUpdatedAt?: string
   lastSummarySent?: string
+  vacationMode: boolean
+  googleCalendarConnected: boolean
+  googleCalendarSyncEnabled: boolean
+  vacationStartAt?: string
+  vacationEndAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -186,6 +191,15 @@ export interface WhatsAppLog {
   sentAt?: string
   error?: string
   createdAt: string
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  description?: string
+  link?: string
 }
 
 export const QUICK_ACTIONS = [

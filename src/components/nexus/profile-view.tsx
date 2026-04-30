@@ -18,6 +18,10 @@ import {
   Save,
   Check,
   Loader2,
+  Calendar,
+  Link2,
+  ExternalLink,
+  Plug,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,7 +41,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TemperatureBar } from './temperature-bar'
 import { WhatsAppPanel } from './whatsapp-panel'
-import type { UserProfile, WhatsAppLog } from './types'
+import type { UserProfile, WhatsAppLog, CalendarEvent } from './types'
 
 // ─── Props ───
 interface ProfileViewProps {
@@ -97,6 +101,19 @@ export function ProfileView({ profile, onSave, onRefreshTemperature }: ProfileVi
   const [waLogs, setWaLogs] = useState<WhatsAppLog[]>([])
   const [waConnected, setWaConnected] = useState(true)
 
+  // Vacation state
+  const [vacationEnabled, setVacationEnabled] = useState(profile?.vacationMode ?? false)
+  const [vacationStart, setVacationStart] = useState(profile?.vacationStartAt ? profile.vacationStartAt.slice(0, 10) : '')
+  const [vacationEnd, setVacationEnd] = useState(profile?.vacationEndAt ? profile.vacationEndAt.slice(0, 10) : '')
+  const [vacationSaving, setVacationSaving] = useState(false)
+
+  // Calendar state
+  const [calendarConnected, setCalendarConnected] = useState(profile?.googleCalendarConnected ?? false)
+  const [calendarSync, setCalendarSync] = useState(profile?.googleCalendarSyncEnabled ?? false)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [googleCredsConfigured, setGoogleCredsConfigured] = useState(true)
+  const [calendarLoading, setCalendarLoading] = useState(false)
+
   // Parse saved data on profile change
   useEffect(() => {
     if (!profile) return
@@ -120,6 +137,12 @@ export function ProfileView({ profile, onSave, onRefreshTemperature }: ProfileVi
       setWorkEnd(sched.end || '18:00')
       setWorkDays(sched.days || ['mon', 'tue', 'wed', 'thu', 'fri'])
     } catch { /* ignore */ }
+
+    setVacationEnabled(profile.vacationMode)
+    setVacationStart(profile.vacationStartAt ? profile.vacationStartAt.slice(0, 10) : '')
+    setVacationEnd(profile.vacationEndAt ? profile.vacationEndAt.slice(0, 10) : '')
+    setCalendarConnected(profile.googleCalendarConnected)
+    setCalendarSync(profile.googleCalendarSyncEnabled)
 
     try {
       setInterests(profile.interests ? JSON.parse(profile.interests) : [])
@@ -181,6 +204,97 @@ export function ProfileView({ profile, onSave, onRefreshTemperature }: ProfileVi
       setSaving(false)
     }
   }, [age, gender, relationshipStatus, children, education, occupation, company, workStart, workEnd, workDays, location, whatsappPhone, bio, interests, goals, coachMode, summaryEnabled, summaryInterval, onSave])
+
+  // ─── Vacation toggle ───
+  const handleVacationToggle = useCallback(async (enabled: boolean) => {
+    setVacationSaving(true)
+    try {
+      const res = await fetch('/api/nexus/vacation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled,
+          startDate: enabled ? vacationStart || undefined : undefined,
+          endDate: enabled ? vacationEnd || undefined : undefined,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.profile) {
+          setVacationEnabled(data.profile.vacationMode)
+          setVacationStart(data.profile.vacationStartAt ? data.profile.vacationStartAt.slice(0, 10) : '')
+          setVacationEnd(data.profile.vacationEndAt ? data.profile.vacationEndAt.slice(0, 10) : '')
+          // Update parent profile via onSave
+          onSave({
+            vacationMode: data.profile.vacationMode,
+            vacationStartAt: data.profile.vacationStartAt,
+            vacationEndAt: data.profile.vacationEndAt,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Vacation toggle failed:', err)
+    } finally {
+      setVacationSaving(false)
+    }
+  }, [vacationStart, vacationEnd, onSave])
+
+  // ─── Google Calendar connect ───
+  const handleConnectCalendar = useCallback(async () => {
+    try {
+      const res = await fetch('/api/nexus/calendar/connect')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.url) {
+          window.open(data.url, '_blank', 'width=500,height=600')
+        }
+      }
+      if (res.status === 400) {
+        setGoogleCredsConfigured(false)
+      }
+    } catch (err) {
+      console.error('Calendar connect failed:', err)
+    }
+  }, [])
+
+  // ─── Google Calendar disconnect ───
+  const handleDisconnectCalendar = useCallback(async () => {
+    try {
+      await fetch('/api/nexus/calendar/disconnect', { method: 'POST' })
+      setCalendarConnected(false)
+      setCalendarEvents([])
+      onSave({ googleCalendarConnected: false, googleCalendarSyncEnabled: false })
+    } catch (err) {
+      console.error('Calendar disconnect failed:', err)
+    }
+  }, [onSave])
+
+  // ─── Load calendar events ───
+  const loadCalendarEvents = useCallback(async () => {
+    if (!calendarConnected) return
+    setCalendarLoading(true)
+    try {
+      const res = await fetch('/api/nexus/calendar/events')
+      if (res.ok) {
+        const data = await res.json()
+        setCalendarEvents(data.events || [])
+        setCalendarConnected(data.connected)
+      }
+    } catch { /* ignore */ } finally {
+      setCalendarLoading(false)
+    }
+  }, [calendarConnected])
+
+  useEffect(() => {
+    if (calendarConnected) {
+      loadCalendarEvents()
+    }
+  }, [calendarConnected, loadCalendarEvents])
+
+  // ─── WhatsApp Real Link ───
+  const whatsappRealLink = whatsappPhone
+    ? `https://wa.me/52${whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hola NEXUS, quiero iniciar sesión')}`
+    : null
 
   // ─── WhatsApp send now ───
   const handleSendSummaryNow = useCallback(async () => {
@@ -711,6 +825,202 @@ export function ProfileView({ profile, onSave, onRefreshTemperature }: ProfileVi
                   </motion.div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* ═══ Section 6: Conexiones ═══ */}
+        <motion.div custom={sectionIndex++} variants={sectionVariants} initial="hidden" animate="visible">
+          <Card className="border-l-2 border-l-emerald-500 border-border/40 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <Plug className="w-4 h-4 text-emerald-500" />
+                Conexiones
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* ─── Vacation Mode ─── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏖️</span>
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-semibold">Modo Vacaciones</Label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Pausa notificaciones y resúmenes automáticos
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${vacationEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                    <span className="text-[10px] text-muted-foreground">
+                      {vacationEnabled ? 'Activo' : 'Inactivo'}
+                    </span>
+                    <Switch
+                      checked={vacationEnabled}
+                      disabled={vacationSaving}
+                      onCheckedChange={(checked) => handleVacationToggle(checked)}
+                    />
+                  </div>
+                </div>
+
+                {vacationEnabled && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-3 pl-1"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Fecha inicio</Label>
+                        <Input
+                          type="date"
+                          value={vacationStart}
+                          onChange={(e) => setVacationStart(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Fecha fin</Label>
+                        <Input
+                          type="date"
+                          value={vacationEnd}
+                          onChange={(e) => setVacationEnd(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+                    {(vacationStart || vacationEnd) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleVacationToggle(true)}
+                        disabled={vacationSaving}
+                        className="h-8 text-xs cursor-pointer"
+                      >
+                        {vacationSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Check className="w-3 h-3 mr-1" />}
+                        Guardar fechas
+                      </Button>
+                    )}
+                  </motion.div>
+                )}
+              </div>
+
+              <Separator className="opacity-50" />
+
+              {/* ─── Google Calendar ─── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-500" />
+                  <Label className="text-sm font-semibold">Google Calendar</Label>
+                  {calendarConnected && (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Conectado
+                    </span>
+                  )}
+                </div>
+
+                {!calendarConnected ? (
+                  <div className="space-y-2">
+                    <Button
+                      onClick={handleConnectCalendar}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-9 text-sm cursor-pointer"
+                      size="sm"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      Conectar Google Calendar
+                    </Button>
+                    {!googleCredsConfigured && (
+                      <p className="text-[10px] text-amber-500">
+                        Configura las credenciales de Google en .env
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Sync toggle */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Sincronizar eventos</Label>
+                      <Switch
+                        checked={calendarSync}
+                        onCheckedChange={(checked) => {
+                          setCalendarSync(checked)
+                          onSave({ googleCalendarSyncEnabled: checked })
+                        }}
+                      />
+                    </div>
+
+                    {/* Upcoming events */}
+                    {calendarLoading && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Cargando eventos...
+                      </div>
+                    )}
+                    {!calendarLoading && calendarEvents.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                          Próximos eventos
+                        </p>
+                        {calendarEvents.slice(0, 3).map((event) => (
+                          <div
+                            key={event.id}
+                            className="flex items-start gap-2 p-2 rounded-lg bg-muted/50"
+                          >
+                            <Calendar className="w-3 h-3 mt-0.5 text-emerald-500 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate">{event.title}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {new Date(event.start).toLocaleString('es-MX', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDisconnectCalendar}
+                      className="text-xs text-destructive hover:text-destructive h-8 cursor-pointer"
+                    >
+                      Desconectar
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="opacity-50" />
+
+              {/* ─── WhatsApp Real Link ─── */}
+              {whatsappRealLink && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-4 h-4 text-emerald-500" />
+                    <Label className="text-sm font-semibold">WhatsApp Directo</Label>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Abre WhatsApp con un mensaje pre-llenado para NEXUS
+                  </p>
+                  <a
+                    href={whatsappRealLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-2 text-xs font-medium transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Abrir WhatsApp
+                  </a>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>

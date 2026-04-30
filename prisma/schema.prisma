@@ -876,6 +876,13 @@ model NexusProfile {
   temperature       Float    @default(50.0) // current temperature 0-100
   tempUpdatedAt     DateTime?
   lastSummarySent   DateTime?
+  vacationMode              Boolean  @default(false)
+  googleCalendarConnected   Boolean  @default(false)
+  googleCalendarToken       String?
+  googleCalendarRefreshToken String?
+  googleCalendarSyncEnabled Boolean  @default(false)
+  vacationStartAt           DateTime?
+  vacationEndAt             DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

@@ -23,6 +23,7 @@ import {
   Loader2,
   LogOut,
   Thermometer,
+  Plane,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -775,6 +776,14 @@ export function NexusShell() {
                 </p>
               </div>
             </div>
+
+            {/* Vacation mode indicator */}
+            {profile?.vacationMode && (
+              <Badge variant="outline" className="hidden sm:flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                <Plane className="w-3 h-3" />
+                Vacaciones
+              </Badge>
+            )}
 
             {/* Temperature bar — always visible in header */}
             <motion.div whileTap={{ scale: 0.95 }} className="hidden sm:block cursor-pointer" onClick={handleRefreshTemperature}>
