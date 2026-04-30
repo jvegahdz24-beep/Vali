@@ -154,3 +154,22 @@ Stage Summary:
 - Temperature bar always visible in header, click to AI-recalculate
 - Full Life Coach profile with WhatsApp auto-summary configuration
 - Cycle perpetuo: summary interval configurable (15min to 12hrs), logged and ready for WhatsApp API
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix critical missing files blocking NEXUS AI — panel de configuración, WhatsApp, y temperature bar
+
+Work Log:
+- Analyzed existing codebase: 11 nexus components, 10 API routes, full Prisma schema already built
+- Identified 3 critical blocking issues: (1) no page.tsx for /nexus-shell route, (2) missing /api/nexus/whatsapp/send, (3) missing /api/nexus/whatsapp/logs
+- Created /src/app/nexus-shell/page.tsx to render NexusShell component
+- Created /src/app/api/nexus/whatsapp/send/route.ts — POST endpoint for generating and logging WhatsApp summaries via AI
+- Created /src/app/api/nexus/whatsapp/logs/route.ts — GET endpoint for retrieving WhatsApp logs and connection status
+- Fixed pre-existing build errors: (a) profile-view.tsx `const sectionIndex` → `let`, (b) archetypes.ts 4 missing object closures `}' },`, (c) onboarding-wizard.tsx malformed JSX comment, (d) archetypes/route.ts type errors (tags, contactsCreated, stageId), (e) chat/route.ts message role type assertion, (f) page.tsx dynamic import for named export, (g) framer-motion ease tuple type
+- Final build: 0 errors, all 12 nexus routes + /nexus-shell page registered
+
+Stage Summary:
+- All existing features (profile panel, temperature bar, WhatsApp panel, life coach, memories, tasks, insights) were already built in the previous session
+- The app was blocked by 3 missing files and 8 pre-existing build errors
+- All issues resolved, production build passes cleanly
+- NEXUS AI is now fully accessible at / and /nexus-shell

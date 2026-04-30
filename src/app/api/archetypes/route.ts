@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create archetype contacts
-    const contactsCreated = []
+    const contactsCreated: string[] = []
     for (const contact of archetype.contacts) {
       const c = await db.contact.create({
         data: {
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
           phone: contact.phone,
           email: contact.email,
           source: contact.source,
-          tags: contact.tags,
+          tags: JSON.stringify(contact.tags),
           leadScore: contact.leadScore,
           temperature: contact.temperature,
         },
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         data: {
           workspaceId: wsId,
           pipelineId: existingPipeline!.id,
-          stageId: stage?.id,
+          stageId: stage?.id ?? '',
           title: deal.title,
           value: deal.value,
           currency: deal.currency,

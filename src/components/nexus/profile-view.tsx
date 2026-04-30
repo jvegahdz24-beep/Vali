@@ -63,7 +63,7 @@ const sectionVariants = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.08, duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+    transition: { delay: i * 0.08, duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
   }),
 }
 
@@ -210,7 +210,7 @@ export function ProfileView({ profile, onSave, onRefreshTemperature }: ProfileVi
     loadLogs()
   }, [])
 
-  const sectionIndex = 0
+  let sectionIndex = 0
 
   return (
     <ScrollArea className="h-full">

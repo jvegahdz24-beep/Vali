@@ -347,7 +347,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
                   />
                 </div>
 
-                {/* Manual Industry (fallback) */
+                {/* Manual Industry (fallback) */}
                 <details>
                   <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-600">
                     O seleccionar industria manualmente ▾

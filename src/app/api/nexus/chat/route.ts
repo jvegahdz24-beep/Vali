@@ -81,8 +81,8 @@ Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`
 
     // Build messages array for AI
     const aiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...history.map(m => ({ role: m.role, content: m.content }))
+      { role: 'system' as const, content: systemPrompt },
+      ...history.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
     ]
 
     // Call AI via z-ai-web-dev-sdk

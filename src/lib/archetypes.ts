@@ -354,7 +354,7 @@ const AGENCIA_AUTOS: BusinessArchetype = {
   quickReplies: ['Buscar auto', 'Prueba de manejo', 'Financiamiento', 'Auto nuevo', 'Auto seminuevo', 'Seguro de auto'],
   sampleConversation: [
     { role: 'contact', content: 'Quiero un sedán económico, presupuesto hasta 400 mil pesos' },
-    { role: 'agent', content: '¡Hola! Tengo las mejores opciones para ti 🚗\n\n1. **Nissan Versa 2025** - Desde $328,000 | 50km/L | 5 años garantía\n2. **MG5 2025** - Desde $349,000 | Amplio espacio | Equipo completo\n3. **Kia Rio 2025** - Desde $355,000 | El más vendido | Excelente valor\n\n📅 ¿Agendamos tu prueba de manejo? Tenemos disponibilidad hoy y mañana.\n💳 Financiamiento desde $5,900/mes con enganche del 20%.',
+    { role: 'agent', content: '¡Hola! Tengo las mejores opciones para ti 🚗\n\n1. **Nissan Versa 2025** - Desde $328,000 | 50km/L | 5 años garantía\n2. **MG5 2025** - Desde $349,000 | Amplio espacio | Equipo completo\n3. **Kia Rio 2025** - Desde $355,000 | El más vendido | Excelente valor\n\n📅 ¿Agendamos tu prueba de manejo? Tenemos disponibilidad hoy y mañana.\n💳 Financiamiento desde $5,900/mes con enganche del 20%.' },
     { role: 'contact', content: 'Me interesa el Versa, quiero probarlo mañana' },
     { role: 'agent', content: '¡Excelente elección! El Versa es confiable y económico.\n\n📋 **Prueba de Manejo**\n📅 Mañana\n⏰ ¿10 AM o 2 PM?\n📍 Agencia Av. Industria 789\n🚗 Nissan Versa Advance 2025\n⏱ 30 minutos\n\n¿A qué hora te queda mejor? También puedo prepararte la cotización con financiamiento.' },
   ],
@@ -413,7 +413,7 @@ const PASTELERIA: BusinessArchetype = {
   quickReplies: ['Ver catálogo', 'Cotizar pastel', 'Sabores disponibles', 'Pedidos personalizados', 'Zona de entrega', 'Precios'],
   sampleConversation: [
     { role: 'contact', content: 'Hola, necesito un pastel para la boda de mi hija, serán 150 personas' },
-    { role: 'agent', content: '¡Felicidades! 🎂 Será un pastel hermoso.\n\nPara cotizar preciso:\n1. ¿Fecha de la boda?\n2. ¿Sabores preferidos? (vainilla, chocolate, red velvet, tres leches, etc.)\n3. ¿Algún diseño en mente?\n4. ¿Necesita top de porcelana?\n\n💡 **Referencia rápida:**\n• 3 leños (150 personas): $8,500 - $12,000\n• Decoración con flores: +$1,500\n• Topping personalizado: +$800\n\nMándame fotos de inspiración por aquí y preparo la cotización.',
+    { role: 'agent', content: '¡Felicidades! 🎂 Será un pastel hermoso.\n\nPara cotizar preciso:\n1. ¿Fecha de la boda?\n2. ¿Sabores preferidos? (vainilla, chocolate, red velvet, tres leches, etc.)\n3. ¿Algún diseño en mente?\n4. ¿Necesita top de porcelana?\n\n💡 **Referencia rápida:**\n• 3 leños (150 personas): $8,500 - $12,000\n• Decoración con flores: +$1,500\n• Topping personalizado: +$800\n\nMándame fotos de inspiración por aquí y preparo la cotización.' },
     { role: 'contact', content: 'Es el 15 de junio, quiero 3 leños de vainilla y chocolate con flores' },
     { role: 'agent', content: 'Perfecto, armamos tu cotización:\n\n🎂 **Pastel Bodas**\n• 3 leños: 2 vainilla + 1 chocolate\n• Decoración floral natural\n• Topping "Felices Bodas {nombres}"\n• Base de porcelana (reutilizable)\n• 150 porciones\n• Entrega: 15 de junio\n\n💰 **Total: $10,800**\n💳 Anticipo: $3,240 (30%)\n\nPara confirmar, te envío el link de anticipo. ¿Todo bien?' },
   ],
@@ -527,7 +527,7 @@ const RESTAURANTE: BusinessArchetype = {
   quickReplies: ['Reservar mesa', 'Menú del día', 'Pedir a domicilio', 'Eventos', 'Promociones', 'Ubicación'],
   sampleConversation: [
     { role: 'contact', content: 'Quiero reservar para este sábado, somos 6 personas' },
-    { role: 'agent', content: '¡Hola! Con gusto te reservo 🍽️\n\n📅 Sábado\n👥 6 personas\n🕐 ¿12:30, 2:00 o 8:00 PM?\n📍 Terraza o salón interior\n\n¿Alguien tiene alguna alergia alimentaria? Tenemos opciones sin gluten y veganas.\n\nTe confirmo en cuanto me des la hora.',
+    { role: 'agent', content: '¡Hola! Con gusto te reservo 🍽️\n\n📅 Sábado\n👥 6 personas\n🕐 ¿12:30, 2:00 o 8:00 PM?\n📍 Terraza o salón interior\n\n¿Alguien tiene alguna alergia alimentaria? Tenemos opciones sin gluten y veganas.\n\nTe confirmo en cuanto me des la hora.' },
     { role: 'contact', content: 'Las 2 PM en terraza por favor, sin alergias' },
     { role: 'agent', content: '¡Listo! Reservación confirmada ✅\n\n📅 Sábado\n🕐 2:00 PM\n👥 6 personas\n🌿 Terraza\n\nPara tu grupo te recomiendo:\n🥩 Arrachera al carbón (nuestra especialidad)\n🥑 Guacamole table-side\n🌮 Tacos Gobernador (nuevos en el menú)\n🍹 Margaritas de la casa 2x1\n\n¿Te gustaría pre-ordenar algo? También te puedo enviar el menú completo.' },
   ],
@@ -586,7 +586,7 @@ const GIMNASIO: BusinessArchetype = {
   quickReplies: ['Inscribirme', 'Clase de prueba', 'Horarios', 'Precios', 'Disciplinas', 'Personal trainer'],
   sampleConversation: [
     { role: 'contact', content: 'Quiero información sobre membresías y clases' },
-    { role: 'agent', content: '¡Qué buena onda que quieres empezar! 💪\n\n**Planes disponibles:**\n\n🥉 Básico - $600/mes\n• Acceso al gym\n• Horario: 6AM-10PM\n\n🥈 Pro - $800/mes\n• Todo lo básico + 2 clases grupales/semana\n• Asesoría nutricional básica\n\n🥇 Elite - $1,000/mes\n• Todo lo Pro + clases ilimitadas\n• Personal trainer 2x/semana\n• Spa 2x/mes\n\n🔥 **Promo:** Inscríbete hoy y obtén 1 mes GRATIS en tu segundo mes.\n\n¿Agendamos tu clase de prueba GRATIS?',
+    { role: 'agent', content: '¡Qué buena onda que quieres empezar! 💪\n\n**Planes disponibles:**\n\n🥉 Básico - $600/mes\n• Acceso al gym\n• Horario: 6AM-10PM\n\n🥈 Pro - $800/mes\n• Todo lo básico + 2 clases grupales/semana\n• Asesoría nutricional básica\n\n🥇 Elite - $1,000/mes\n• Todo lo Pro + clases ilimitadas\n• Personal trainer 2x/semana\n• Spa 2x/mes\n\n🔥 **Promo:** Inscríbete hoy y obtén 1 mes GRATIS en tu segundo mes.\n\n¿Agendamos tu clase de prueba GRATIS?' },
     { role: 'contact', content: 'Me interesa el Elite, quiero la clase de prueba mañana' },
     { role: 'agent', content: '¡EXCELENTE decisión! 🔥 El plan Elite es nuestra mejor opción.\n\n📅 **Clase de prueba GRATIS**\n⏰ Mañana 7:00 AM o 6:00 PM\n🏋️ Musculación o Funcional (a tu elección)\n👨‍🏫 Con un coach certificado\n⏱ 1 hora\n\n📍 Trae ropa cómoda y agua.\n\n¿A qué hora prefieres? Después de la clase te hago la evaluación física sin costo para crear tu plan personalizado.' },
   ],

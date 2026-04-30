@@ -21,7 +21,7 @@ function FullPageLoader() {
 }
 
 const NexusApp = dynamic(
-  () => import('@/components/nexus/nexus-shell'),
+  () => import('@/components/nexus/nexus-shell').then(mod => ({ default: mod.NexusShell })),
   { ssr: false, loading: FullPageLoader }
 )
 
