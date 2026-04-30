@@ -1,9 +1,9 @@
 #!/bin/bash
-export DATABASE_URL="file:/home/z/my-project/db/custom.db"
-export NEXTAUTH_SECRET="dev-secret-do-not-use-in-prod-32chars!!"
-export DEMO_EMAIL="jvegahdz24@gmail.com"
-export DEMO_PASSWORD="valiflow2026"
-export PORT=3000
-export HOSTNAME="0.0.0.0"
-export NODE_ENV="production"
-exec node .next/standalone/server.js
+# ValiAutoFlow auto-restart server
+cd /home/z/my-project
+cp .env .next/standalone/.env 2>/dev/null
+
+while true; do
+  NODE_ENV=production NODE_OPTIONS="--max-old-space-size=2048" node .next/standalone/server.js 2>&1
+  sleep 1
+done
