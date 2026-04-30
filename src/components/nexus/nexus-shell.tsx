@@ -12,6 +12,7 @@ import {
   ListTodo,
   Database,
   Lightbulb,
+  QrCode,
   Plus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -48,6 +49,7 @@ import { MemoriesView } from './memories-view'
 import { InsightsView } from './insights-view'
 import { ProfileView } from './profile-view'
 import { TemperatureBar } from './temperature-bar'
+import { ConnectionsView } from './connections-view'
 import {
   AgentType,
   AGENT_CONFIGS,
@@ -83,6 +85,7 @@ const NAV_ITEMS: { key: ViewType; label: string; icon: React.ReactNode }[] = [
   { key: 'tasks', label: 'Tareas', icon: <ListTodo className="w-4 h-4" /> },
   { key: 'memories', label: 'Memoria', icon: <Database className="w-4 h-4" /> },
   { key: 'insights', label: 'Insights', icon: <Lightbulb className="w-4 h-4" /> },
+  { key: 'connections', label: 'Conexiones', icon: <QrCode className="w-4 h-4" /> },
   { key: 'profile', label: 'Perfil', icon: <Thermometer className="w-4 h-4" /> },
 ]
 
@@ -801,6 +804,8 @@ export function NexusShell() {
                     ? 'Memoria'
                     : currentView === 'profile'
                     ? 'Perfil'
+                    : currentView === 'connections'
+                    ? 'Conexiones'
                     : 'Insights'}
                 </h1>
                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
@@ -918,6 +923,12 @@ export function NexusShell() {
                     insights={insights}
                     onGenerateInsights={handleGenerateInsights}
                     onLoadInsights={handleLoadInsights}
+                  />
+                )}
+                {currentView === 'connections' && (
+                  <ConnectionsView
+                    whatsappPhone={profile?.whatsappPhone}
+                    summaryInterval={profile?.summaryInterval}
                   />
                 )}
                 {currentView === 'profile' && (

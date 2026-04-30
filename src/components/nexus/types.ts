@@ -79,7 +79,7 @@ export interface User {
   workspaceName?: string
 }
 
-export type ViewType = 'chat' | 'contacts' | 'agents' | 'tasks' | 'memories' | 'insights' | 'profile'
+export type ViewType = 'chat' | 'contacts' | 'agents' | 'tasks' | 'memories' | 'insights' | 'connections' | 'profile'
 export type AgentType = 'nexus' | 'coder' | 'analyst' | 'writer'
 
 export interface AgentConfig {
