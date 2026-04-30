@@ -54,6 +54,11 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
 
+  // Silence turbopack workspace root warning on Windows
+  turbopack: {
+    root: ".",
+  },
+
   // Allow z.ai preview origin for dev assets
   allowedDevOrigins: [
     "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site",
