@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import {
   exchangeCodeForTokens,
   getGoogleUser,

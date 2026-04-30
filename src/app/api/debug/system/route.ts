@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { cookies } from 'next/headers'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 

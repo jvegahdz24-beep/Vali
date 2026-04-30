@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
+import { SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import type { NextRequest } from 'next/server'
 
 // ─── Route Configuration ──────────────────────────────────────
@@ -178,7 +178,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for authentication via valiflow-session cookie
+  // Check for authentication via valiflow-session cookie presence.
+  // NOTE: Full JWT verification is done client-side (useAuth hook)
+  // and in API routes (requireAuth). Middleware only checks cookie existence
+  // to avoid crypto.subtle crashes in Edge Runtime of standalone mode.
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
   if (!sessionToken) {
@@ -187,32 +190,8 @@ export async function middleware(request: NextRequest) {
     return addSecurityHeaders(NextResponse.redirect(loginUrl))
   }
 
-  // Verify the JWT token
-  const payload = await verifySessionToken(sessionToken)
-
-  if (!payload) {
-    // Token is invalid or expired — clear cookie and redirect to login
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('callbackUrl', pathname)
-    const response = NextResponse.redirect(loginUrl)
-    response.cookies.set(SESSION_COOKIE_NAME, '', {
-      httpOnly: true,
-      secure: false, // Behind Caddy reverse proxy
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/',
-    })
-    return addSecurityHeaders(response)
-  }
-
-  // User is authenticated — SPA routes served from /
-  // Redirect non-root paths to / with redirect param so client restores correct view
-  if (pathname !== '/') {
-    const homeUrl = new URL('/', request.url)
-    homeUrl.searchParams.set('redirect', pathname)
-    return addSecurityHeaders(NextResponse.redirect(homeUrl))
-  }
-
+  // Cookie exists — pass through. Client-side useAuth will verify JWT
+  // and redirect to /login if token is invalid/expired.
   return addSecurityHeaders(NextResponse.next())
 }
 

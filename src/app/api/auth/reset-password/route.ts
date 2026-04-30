@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { validateBody, passwordResetRequestSchema, passwordResetSchema } from '@/lib/validations'
-import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { cookies } from 'next/headers'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 

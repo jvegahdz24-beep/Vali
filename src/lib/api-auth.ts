@@ -3,7 +3,7 @@
 // Use these in all API routes to require authentication & workspace access
 // ═══════════════════════════════════════════════════════════════
 
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { db } from '@/lib/db'
 import { NextRequest } from 'next/server'
 import { cookies } from 'next/headers'

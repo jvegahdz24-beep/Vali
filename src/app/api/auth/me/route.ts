@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
