@@ -1,0 +1,150 @@
+// ═══════════════════════════════════════════════════════════════
+// NEXUS AI — TypeScript Types
+// ═══════════════════════════════════════════════════════════════
+
+export interface Conversation {
+  id: string
+  title: string
+  agentType: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  _count?: { messages: number }
+  messages?: Message[]
+  messages_preview?: { content: string; createdAt: string }[]
+}
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  createdAt: string
+  tokens?: number
+  model?: string
+  latencyMs?: number
+}
+
+export interface Memory {
+  id: string
+  category: string
+  key: string
+  value: string
+  importance: number
+  source: string
+  accessCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Agent {
+  id: string
+  name: string
+  type: string
+  description?: string
+  personality: string
+  capabilities: string // JSON array string
+  isActive: boolean
+}
+
+export interface Task {
+  id: string
+  title: string
+  description?: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  source: string
+  dueDate?: string
+  completedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Insight {
+  id: string
+  type: 'pattern' | 'suggestion' | 'learning' | 'anomaly'
+  title: string
+  content: string
+  confidence: number
+  isRead: boolean
+  createdAt: string
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: string
+  image?: string
+  workspaceId?: string
+  workspaceName?: string
+}
+
+export type ViewType = 'chat' | 'agents' | 'tasks' | 'memories' | 'insights'
+export type AgentType = 'nexus' | 'coder' | 'analyst' | 'writer'
+
+export interface AgentConfig {
+  type: AgentType
+  name: string
+  color: string
+  bgLight: string
+  bgDark: string
+  borderLight: string
+  borderDark: string
+  textLight: string
+  textDark: string
+}
+
+export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
+  nexus: {
+    type: 'nexus',
+    name: 'NEXUS',
+    color: 'emerald',
+    bgLight: 'bg-emerald-500',
+    bgDark: 'bg-emerald-600',
+    borderLight: 'border-emerald-500',
+    borderDark: 'border-emerald-400',
+    textLight: 'text-emerald-600',
+    textDark: 'text-emerald-400',
+  },
+  coder: {
+    type: 'coder',
+    name: 'CODEX',
+    color: 'violet',
+    bgLight: 'bg-violet-500',
+    bgDark: 'bg-violet-600',
+    borderLight: 'border-violet-500',
+    borderDark: 'border-violet-400',
+    textLight: 'text-violet-600',
+    textDark: 'text-violet-400',
+  },
+  analyst: {
+    type: 'analyst',
+    name: 'ANALYTICA',
+    color: 'amber',
+    bgLight: 'bg-amber-500',
+    bgDark: 'bg-amber-600',
+    borderLight: 'border-amber-500',
+    borderDark: 'border-amber-400',
+    textLight: 'text-amber-600',
+    textDark: 'text-amber-400',
+  },
+  writer: {
+    type: 'writer',
+    name: 'ESCRITOR',
+    color: 'rose',
+    bgLight: 'bg-rose-500',
+    bgDark: 'bg-rose-600',
+    borderLight: 'border-rose-500',
+    borderDark: 'border-rose-400',
+    textLight: 'text-rose-600',
+    textDark: 'text-rose-400',
+  },
+}
+
+export const QUICK_ACTIONS = [
+  { label: 'Escríbeme un email', agent: 'writer' as AgentType },
+  { label: 'Analiza estos datos', agent: 'analyst' as AgentType },
+  { label: 'Genera un reporte', agent: 'analyst' as AgentType },
+  { label: 'Ayúdame con código', agent: 'coder' as AgentType },
+  { label: 'Crea una tarea', agent: 'nexus' as AgentType },
+]
