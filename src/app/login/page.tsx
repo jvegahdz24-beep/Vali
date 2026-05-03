@@ -224,29 +224,14 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {/* Entrada rápida */}
+            {/* Demo login — uses server-side endpoint, no credentials in client code */}
             <button
-              type="button"
-              onClick={() => {
-                setEmail('jvegahdz24@gmail.com')
-                setPassword('valiflow2026')
-                setTimeout(() => {
-                  const form = document.querySelector('form') as HTMLFormElement
-                  if (form) form.requestSubmit()
-                }, 100)
-              }}
+              onClick={() => { window.location.href = '/api/auth/demo-login' }}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-smooth disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-smooth disabled:opacity-50"
             >
               🔑 Entrar como demo
             </button>
-
-            <a
-              href="/api/auth/demo-login"
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
-            >
-              Demo directo (sin contraseña)
-            </a>
 
             {/* Security badge */}
             <p className="text-center text-[11px] text-gray-400">

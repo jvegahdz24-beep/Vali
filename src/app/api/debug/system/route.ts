@@ -37,7 +37,15 @@ async function checkComponent(name: string, fn: () => Promise<{ ok: boolean; det
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const session = await requireAuth(request)
+
+    // Restrict debug endpoint to owner/admin roles only
+    if (session.role !== 'owner' && session.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Acceso denegado. Solo roles owner/admin pueden acceder al diagnóstico del sistema.' },
+        { status: 403 }
+      )
+    }
 
   const startTime = Date.now()
   const results: Record<string, unknown> = {}

@@ -238,7 +238,7 @@ class WhatsAppManager {
         version,
         auth: authState,
         logger,
-        printQRInTerminal: true,
+        printQRInTerminal: process.env.NODE_ENV !== 'production',
         generateHighQualityLinkPreview: true,
         browser: ['ValiAutoFlow', 'Chrome', '120.0.0'],
         getMessage: async () => undefined as any,

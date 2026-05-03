@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { join } from 'path'
 import { existsSync, statSync, readFileSync, createReadStream } from 'fs'
+import { requireAuth } from '@/lib/api-auth'
 
 // Common MIME type mappings for fallback
 const MIME_MAP: Record<string, string> = {
@@ -71,6 +72,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAuth(req)
     const { id } = await params
     const { fileId, ext } = parseMediaId(id)
 

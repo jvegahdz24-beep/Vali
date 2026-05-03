@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       data: {
         workspaceId,
         eventType: 'deal_created',
-        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage.name }),
+        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage?.name }),
       },
     })
 
@@ -179,7 +179,7 @@ export async function PUT(req: NextRequest) {
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage.name,
+            stage: deal.stage?.name,
           }),
         },
       })

@@ -750,7 +750,7 @@ export class RevenueEngine {
 
     if (hasTags) {
       const insightMatch = cleaned.match(/\[INSIGHT\]\s*([\s\S]*?)(?=\[DIRECC[OÓ]N\]|\[DIRECCION\]|$)/i)
-      const directionMatch = cleaned.match(/\[DIRECC[OÓ]N\]|\[DIRECCION\]\s*([\s\S]*?)(?=\[PREGUNTA\]|$)/i)
+      const directionMatch = cleaned.match(/\[(?:DIRECC[OÓ]N|DIRECCION)\]\s*([\s\S]*?)(?=\[PREGUNTA\]|$)/i)
       const questionMatch = cleaned.match(/\[PREGUNTA\]\s*([\s\S]*?)(?=\[REPLIES\]|$)/i)
       const repliesMatch = cleaned.match(/\[REPLIES\]\s*([\s\S]*?)$/i)
 

@@ -14,6 +14,10 @@ const DEMO_EMAIL = process.env.DEMO_EMAIL || 'jvegahdz24@gmail.com'
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'valiflow2026'
 
 export async function GET(req: NextRequest) {
+  // Security: Demo login only available in development/staging
+  if (process.env.NODE_ENV === 'production' && !process.env.DEMO_MODE) {
+    return NextResponse.json({ error: 'Demo login not available in production' }, { status: 403 })
+  }
   try {
     // ── 1. Find or create user ──────────────────────────────────
     let user = await db.user.findUnique({

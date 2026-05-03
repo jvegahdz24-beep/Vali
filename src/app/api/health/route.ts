@@ -4,6 +4,16 @@ import { db } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  // In production, return minimal data to avoid information leakage
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      await db.$queryRaw`SELECT 1 as ok`
+      return NextResponse.json({ status: 'healthy' })
+    } catch {
+      return NextResponse.json({ status: 'unhealthy' }, { status: 503 })
+    }
+  }
+
   const checks: {
     database: boolean
     memory: boolean

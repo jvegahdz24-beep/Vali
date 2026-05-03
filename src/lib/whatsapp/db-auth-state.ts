@@ -23,7 +23,7 @@ export class DbAuthState {
   async load(): Promise<string> {
     await fs.mkdir(this.tmpDir, { recursive: true })
     const record = await prisma.whatsAppAuth.findUnique({
-      where: { workspace: this.workspaceId }
+      where: { workspaceId: this.workspaceId }
     })
     if (record?.authData) {
       try {
@@ -55,9 +55,9 @@ export class DbAuthState {
       }
       if (Object.keys(files).length === 0) return
       await prisma.whatsAppAuth.upsert({
-        where: { workspace: this.workspaceId },
+        where: { workspaceId: this.workspaceId },
         update: { authData: JSON.stringify(files) },
-        create: { workspace: this.workspaceId, authData: JSON.stringify(files) }
+        create: { workspaceId: this.workspaceId, authData: JSON.stringify(files) }
       })
       console.log('[DB-AUTH] Guardados', Object.keys(files).length, 'archivos en DB')
     } catch (err) { console.error('[DB-AUTH] Error guardando:', err) }
@@ -65,7 +65,7 @@ export class DbAuthState {
 
   async clear(): Promise<void> {
     try {
-      await prisma.whatsAppAuth.deleteMany({ where: { workspace: this.workspaceId } })
+      await prisma.whatsAppAuth.deleteMany({ where: { workspaceId: this.workspaceId } })
       await fs.rm(this.tmpDir, { recursive: true, force: true })
       console.log('[DB-AUTH] Credenciales eliminadas')
     } catch (err) { console.error('[DB-AUTH] Error limpiando:', err) }

@@ -107,7 +107,7 @@ export async function PUT(
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage.name,
+            stage: deal.stage?.name,
           }),
         },
       })

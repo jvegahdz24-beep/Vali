@@ -118,7 +118,7 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
         return {
           content,
           model,
-          provider: 'groq' as const,
+          provider: 'glm' as const,
           tokensUsed: data.usage?.total_tokens ?? 0,
           latencyMs: Date.now() - start,
           raw: data,

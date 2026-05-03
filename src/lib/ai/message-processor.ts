@@ -428,13 +428,13 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 11. Update contact lead score + tags ──
-  if (contact && engineResult.action) {
-    const existingTags: string[] = JSON.parse(contact.tags || '[]')
-    const newTags = engineResult.crmUpdates
-      ?.filter((u) => u.type === 'tags')
-      .flatMap((u) => u.value)
-      .filter((t) => !existingTags.includes(t as string)) as string[]
+  const existingTags: string[] = contact ? JSON.parse(contact.tags || '[]') : []
+  const newTags = engineResult.crmUpdates
+    ?.filter((u) => u.type === 'tags')
+    .flatMap((u) => u.value)
+    .filter((t) => !existingTags.includes(t as string)) as string[] ?? []
 
+  if (contact && engineResult.action) {
     await db.contact.update({
       where: { id: contact.id },
       data: {
@@ -447,7 +447,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 11b. Auto-create/update deal in pipeline ──
   if (contact) {
-    const currentTags: string[] = JSON.parse(contact.tags || '[]')
+    const currentTags: string[] = [...existingTags, ...newTags]
     await autoCreateOrUpdateDeal({
       workspaceId: workspace.id,
       contactId: contact.id,

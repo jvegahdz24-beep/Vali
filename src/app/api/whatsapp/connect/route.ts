@@ -27,8 +27,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    await requireAuth(req)
     const status = whatsAppManager.getStatus()
 
     return NextResponse.json({ success: true, status })

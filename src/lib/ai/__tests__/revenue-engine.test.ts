@@ -52,7 +52,7 @@ describe('RevenueEngine — analyzeLead', () => {
       { role: 'user', content: '¿Puedo pagar con crédito? ¿Cuánto es el anticipo?' },
     ]
     const result = engine.analyzeLead(messages)
-    expect(result.scores?.budget ?? result.score).toBeGreaterThan(0)
+    expect(result.score).toBeGreaterThan(0)
     expect(result.tags).toContain('tiene_interes_financiero')
   })
 

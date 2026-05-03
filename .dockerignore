@@ -2,12 +2,16 @@ node_modules
 .next
 .git
 .gitignore
+.whatsapp-auth/
+.whatsapp-ephemeral/
+media/
+uploads/
+*.log
 .env
 .env.local
 .env.production
 db/
 data/
-uploads/
 skills/
 *.md
 !README.md

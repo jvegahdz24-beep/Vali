@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
 import crypto from 'crypto'
 import { randomPick, randomInt, randomDaysBack } from '@/lib/seeded-random'
@@ -737,8 +738,7 @@ export async function POST(req: NextRequest) {
 // GET endpoint to check seed status
 export async function GET(req: NextRequest) {
   try {
-    // GET status check — always allow (needed by frontend to detect if DB is ready)
-    // Only POST (actual seeding) is guarded in production
+    await requireAuth(req)
 
     const workspaceCount = await db.workspace.count()
     const contactCount = await db.contact.count()
@@ -760,6 +760,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error('[Seed Status Error]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse(error, 'Internal server error')
   }
 }

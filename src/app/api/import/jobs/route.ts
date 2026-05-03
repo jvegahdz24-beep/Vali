@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
     // importJob model may not exist — return empty array as fallback
     let jobs: any[] = []
     try {
-      // @ts-expect-error — importJob table may not be in current schema
       jobs = await db.importJob.findMany({
         where: { workspaceId: workspaceId! },
         orderBy: { createdAt: 'desc' },

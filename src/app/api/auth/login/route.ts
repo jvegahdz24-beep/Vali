@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { validateBody, loginSchema } from '@/lib/validations'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Compare password using bcrypt (supports both legacy SHA-256 and new bcrypt hashes)
 function verifyPassword(password: string, storedHash: string): boolean {
@@ -26,6 +27,15 @@ const DEMO_EMAIL = process.env.DEMO_EMAIL || ''
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || ''
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 10 login attempts per minute per IP
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || 'unknown'
+  const rateLimitResult = rateLimit(clientIp + ':login', 10, 60_000)
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { error: 'Demasiados intentos. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },
+      { status: 429 }
+    )
+  }
   try {
     const body = await req.json()
 
@@ -116,7 +126,7 @@ export async function POST(req: NextRequest) {
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error('[Login Error]', errMsg)
     return NextResponse.json(
-      { error: 'Error interno del servidor', code: 'INTERNAL_ERROR', details: errMsg },
+      { error: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
       { status: 500 }
     )
   }
