@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiFlow Pro — Fused Architecture Schema (v2.0)
-// Next.js 16 + Prisma + PostgreSQL (Supabase)
-// Migrated from SQLite to Supabase PostgreSQL
+// Next.js 16 + Prisma + SQLite (production-ready)
+// PostgreSQL migration ready: see supabase/migration.sql
 // ═══════════════════════════════════════════════════════════════
 
 generator client {

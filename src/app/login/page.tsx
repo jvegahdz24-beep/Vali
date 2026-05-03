@@ -241,6 +241,13 @@ export default function LoginPage() {
               🔑 Entrar como demo
             </button>
 
+            <a
+              href="/api/auth/demo-login"
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              Demo directo (sin contraseña)
+            </a>
+
             {/* Security badge */}
             <p className="text-center text-[11px] text-gray-400">
               🔒 Tus datos están protegidos y encriptados
