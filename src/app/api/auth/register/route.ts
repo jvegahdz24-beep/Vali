@@ -9,6 +9,7 @@ import { db } from '@/lib/db'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
 import { validateBody, registerSchema } from '@/lib/validations'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { sendWelcomeEmail } from '@/lib/email'
 
 function hashPassword(plain: string): string {
   return bcrypt.hashSync(plain, 10)
@@ -125,6 +126,11 @@ export async function POST(req: NextRequest) {
         currency: 'MXN',
         interval: 'monthly',
       },
+    })
+
+    // ─── Send welcome email (non-blocking) ────────────────
+    sendWelcomeEmail(user.email!, user.name || undefined).catch((err) => {
+      console.warn('[Register] Welcome email failed (non-blocking):', err)
     })
 
     // ─── Success ───────────────────────────────────────────

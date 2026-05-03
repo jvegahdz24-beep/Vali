@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { whatsAppManager } from '@/lib/whatsapp/connection'
 import { db } from '@/lib/db'
 import { validateBody, whatsappSendSchema } from '@/lib/validations'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { getClientIp } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse, getClientIp } from '@/lib/api-auth'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
 
     const ip = getClientIp(req)
     const rl = rateLimit(`${ip}:whatsapp:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
@@ -23,6 +22,11 @@ export async function POST(req: NextRequest) {
     }
 
     const { phone, message, workspaceId, conversationId, contactId } = validation.data
+
+    // Verify workspace access before sending
+    if (workspaceId) {
+      await requireWorkspace(workspaceId, session.userId)
+    }
 
     const result = await whatsAppManager.sendMessage(phone, message)
 

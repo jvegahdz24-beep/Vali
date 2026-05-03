@@ -6,62 +6,10 @@ import { validateBody, passwordResetRequestSchema, passwordResetSchema } from '@
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { cookies } from 'next/headers'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { sendPasswordResetEmail } from '@/lib/email'
 
 function hashPassword(plain: string): string {
   return bcrypt.hashSync(plain, 10)
-}
-
-async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`
-
-  // Try sending via Resend API (if configured)
-  const resendApiKey = process.env.RESEND_API_KEY
-  if (resendApiKey) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'ValiAutoFlow <noreply@valiflow.com>',
-          to: email,
-          subject: '🔑 Restablece tu contraseña — ValiAutoFlow',
-          html: `
-            <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #059669, #0d9488); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-                <h1 style="color: white; margin: 0; font-size: 24px;">ValiAutoFlow</h1>
-              </div>
-              <p style="font-size: 16px; color: #374151;">Hola ${userName},</p>
-              <p style="font-size: 16px; color: #374151;">Recibimos una solicitud para restablecer tu contraseña. Haz clic en el botón de abajo para crear una nueva:</p>
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${resetUrl}" style="background: #059669; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; font-size: 16px;">
-                  Restablecer Contraseña
-                </a>
-              </div>
-              <p style="font-size: 14px; color: #6b7280;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
-              <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
-                <p style="font-size: 12px; color: #9ca3af;">ValiAutoFlow — Automatización inteligente con WhatsApp + IA para Pymes</p>
-              </div>
-            </div>
-          `,
-        }),
-      })
-      if (response.ok) {
-        console.log('[Reset Password] Email sent via Resend to:', email)
-        return true
-      }
-      console.error('[Reset Password] Resend API error:', await response.text())
-    } catch (error) {
-      console.error('[Reset Password] Failed to send email via Resend:', error)
-    }
-  }
-
-  // Fallback: log the reset URL (dev mode)
-  console.log(`[Reset Password] EMAIL NOT CONFIGURED. Reset URL: ${resetUrl}`)
-  return false
 }
 
 // POST /api/auth/reset-password — Request password reset
@@ -112,7 +60,7 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      const emailSent = await sendPasswordResetEmail(user.email!, resetToken, user.name || 'Usuario')
+      const emailSent = await sendPasswordResetEmail({ email: user.email!, token: resetToken, name: user.name || 'Usuario' })
       const isDev = process.env.NODE_ENV === 'development'
 
       return NextResponse.json({
