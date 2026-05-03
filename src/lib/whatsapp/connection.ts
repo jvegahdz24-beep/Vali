@@ -33,6 +33,7 @@ export interface WhatsAppStatus {
   qrCode: string | null
   phone: string | null
   lastActivity: string | null
+  lastError: string | null
 }
 
 type StatusEventCallback = (status: WhatsAppStatus) => void
@@ -95,6 +96,7 @@ class WhatsAppManager {
   private _lastActivity: string | null = null
   private _reconnectAttempts = 0
   private _maxReconnectAttempts = 10
+  private _lastError: string | null = null
 
   // FIX P5: Per-phone processing lock to prevent concurrent processing
   // Dedup is now handled by shared-dedup.ts (used by both connection + webhook)
@@ -189,6 +191,7 @@ class WhatsAppManager {
 
     this._connecting = true
     this._reconnectAttempts = 0
+    this._lastError = null
     this.emitStatus()
 
     // 🔥 NON-BLOCKING: Launch connection in background, return immediately
@@ -427,6 +430,7 @@ class WhatsAppManager {
     } catch (error) {
       this._connecting = false
       this._connected = false
+      this._lastError = error instanceof Error ? error.message : String(error)
       console.error('[WhatsApp] Failed to start:', error)
       this.emitStatus()
       // Don't throw — this runs in background, log and recover
@@ -538,6 +542,7 @@ class WhatsAppManager {
       qrCode,
       phone: this._phone,
       lastActivity: this._lastActivity,
+      lastError: this._lastError,
     }
   }
 

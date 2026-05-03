@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Workflow,
   Code,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PLANS, PERSONALITY_PROMPTS } from '@/lib/constants'
@@ -61,8 +62,10 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null)
   const [lastActivity, setLastActivity] = useState<string | null>(null)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
   const [isConnecting, setIsConnecting] = useState(false)
   const pollInterval = useRef<NodeJS.Timeout | null>(null)
+  const connectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [activePersonality, setActivePersonality] = useState(() => localStorage.getItem('vf_personality') || 'JHON')
   const [temperature, setTemperature] = useState(() => {
     const val = localStorage.getItem('vf_temperature')
@@ -307,7 +310,25 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
       setWhatsappConnecting(data.connecting)
       setConnectedPhone(data.phone)
       setLastActivity(data.lastActivity)
-      if (data.qrCode) setQrCode(data.qrCode)
+      if (data.qrCode) {
+        setQrCode(data.qrCode)
+        setConnectionError(null)
+        // Clear timeout when QR arrives successfully
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current)
+          connectTimeoutRef.current = null
+        }
+      }
+      if (data.lastError && !data.connected && !data.connecting) {
+        setConnectionError(data.lastError)
+      }
+      // If backend says not connecting and no QR and no error, clear stale states
+      if (!data.connecting && !data.qrCode && !data.connected) {
+        if (pollInterval.current) {
+          clearInterval(pollInterval.current)
+          pollInterval.current = null
+        }
+      }
     } catch (err) {
       console.error('Error fetching WhatsApp status:', err)
     }
@@ -317,14 +338,30 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   useEffect(() => {
     if (whatsappConnecting) {
       pollInterval.current = setInterval(fetchStatus, 2000)
+      // Timeout: if no QR after 30 seconds, show error
+      connectTimeoutRef.current = setTimeout(() => {
+        setConnectionError('Tiempo de espera agotado. Verifica que el servidor tenga acceso a internet e intenta de nuevo.')
+        setWhatsappConnecting(false)
+        setIsConnecting(false)
+        if (pollInterval.current) {
+          clearInterval(pollInterval.current)
+          pollInterval.current = null
+        }
+        toast.error('No se pudo generar el QR. Intenta de nuevo.')
+      }, 30000)
     } else {
       if (pollInterval.current) {
         clearInterval(pollInterval.current)
         pollInterval.current = null
       }
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current)
+        connectTimeoutRef.current = null
+      }
     }
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current)
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current)
     }
   }, [whatsappConnecting, fetchStatus])
 
@@ -336,6 +373,8 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
   // Connect WhatsApp
   const handleConnect = async () => {
     setIsConnecting(true)
+    setConnectionError(null)
+    setQrCode(null)
     try {
       const res = await fetch('/api/whatsapp/connect', { method: 'POST' })
       if (!res.ok) throw new Error('Error al conectar')
@@ -345,6 +384,8 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
       if (data.status?.connected) setWhatsappConnected(true)
     } catch (err) {
       console.error('Error connecting WhatsApp:', err)
+      setConnectionError('Error al iniciar la conexión. Intenta de nuevo.')
+      toast.error('Error al conectar WhatsApp')
     } finally {
       setIsConnecting(false)
     }
@@ -640,15 +681,22 @@ export function SettingsView({ workspaceId }: SettingsViewProps) {
                       </div>
                     ) : (
                       <div className="text-center space-y-4">
+                        {/* Connection Error Display */}
+                        {connectionError && (
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                            <span>{connectionError}</span>
+                          </div>
+                        )}
                         <div className="w-48 h-48 mx-auto bg-muted/30 rounded-xl flex items-center justify-center border-2 border-dashed border-border/60">
                           <div className="text-center">
                             <QrCode className="h-10 w-10 text-muted-foreground/50 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">Código QR</p>
+                            <p className="text-xs text-muted-foreground">Codigo QR</p>
                           </div>
                         </div>
                         <div className="space-y-2">
                           <p className="text-sm text-muted-foreground">
-                            Haz clic en el botón de abajo para generar tu código QR
+                            Haz clic en el boton de abajo para generar tu codigo QR
                           </p>
                           <Button
                             onClick={handleConnect}
