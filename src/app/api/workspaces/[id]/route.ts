@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const workspaceId = req.url.split('/workspaces/')[1]?.split('/')[0]
-    await requireWorkspace(workspaceId, session.userId)
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
+    }
+
+    // RBAC: Any workspace member can view workspace
+    await rbac.canRead(session, workspaceId)
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
@@ -32,7 +39,13 @@ export async function PUT(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const workspaceId = req.url.split('/workspaces/')[1]?.split('/')[0]
-    await requireWorkspace(workspaceId, session.userId)
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
+    }
+
+    // RBAC: Workspace settings require owner or admin
+    await rbac.ownerOrAdmin(session, workspaceId)
 
     const body = await req.json()
     const { name, industry, timezone, locale, logo } = body

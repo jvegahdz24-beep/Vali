@@ -6,14 +6,20 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
+    if (!workspaceId) {
+      return Response.json({ error: 'workspaceId is required' }, { status: 400 })
+    }
+
+    // RBAC: Any workspace member can list agents
+    await rbac.canRead(session, workspaceId)
 
     const type = searchParams.get('type') || undefined
     const includeInactive = searchParams.get('includeInactive') === 'true'
@@ -64,7 +70,8 @@ export async function POST(req: NextRequest) {
       webhookUrl,
     } = body
 
-    await requireWorkspace(workspaceId, session.userId)
+    // RBAC: Create agent requires owner or admin
+    await rbac.ownerOrAdmin(session, workspaceId)
 
     if (!name) {
       return Response.json(

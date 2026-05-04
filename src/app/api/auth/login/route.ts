@@ -29,7 +29,7 @@ const DEMO_PASSWORD = process.env.DEMO_PASSWORD || ''
 export async function POST(req: NextRequest) {
   // Rate limit: 10 login attempts per minute per IP
   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || 'unknown'
-  const rateLimitResult = rateLimit(clientIp + ':login', 10, 60_000)
+  const rateLimitResult = await rateLimit(clientIp + ':login', 10, 60_000)
   if (!rateLimitResult.success) {
     return NextResponse.json(
       { error: 'Demasiados intentos. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },

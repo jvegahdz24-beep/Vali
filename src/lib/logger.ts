@@ -22,6 +22,8 @@ export type LogTag =
   | 'FRONTEND'
   | 'FOLLOWUP'
   | 'STAGE_TRACKER'
+  | 'EVENT_BUS'
+  | 'LIFE_ENGINE'
 
 export interface LogEntry {
   tag: string       // e.g. "[CORE]"

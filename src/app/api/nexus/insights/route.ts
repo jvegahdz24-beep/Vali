@@ -7,9 +7,17 @@ import ZAI from 'z-ai-web-dev-sdk'
 export async function GET(request: NextRequest) {
   try {
     const session = await requireAuth(request)
+    const { searchParams } = new URL(request.url)
+    const workspaceId = searchParams.get('workspaceId') || undefined
+
+    const where: Record<string, unknown> = {
+      userId: session.userId,
+      // If workspaceId is provided, scope NEXUS insights to that workspace
+      ...(workspaceId ? { workspaceId } : {}),
+    }
 
     const insights = await db.nexusInsight.findMany({
-      where: { userId: session.userId },
+      where,
       orderBy: { createdAt: 'desc' },
       take: 20,
     })

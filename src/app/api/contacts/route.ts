@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { enforcePlanLimit } from '@/lib/plan-enforcer'
 
 export async function GET(req: NextRequest) {
   try {
@@ -104,6 +105,16 @@ export async function POST(req: NextRequest) {
         { error: 'Missing required fields: firstName' },
         { status: 400 }
       )
+    }
+
+    // Enforce plan limit
+    try {
+      await enforcePlanLimit(workspaceId, 'contacts')
+    } catch (planErr) {
+      if (planErr && typeof planErr === 'object' && 'statusCode' in planErr && (planErr as any).statusCode === 403) {
+        return Response.json((planErr as any).toJSON(), { status: 403 })
+      }
+      throw planErr
     }
 
     // Check for duplicate phone

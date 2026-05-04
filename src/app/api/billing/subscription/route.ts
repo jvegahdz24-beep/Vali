@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { PLANS } from '@/lib/constants'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +13,9 @@ export async function GET(req: NextRequest) {
     if (!workspaceId) {
       return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
-    await requireWorkspace(workspaceId, session.userId)
+
+    // RBAC: Any workspace member can view subscription info
+    await rbac.canRead(session, workspaceId)
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
@@ -64,7 +67,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    await requireWorkspace(workspaceId, session.userId)
+
+    // RBAC: Billing management requires owner or admin
+    await rbac.ownerOrAdmin(session, workspaceId)
 
     const planConfig = PLANS[plan]
     if (!planConfig) {

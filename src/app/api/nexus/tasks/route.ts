@@ -8,12 +8,17 @@ export async function GET(request: NextRequest) {
     const session = await requireAuth(request)
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const workspaceId = searchParams.get('workspaceId') || undefined
+
+    const where: Record<string, unknown> = {
+      userId: session.userId,
+      ...(status && status !== 'all' ? { status } : {}),
+      // If workspaceId is provided, scope NEXUS tasks to that workspace
+      ...(workspaceId ? { workspaceId } : {}),
+    }
 
     const tasks = await db.nexusTask.findMany({
-      where: {
-        userId: session.userId,
-        ...(status && status !== 'all' ? { status } : {}),
-      },
+      where,
       orderBy: { createdAt: 'desc' },
     })
 
@@ -28,7 +33,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request)
     const body = await request.json()
-    const { title, description, priority, dueDate } = body
+    const { title, description, priority, dueDate, workspaceId } = body
 
     if (!title) {
       return Response.json({ error: 'Título es requerido' }, { status: 400 })
@@ -37,6 +42,7 @@ export async function POST(request: NextRequest) {
     const task = await db.nexusTask.create({
       data: {
         userId: session.userId,
+        workspaceId: workspaceId || null,
         title,
         description,
         priority: priority || 'medium',

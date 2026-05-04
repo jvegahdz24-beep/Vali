@@ -64,7 +64,7 @@ export interface AIProviderInstance {
 // When the z.ai SDK proxy returns 401 (missing X-Token),
 // fall back to calling the GLM API directly with JWT auth.
 
-function generateGLMToken(apiKey: string): string {
+export function generateGLMToken(apiKey: string): string {
   const [id, secret] = apiKey.split('.')
   const header = { alg: 'HS256', sign_type: 'SIGN' }
   const payload = {

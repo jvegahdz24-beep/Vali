@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { SESSION_COOKIE_NAME } from '@/lib/auth-edge'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import type { NextRequest } from 'next/server'
 
 // ─── Route Configuration ──────────────────────────────────────
@@ -32,6 +32,8 @@ const publicApiRoutes = [
 // Rate-limited route prefixes (endpoint → { limit, windowMs })
 const rateLimitedRoutes: Record<string, { limit: number; windowMs: number }> = {
   '/api/auth/login': { limit: 20, windowMs: 60_000 },
+  '/api/auth/register': { limit: 3, windowMs: 60_000 },
+  '/api/auth/reset-password': { limit: 5, windowMs: 60_000 },
 }
 
 // Static file extensions
@@ -178,10 +180,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for authentication via valiflow-session cookie presence.
-  // NOTE: Full JWT verification is done client-side (useAuth hook)
-  // and in API routes (requireAuth). Middleware only checks cookie existence
-  // to avoid crypto.subtle crashes in Edge Runtime of standalone mode.
+  // ─── SECURE: Actually verify the JWT signature ───────────
+  // Previously we only checked if the cookie EXISTS (any string bypassed auth).
+  // Now we use crypto.subtle.verify() to validate the HMAC-SHA256 signature,
+  // check expiration, and validate required payload fields.
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
   if (!sessionToken) {
@@ -190,8 +192,26 @@ export async function middleware(request: NextRequest) {
     return addSecurityHeaders(NextResponse.redirect(loginUrl))
   }
 
-  // Cookie exists — pass through. Client-side useAuth will verify JWT
-  // and redirect to /login if token is invalid/expired.
+  // Verify JWT signature + expiration + payload
+  const payload = await verifySessionToken(sessionToken)
+
+  if (!payload) {
+    // Invalid or expired token — redirect to login
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('callbackUrl', pathname)
+    // Clear the invalid cookie so the client doesn't get stuck in a loop
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.set(SESSION_COOKIE_NAME, '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    })
+    return addSecurityHeaders(response)
+  }
+
+  // Valid session — pass through
   return addSecurityHeaders(NextResponse.next())
 }
 

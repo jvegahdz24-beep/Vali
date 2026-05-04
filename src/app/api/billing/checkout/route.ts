@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCheckoutSession, PLAN_PRICE_IDS } from '@/lib/stripe'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +21,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    await requireWorkspace(workspaceId, session.userId)
+
+    // RBAC: Billing requires owner or admin
+    await rbac.ownerOrAdmin(session, workspaceId)
 
     // Validate plan key
     if (!PLAN_PRICE_IDS[planKey]) {

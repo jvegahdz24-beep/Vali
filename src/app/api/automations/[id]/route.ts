@@ -7,7 +7,8 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function GET(
   req: NextRequest,
@@ -22,7 +23,8 @@ export async function GET(
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
 
-    await requireWorkspace(automation.workspaceId, session.userId)
+    // RBAC: Any workspace member can view an automation
+    await rbac.canRead(session, automation.workspaceId)
 
     return Response.json({
       ...automation,
@@ -49,7 +51,8 @@ export async function PUT(
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
 
-    await requireWorkspace(existing.workspaceId, session.userId)
+    // RBAC: Update automation requires owner or admin
+    await rbac.ownerOrAdmin(session, existing.workspaceId)
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
@@ -88,7 +91,8 @@ export async function DELETE(
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
 
-    await requireWorkspace(existing.workspaceId, session.userId)
+    // RBAC: Delete automation requires owner or admin
+    await rbac.ownerOrAdmin(session, existing.workspaceId)
 
     await db.automation.delete({ where: { id } })
 

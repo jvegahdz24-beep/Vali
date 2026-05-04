@@ -118,11 +118,35 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
   const safePhone = normalizedPhone
 
-  // ── 1. Find workspace ──
+  // ── 1. Find workspace via phone-to-workspace mapping ──
   let workspace
   if (forcedWorkspaceId) {
     workspace = await db.workspace.findUnique({ where: { id: forcedWorkspaceId } })
-  } else {
+  } else if (safePhone) {
+    // Look up workspace via PhoneWorkspaceMapping (uses normalized phone)
+    const mapping = await db.phoneWorkspaceMapping.findFirst({
+      where: {
+        phoneNumber: safePhone,
+        channel,
+        isActive: true,
+      },
+      include: { workspace: true },
+    })
+    if (mapping?.workspace) {
+      workspace = mapping.workspace
+      debug(`[Core:1] Workspace resolved via phone mapping: ${workspace.name} (phone=${safePhone})`)
+    }
+  }
+
+  // Fallback: if no mapping found, try first active workspace
+  if (!workspace) {
+    if (safePhone && !forcedWorkspaceId) {
+      console.warn(
+        `[Multi-Tenancy] No phone workspace mapping found for phone=${safePhone} channel=${channel}. ` +
+        `Falling back to first active workspace. ` +
+        `Create a PhoneWorkspaceMapping to route this phone to the correct workspace.`
+      )
+    }
     workspace = await db.workspace.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } })
     // Fallback: if no active workspace, reactivate the first one
     if (!workspace) {
@@ -137,7 +161,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   if (!workspace) {
     throw new Error('No workspace found')
   }
-  debug(`[Core:2] ✅ Workspace: ${workspace.name}`)
+  debug(`[Core:2] ✅ Workspace: ${workspace.name} (id=${workspace.id})`)
 
   // ── 2. Find or create contact (FIX P0: atomic upsert) ──
   // Uses DB-level unique constraint on (workspaceId, phone) to prevent

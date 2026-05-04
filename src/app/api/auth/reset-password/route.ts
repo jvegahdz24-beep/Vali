@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit: 3 password reset requests per minute per IP
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-    const rl = rateLimit(`reset-pw:${clientIp}`, RATE_LIMITS.auth.limit, RATE_LIMITS.auth.windowMs)
+    const rl = await rateLimit(`reset-pw:${clientIp}`, RATE_LIMITS.auth.limit, RATE_LIMITS.auth.windowMs)
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Demasiados intentos. Espera un momento.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },

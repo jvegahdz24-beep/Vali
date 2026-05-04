@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit: 3 registrations per minute per IP
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-    const rl = rateLimit(`register:${clientIp}`, RATE_LIMITS.register.limit, RATE_LIMITS.register.windowMs)
+    const rl = await rateLimit(`register:${clientIp}`, RATE_LIMITS.register.limit, RATE_LIMITS.register.windowMs)
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Demasiados intentos. Espera un momento.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },

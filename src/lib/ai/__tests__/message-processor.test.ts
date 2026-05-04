@@ -19,6 +19,9 @@ vi.mock('@/lib/db', () => ({
       findFirst: (...args: any[]) => mockFindFirst(...args),
       update: (...args: any[]) => mockUpdate(...args),
     },
+    phoneWorkspaceMapping: {
+      findFirst: (...args: any[]) => mockFindFirst(...args),
+    },
     contact: {
       upsert: (...args: any[]) => mockUpsert(...args),
       findUnique: (...args: any[]) => mockFindUnique(...args),
@@ -102,7 +105,10 @@ describe('processMessageCore', () => {
   })
 
   it('lanza error si no hay workspace', async () => {
-    mockFindFirst.mockResolvedValue(null)
+    // phoneWorkspaceMapping returns null (no mapping)
+    mockFindFirst.mockResolvedValueOnce(null)
+    // workspace findFirst returns null (no workspace)
+    mockFindFirst.mockResolvedValueOnce(null)
 
     const { processMessageCore } = await import('@/lib/ai/message-processor')
 
@@ -115,6 +121,8 @@ describe('processMessageCore', () => {
   })
 
   it('procesa mensaje exitosamente con workspace existente', async () => {
+    // phoneWorkspaceMapping returns null (no mapping → falls back)
+    mockFindFirst.mockResolvedValueOnce(null)
     // Workspace exists
     mockFindFirst.mockResolvedValueOnce({
       id: 'ws_1',
@@ -173,6 +181,8 @@ describe('processMessageCore', () => {
   })
 
   it('crea conversación nueva si no existe', async () => {
+    // phoneWorkspaceMapping returns null
+    mockFindFirst.mockResolvedValueOnce(null)
     // Workspace
     mockFindFirst.mockResolvedValueOnce({
       id: 'ws_1',
@@ -223,6 +233,8 @@ describe('processMessageCore', () => {
   })
 
   it('skipAI retorna sin respuesta de IA', async () => {
+    // phoneWorkspaceMapping returns null
+    mockFindFirst.mockResolvedValueOnce(null)
     mockFindFirst.mockResolvedValueOnce({
       id: 'ws_1',
       name: 'WS',

@@ -1,18 +1,21 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+import { chatWithAI } from '@/lib/ai/providers'
+import { extractMemoriesFromConversation, searchMemories } from '@/lib/memory-engine'
 
 // POST /api/nexus/chat — Send message and get AI streaming response
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request)
     const body = await request.json()
-    const { message, conversationId, agentType } = body
+    const { message, conversationId, agentType, contactId } = body
 
     if (!message || typeof message !== 'string') {
       return Response.json({ error: 'Mensaje requerido' }, { status: 400 })
     }
+
+        const workspaceId = body.workspaceId || undefined
 
     // Get or create conversation
     let convId = conversationId
@@ -20,6 +23,7 @@ export async function POST(request: NextRequest) {
       const conv = await db.nexusConversation.create({
         data: {
           userId: session.userId,
+          workspaceId: workspaceId || null,
           agentType: agentType || 'nexus',
           title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
         }
@@ -51,12 +55,50 @@ export async function POST(request: NextRequest) {
       take: 20,
     })
 
-    // Get user memories for context
-    const memories = await db.nexusMemory.findMany({
-      where: { userId: session.userId },
-      orderBy: { importance: 'desc' },
-      take: 10,
-    })
+    // ─── NEW: Use Memory Engine for semantic relevance ───
+    let memoryContext = 'Sin memorias aún.'
+    if (contactId) {
+      try {
+        const { getRelevantMemories } = await import('@/lib/memory-engine')
+        const relevantMemories = await getRelevantMemories(contactId, message, 10)
+        if (relevantMemories.length > 0) {
+          memoryContext = relevantMemories
+            .map((m) => `- [${m.category}] ${m.key}: ${m.value}`)
+            .join('\n')
+        }
+      } catch {
+        // Fallback to basic memories if engine fails
+        const basicMemories = await db.nexusMemory.findMany({
+          where: {
+            userId: session.userId,
+            contactId,
+            status: 'active',
+          },
+          orderBy: { importance: 'desc' },
+          take: 10,
+        })
+        if (basicMemories.length > 0) {
+          memoryContext = basicMemories
+            .map((m) => `- [${m.category}] ${m.key}: ${m.value}`)
+            .join('\n')
+        }
+      }
+    } else {
+      // No contactId — use global user memories
+      const userMemories = await db.nexusMemory.findMany({
+        where: {
+          userId: session.userId,
+          status: 'active',
+        },
+        orderBy: { importance: 'desc' },
+        take: 10,
+      })
+      if (userMemories.length > 0) {
+        memoryContext = userMemories
+          .map((m) => `- [${m.category}] ${m.key}: ${m.value}`)
+          .join('\n')
+      }
+    }
 
     // Build system prompt with agent personality and memories
     const agentType_val = agentType || 'nexus'
@@ -65,16 +107,19 @@ export async function POST(request: NextRequest) {
 Piensa de forma independiente, toma initiative cuando sea necesario, y recuerda información importante sobre el usuario.
 Respondes en español por defecto a menos que el usuario hable otro idioma.
 Memorias del usuario que debes tener en cuenta:
-${memories.map(m => `- [${m.category}] ${m.key}: ${m.value}`).join('\n') || 'Sin memorias aún.'}`,
+${memoryContext}`,
       coder: `Eres CODEX, un asistente especializado en programación y desarrollo de software.
 Eres experto en múltiples lenguajes y frameworks. Proporcionas código limpio, bien documentado y optimizado.
-Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`,
+Memorias del usuario:
+${memoryContext}`,
       analyst: `Eres ANALYTICA, un asistente especializado en análisis de datos y business intelligence.
 Ayudas a interpretar datos, crear reportes y encontrar insights accionables.
-Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`,
+Memorias del usuario:
+${memoryContext}`,
       writer: `Eres ESCRITOR, un asistente especializado en redacción y creación de contenido.
 Dominas múltiples formatos: artículos, correos, guiones, documentación técnica y creativa.
-Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`,
+Memorias del usuario:
+${memoryContext}`,
     }
 
     const systemPrompt = agentConfigs[agentType_val] || agentConfigs.nexus
@@ -85,20 +130,23 @@ Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`
       ...history.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
     ]
 
-    // Call AI via z-ai-web-dev-sdk
-    const zai = await ZAI.create()
+    // Call AI via chatWithAI
     const startTime = Date.now()
 
     try {
-      const completion = await zai.chat.completions.create({
-        messages: aiMessages,
-        temperature: agentType_val === 'coder' ? 0.3 : 0.7,
-        max_tokens: 4096,
-      })
+      const result = await chatWithAI(
+        aiMessages,
+        'glm',
+        undefined,
+        {
+          temperature: agentType_val === 'coder' ? 0.3 : 0.7,
+          maxTokens: 4096,
+        }
+      )
 
       const latencyMs = Date.now() - startTime
-      const aiContent = completion.choices[0]?.message?.content || 'Lo siento, no pude generar una respuesta.'
-      const tokensUsed = completion.usage?.total_tokens || 0
+      const aiContent = result.content
+      const tokensUsed = result.tokensUsed
 
       // Save assistant message
       await db.nexusMessage.create({
@@ -107,13 +155,23 @@ Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`
           role: 'assistant',
           content: aiContent,
           tokens: tokensUsed,
-          model: completion.model || 'unknown',
+          model: result.model,
           latencyMs,
         }
       })
 
-      // Extract and save memories from the conversation
-      await extractMemories(session.userId, message, aiContent)
+      // ─── NEW: Use Memory Engine for auto-extraction ───
+      // Extract memories from conversation asynchronously (don't block response)
+      extractMemoriesFromConversation(
+        session.userId,
+        [
+          { role: 'user', content: message },
+          { role: 'assistant', content: aiContent },
+        ],
+        contactId
+      ).catch((err) => {
+        console.error('[NEXUS Memory Engine] Background extraction error:', err instanceof Error ? err.message : String(err))
+      })
 
       return Response.json({
         message: aiContent,
@@ -149,12 +207,18 @@ Memorias del usuario: ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}`
 export async function GET(request: NextRequest) {
   try {
     const session = await requireAuth(request)
+    const { searchParams } = new URL(request.url)
+    const workspaceId = searchParams.get('workspaceId') || undefined
+
+    const where: Record<string, unknown> = {
+      userId: session.userId,
+      status: 'active',
+      // If workspaceId is provided, scope NEXUS conversations to that workspace
+      ...(workspaceId ? { workspaceId } : {}),
+    }
 
     const conversations = await db.nexusConversation.findMany({
-      where: {
-        userId: session.userId,
-        status: 'active',
-      },
+      where,
       orderBy: { updatedAt: 'desc' },
       take: 50,
       include: {
@@ -170,67 +234,5 @@ export async function GET(request: NextRequest) {
     return Response.json({ conversations })
   } catch (error) {
     return errorResponse(error)
-  }
-}
-
-// Auto-extract memories from conversations
-async function extractMemories(userId: string, userMessage: string, aiResponse: string) {
-  try {
-    const zai = await ZAI.create()
-    const extraction = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `Extrae hechos importantes del usuario del siguiente diálogo.
-Responde SOLO en formato JSON array, cada objeto con: key (breve identificador), value (el hecho), category (preference/fact/instruction/context), importance (1-10).
-Si no hay información notable, responde con [].
-Ejemplo: [{"key":"nombre","value":"Juan","category":"fact","importance":8}]
-NO incluyas texto adicional, solo el JSON array.`
-        },
-        {
-          role: 'user',
-          content: `Usuario: ${userMessage}\nAsistente: ${aiResponse}`
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 500,
-    })
-
-    const content = extraction.choices[0]?.message?.content || '[]'
-    // Clean response - extract JSON array
-    const jsonMatch = content.match(/\[[\s\S]*\]/)
-    if (jsonMatch) {
-      const memories = JSON.parse(jsonMatch[0]) as Array<{key: string; value: string; category: string; importance: number}>
-
-      for (const mem of memories) {
-        if (mem.key && mem.value) {
-          await db.nexusMemory.upsert({
-            where: {
-              userId_key: {
-                userId,
-                key: mem.key,
-              }
-            },
-            create: {
-              userId,
-              key: mem.key,
-              value: mem.value,
-              category: mem.category || 'general',
-              importance: Math.min(10, Math.max(1, mem.importance || 5)),
-              source: 'conversation',
-            },
-            update: {
-              value: mem.value,
-              importance: Math.min(10, Math.max(1, mem.importance || 5)),
-              lastAccessed: new Date(),
-              accessCount: { increment: 1 },
-            }
-          })
-        }
-      }
-    }
-  } catch (e) {
-    // Memory extraction failure should not block the response
-    console.error('[NEXUS Memory Extraction Error]', e instanceof Error ? e.message : String(e))
   }
 }

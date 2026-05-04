@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const session = await requireAuth(req)
 
     const ip = getClientIp(req)
-    const rl = rateLimit(`${ip}:whatsapp:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
+    const rl = await rateLimit(`${ip}:whatsapp:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
     if (!rl.success) {
       return NextResponse.json({ error: 'Demasiados mensajes. Intenta más tarde.', code: 'RATE_LIMITED' }, { status: 429 })
     }
