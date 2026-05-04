@@ -5,8 +5,16 @@
 // Replaces jose package to eliminate Turbopack bundling issues
 // ═══════════════════════════════════════════════════════════════
 
-// JWT secret from env
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-secret-do-not-use-in-prod-32chars!!' : (() => { throw new Error('NEXTAUTH_SECRET environment variable is required in production') })())
+// JWT secret from env — validated lazily at usage time, not at module load,
+// so that `next build` (NODE_ENV=production) doesn't crash when the var is missing.
+const _JWT_SECRET = process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-secret-do-not-use-in-prod-32chars!!' : '')
+
+function getJWT_SECRET(): string {
+  if (!_JWT_SECRET) {
+    throw new Error('NEXTAUTH_SECRET environment variable is required in production')
+  }
+  return _JWT_SECRET
+}
 
 // Cookie name
 export const SESSION_COOKIE_NAME = 'valiflow-session'
@@ -52,7 +60,7 @@ function base64urlDecode(str: string): Uint8Array {
  */
 async function getSigningKey(): Promise<CryptoKey> {
   const encoder = new TextEncoder()
-  const keyData = encoder.encode(JWT_SECRET)
+  const keyData = encoder.encode(getJWT_SECRET())
   return crypto.subtle.importKey(
     'raw',
     keyData,

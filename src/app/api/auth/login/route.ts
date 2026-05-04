@@ -48,9 +48,18 @@ export async function POST(req: NextRequest) {
     const normalizedEmail = email.toLowerCase().trim()
 
     // Find user in DB
-    const user = await db.user.findUnique({
-      where: { email: normalizedEmail },
-    })
+    let user
+    try {
+      user = await db.user.findUnique({
+        where: { email: normalizedEmail },
+      })
+    } catch {
+      // DB unreachable — return 401 to avoid leaking internal errors on auth endpoint
+      return NextResponse.json(
+        { error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' },
+        { status: 401 }
+      )
+    }
 
     if (!user || !user.password) {
       return NextResponse.json(
