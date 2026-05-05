@@ -53,3 +53,29 @@ Stage Summary:
 - Tests: 122/122 passing
 - TypeScript: 0 errors
 - Git: commit local hecho (push remoto requiere GitHub token)
+---
+Task ID: fase1-infraestructura-nerviosa
+Agent: Main Agent (5 parallel sub-agents)
+Task: FASE 1 — Infraestructura Nerviosa completa
+
+Work Log:
+- Audit completo del estado actual: schema PostgreSQL, Docker Compose, Redis, JWT, RBAC, Event Bus, Logger — todo ya existente de sesión anterior
+- Identificados 12 gaps críticos: .env apuntaba a SQLite, sin BullMQ, sin Meilisearch, sin CI/CD, sin seed, sin auth routes, sin tracing, sin metrics
+- Lanzó 5 sub-agentes en paralelo: BullMQ queues, Docker+Meilisearch, Auth API routes, Observability, Seeds+CI/CD
+- BullMQ: 5 colas (followups, events, ai-tasks, sync, notifications) + 5 workers reales con integración completa
+- Meilisearch: servicio docker + docker-compose.dev.yml + config integrada
+- Auth API: 5 endpoints (login, register, refresh, logout, me) con rate limiting y refresh token rotation
+- Observability: custom tracer con correlation IDs + Prometheus metrics (9 métricas) + /api/metrics endpoint
+- CI/CD: GitHub Actions con PostgreSQL+Redis services para tests
+- Seeds: demo user + workspace + pipeline con 5 etapas (idempotente)
+- Fixes: .env PostgreSQL, Dockerfile Node 22, logger tags, crypto types, redis set overload, middleware metrics route
+- Bootstrap: workers auto-start en app init
+- Version: 0.2.0 → 3.0.0
+- TypeScript: 0 errores de compilación
+- Push: commit 1217f17, tag v3.0.0-fase1
+
+Stage Summary:
+- 30 archivos modificados (3149 insertions, 207 deletions)
+- FASE 1 completa: PostgreSQL + Redis + BullMQ + Meilisearch + JWT + RBAC + Event Bus + Auth Routes + Observability + CI/CD + Seeds
+- TypeScript: 0 errors
+- Git: pushed to origin/main, tag v3.0.0-fase1
