@@ -82,8 +82,8 @@ model User {
   nexusTasks         NexusTask[]
   nexusInsights      NexusInsight[]
   nexusProfile       NexusProfile?
-  nexusTempLogs      NexusTemperatureLog[] @relation("TempLogUser")
-  nexusWhatsAppLogs  NexusWhatsAppLog[]    @relation("WhatsAppLogUser")
+  nexusTempLogs      NexusTemperatureLog[]    @relation("TempLogUser")
+  nexusWhatsAppLogs  NexusWhatsAppLog[]       @relation("WhatsAppLogUser")
   nexusContacts      NexusContact[]
   nexusFollowUps     NexusFollowUp[]
   nexusEnergyLogs    NexusEnergyLog[]
@@ -114,37 +114,43 @@ model Workspace {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  ownerId         String
-  members         WorkspaceMember[]
-  contacts        Contact[]
-  conversations   Conversation[]
-  pipelines       Pipeline[]
-  agents          Agent[]
-  automations     Automation[]
-  followUpRules   FollowUpRule[]
-  agentPersonas   AgentPersona[]
-  webhookConfigs  WebhookConfig[]
-  analyticsEvents AnalyticsEvent[]
-  subscription    Subscription?
-  deals           Deal[]
-  leadProfiles    LeadProfile[]
-  appointments    Appointment[]
-  importJobs      ImportJob[]
-  automationLogs  AutomationLog[]
-  whatsappAuth    WhatsAppAuth?
-  telegramBot     TelegramBot?
-  followUpTasks   FollowUpTask[]
-  phoneMappings     PhoneWorkspaceMapping[]
-  ephemeralAgents   EphemeralAgent[]
-  analyticsAlerts   AnalyticsAlert[]
-  funnelSnapshots   FunnelSnapshot[]
+  owner              User                    @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  ownerId            String
+  members            WorkspaceMember[]
+  contacts           Contact[]
+  conversations      Conversation[]
+  pipelines          Pipeline[]
+  agents             Agent[]
+  automations        Automation[]
+  followUpRules      FollowUpRule[]
+  agentPersonas      AgentPersona[]
+  webhookConfigs     WebhookConfig[]
+  analyticsEvents    AnalyticsEvent[]
+  subscription       Subscription?
+  deals              Deal[]
+  leadProfiles       LeadProfile[]
+  appointments       Appointment[]
+  importJobs         ImportJob[]
+  automationLogs     AutomationLog[]
+  whatsappAuth       WhatsAppAuth?
+  telegramBot        TelegramBot?
+  followUpTasks      FollowUpTask[]
+  phoneMappings      PhoneWorkspaceMapping[]
+  ephemeralAgents    EphemeralAgent[]
+  analyticsAlerts    AnalyticsAlert[]
+  funnelSnapshots    FunnelSnapshot[]
   nexusConversations NexusConversation[]
-  nexusMemories       NexusMemory[]
-  nexusAgents         NexusAgent[]
-  nexusTasks          NexusTask[]
-  nexusInsights       NexusInsight[]
-  nexusProfiles       NexusProfile[]
+  nexusMemories      NexusMemory[]
+  nexusAgents        NexusAgent[]
+  nexusTasks         NexusTask[]
+  nexusInsights      NexusInsight[]
+  nexusProfiles      NexusProfile[]
+
+  // MEMORY V2 — Multi-Layer Memory System
+  memoryEmbeddings   MemoryEmbedding[]
+  episodicMemories   EpisodicMemory[]
+  emotionalRecords   EmotionalRecord[]
+  behavioralPatterns BehavioralPattern[]
 
   @@index([ownerId])
 }
@@ -152,10 +158,10 @@ model Workspace {
 model PhoneWorkspaceMapping {
   id          String   @id @default(cuid())
   workspaceId String
-  phoneNumber String   // Normalized phone number (e.g. "+5215512345678")
+  phoneNumber String // Normalized phone number (e.g. "+5215512345678")
   channel     String   @default("whatsapp") // whatsapp, telegram, instagram
   isActive    Boolean  @default(true)
-  label       String?  // Optional human-readable label (e.g. "Ventas WhatsApp")
+  label       String? // Optional human-readable label (e.g. "Ventas WhatsApp")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -239,12 +245,13 @@ model Conversation {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  messages      Message[]
-  agentLogs     AgentLog[]
-  mediaFiles    MediaFile[]
-  followUpTasks FollowUpTask[]
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact          Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages         Message[]
+  agentLogs        AgentLog[]
+  mediaFiles       MediaFile[]
+  followUpTasks    FollowUpTask[]
+  episodicMemories EpisodicMemory[]
 
   @@index([workspaceId])
   @@index([contactId])
@@ -789,12 +796,12 @@ model WhatsAppAuth {
 
 model EventLog {
   id        String   @id @default(cuid())
-  type      String   // event type: message.received, emotion.detected, etc.
+  type      String // event type: message.received, emotion.detected, etc.
   source    String   @default("system") // who emitted: system, engine, whatsapp, ai, automation
-  payload   String   @db.Text  // JSON-serialized event payload
+  payload   String   @db.Text // JSON-serialized event payload
   createdAt DateTime @default(now())
   processed Boolean  @default(false) // true = handled successfully, false = pending/DLQ
-  error     String?  // error message if processing failed
+  error     String? // error message if processing failed
 
   @@index([type])
   @@index([source])
@@ -807,14 +814,14 @@ model EventLog {
 // ─────────────────────────────────────────────────────────────
 
 model TelegramBot {
-  id          String   @id @default(cuid())
-  workspaceId String   @unique
-  botToken    String   @db.Text // Telegram Bot API token (stored encrypted at rest via env)
-  chatId      String?  // The chat ID where commands are sent from (authorized user)
-  isActive    Boolean  @default(true)
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  botToken    String    @db.Text // Telegram Bot API token (stored encrypted at rest via env)
+  chatId      String? // The chat ID where commands are sent from (authorized user)
+  isActive    Boolean   @default(true)
   pausedAt    DateTime? // When automations were paused via /pause
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -850,7 +857,7 @@ model EngineEvent {
 model NexusConversation {
   id          String   @id @default(cuid())
   userId      String
-  workspaceId String?  // Optional: scope NEXUS data to a workspace
+  workspaceId String? // Optional: scope NEXUS data to a workspace
   title       String   @default("Nueva conversación")
   agentType   String   @default("nexus") // nexus, coder, analyst, writer, researcher
   status      String   @default("active") // active, archived, deleted
@@ -889,8 +896,8 @@ model NexusMessage {
 model NexusMemory {
   id               String    @id @default(cuid())
   userId           String
-  workspaceId       String?   // Optional: scope NEXUS data to a workspace
-  contactId        String?   // Optional: associate memory with a specific contact
+  workspaceId      String? // Optional: scope NEXUS data to a workspace
+  contactId        String? // Optional: associate memory with a specific contact
   category         String    @default("conversational") // conversational, commercial, emotional, behavioral, preference, fact, instruction, context
   key              String
   value            String
@@ -901,13 +908,13 @@ model NexusMemory {
   lastReinforcedAt DateTime  @default(now()) // When this memory was last used/referenced
   expiresAt        DateTime?
   status           String    @default("active") // active, superseded, archived
-  supersededById   String?   // ID of the memory that superseded this one
-  embedding        String?   // AI-generated description for semantic relevance ranking
+  supersededById   String? // ID of the memory that superseded this one
+  embedding        String? // AI-generated description for semantic relevance ranking
   tags             String    @default("[]") // JSON array of tags for classification
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@unique([userId, key])
@@ -923,7 +930,7 @@ model NexusMemory {
 model NexusAgent {
   id           String   @id @default(cuid())
   userId       String
-  workspaceId  String?  // Optional: scope NEXUS data to a workspace
+  workspaceId  String? // Optional: scope NEXUS data to a workspace
   name         String
   type         String   @default("nexus") // nexus, coder, analyst, writer, researcher, custom
   description  String?
@@ -935,7 +942,7 @@ model NexusAgent {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
@@ -947,7 +954,7 @@ model NexusAgent {
 model NexusTask {
   id          String    @id @default(cuid())
   userId      String
-  workspaceId String?   // Optional: scope NEXUS data to a workspace
+  workspaceId String? // Optional: scope NEXUS data to a workspace
   title       String
   description String?
   status      String    @default("pending") // pending, in_progress, completed, failed, cancelled
@@ -959,7 +966,7 @@ model NexusTask {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
@@ -972,7 +979,7 @@ model NexusTask {
 model NexusInsight {
   id          String   @id @default(cuid())
   userId      String
-  workspaceId String?  // Optional: scope NEXUS data to a workspace
+  workspaceId String? // Optional: scope NEXUS data to a workspace
   type        String // pattern, suggestion, anomaly, learning
   title       String
   content     String   @db.Text
@@ -981,7 +988,7 @@ model NexusInsight {
   metadata    String   @default("{}") // JSON
   createdAt   DateTime @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
@@ -997,7 +1004,7 @@ model NexusInsight {
 
 model NexusProfile {
   userId                     String    @id // 1:1 with User, uses userId as PK
-  workspaceId                 String?   // Optional: scope NEXUS data to a workspace
+  workspaceId                String? // Optional: scope NEXUS data to a workspace
   age                        Int?
   gender                     String? // masculino, femenino, otro, no_especificar
   occupation                 String?
@@ -1088,7 +1095,7 @@ model NexusContact {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  followUps NexusFollowUp[]
+  followUps     NexusFollowUp[]
   silenceAlerts NexusSilenceAlert[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1104,16 +1111,16 @@ model NexusContact {
 // ─────────────────────────────────────────────────────────────
 
 model EphemeralAgent {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   contactId   String?
-  agentType   String   // financial_advisor, debt_collector, recovery_agent, emotional_support, calendar_agent, research_agent, campaign_agent, closing_agent
-  status      String   @default("spawning") // spawning, active, completed, expired, failed
-  objective   String   @default("")
-  result      String   @default("{}") // JSON: agent's final output / recommendation
-  spawnReason String?  // What triggered this spawn (event description)
-  context     String   @default("{}") // JSON: additional context passed at spawn time
-  createdAt   DateTime @default(now())
+  agentType   String // financial_advisor, debt_collector, recovery_agent, emotional_support, calendar_agent, research_agent, campaign_agent, closing_agent
+  status      String    @default("spawning") // spawning, active, completed, expired, failed
+  objective   String    @default("")
+  result      String    @default("{}") // JSON: agent's final output / recommendation
+  spawnReason String? // What triggered this spawn (event description)
+  context     String    @default("{}") // JSON: additional context passed at spawn time
+  createdAt   DateTime  @default(now())
   expiresAt   DateTime // When this agent must expire
   completedAt DateTime?
 
@@ -1132,20 +1139,20 @@ model EphemeralAgent {
 // ─────────────────────────────────────────────────────────────
 
 model NexusFollowUp {
-  id         String   @id @default(cuid())
-  userId     String
-  contactId  String? // optional: linked NexusContact
-  type       String   @default("micro") // micro (hourly), deep (24h), reengagement (silence)
-  content    String   // the generated message content (in Spanish)
-  context    String   @default("{}") // JSON: { topic, timeOfDay, temperature, daysSinceInteraction }
-  status     String   @default("pending") // pending, approved, sent, dismissed, expired
-  sentAt     DateTime?
-  expiresAt  DateTime?
+  id          String    @id @default(cuid())
+  userId      String
+  contactId   String? // optional: linked NexusContact
+  type        String    @default("micro") // micro (hourly), deep (24h), reengagement (silence)
+  content     String // the generated message content (in Spanish)
+  context     String    @default("{}") // JSON: { topic, timeOfDay, temperature, daysSinceInteraction }
+  status      String    @default("pending") // pending, approved, sent, dismissed, expired
+  sentAt      DateTime?
+  expiresAt   DateTime?
   dismissedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contact NexusContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact NexusContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([contactId])
@@ -1155,13 +1162,13 @@ model NexusFollowUp {
 }
 
 model NexusEnergyLog {
-  id           String   @id @default(cuid())
-  userId       String
-  score        Int      // 0-100 energy score
-  breakdown    String   @default("{}") // JSON: { frequencyDelta, responseTimeDelta, lengthDelta, sentimentScore, timePatternScore }
-  label        String? // optional label like "Alta energía", "Posible estrés"
-  source       String   @default("system") // system, manual, ai_analysis
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  score     Int // 0-100 energy score
+  breakdown String   @default("{}") // JSON: { frequencyDelta, responseTimeDelta, lengthDelta, sentimentScore, timePatternScore }
+  label     String? // optional label like "Alta energía", "Posible estrés"
+  source    String   @default("system") // system, manual, ai_analysis
+  createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1170,19 +1177,19 @@ model NexusEnergyLog {
 }
 
 model NexusSilenceAlert {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   userId           String
   contactId        String?
-  hoursSilent      Int      // hours since last interaction
-  expectedInterval Int      // normal expected response interval in hours
-  urgencyLevel     String   @default("low") // low, medium, high, critical
+  hoursSilent      Int // hours since last interaction
+  expectedInterval Int // normal expected response interval in hours
+  urgencyLevel     String    @default("low") // low, medium, high, critical
   message          String? // generated re-engagement message
-  status           String   @default("active") // active, resolved, dismissed, expired
+  status           String    @default("active") // active, resolved, dismissed, expired
   resolvedAt       DateTime?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contact NexusContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact NexusContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([contactId])
@@ -1193,8 +1200,8 @@ model NexusSilenceAlert {
 model NexusBehavioralPattern {
   id          String   @id @default(cuid())
   userId      String
-  patternType String   // rhythm, engagement_cycle, topic_preference, emotional_trigger
-  name        String   // short name like "Persona matutina", "Patrón semanal"
+  patternType String // rhythm, engagement_cycle, topic_preference, emotional_trigger
+  name        String // short name like "Persona matutina", "Patrón semanal"
   description String
   confidence  Float    @default(0) // 0-1
   data        String   @default("{}") // JSON: pattern-specific data
@@ -1214,18 +1221,18 @@ model NexusBehavioralPattern {
 // ─────────────────────────────────────────────────────────────
 
 model AnalyticsAlert {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   contactId   String?
-  alertType   String   // ghosting_risk, ghosted, engagement_drop, sentiment_shift, funnel_stuck, response_time_spike
-  severity    String   @default("warning") // info, warning, critical
+  alertType   String // ghosting_risk, ghosted, engagement_drop, sentiment_shift, funnel_stuck, response_time_spike
+  severity    String    @default("warning") // info, warning, critical
   title       String
   description String
-  metadata    String   @default("{}") // JSON: { expectedIntervalMs, actualIntervalMs, dealStage, ... }
-  isRead      Boolean  @default(false)
-  isResolved  Boolean  @default(false)
+  metadata    String    @default("{}") // JSON: { expectedIntervalMs, actualIntervalMs, dealStage, ... }
+  isRead      Boolean   @default(false)
+  isResolved  Boolean   @default(false)
   resolvedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1238,30 +1245,30 @@ model AnalyticsAlert {
 }
 
 model FunnelSnapshot {
-  id             String   @id @default(cuid())
-  workspaceId    String
-  snapshotDate   DateTime @default(now())
-  period         String   @default("daily") // daily, weekly, monthly
+  id           String   @id @default(cuid())
+  workspaceId  String
+  snapshotDate DateTime @default(now())
+  period       String   @default("daily") // daily, weekly, monthly
 
   // Funnel counts per stage
-  contactCount   Int      @default(0) // total contacts
-  qualifiedCount Int      @default(0) // contacts qualified
-  proposalCount  Int      @default(0) // contacts with proposals
-  negotiationCount Int    @default(0) // contacts in negotiation
-  wonCount       Int      @default(0) // deals won
-  lostCount      Int      @default(0) // deals lost
+  contactCount     Int @default(0) // total contacts
+  qualifiedCount   Int @default(0) // contacts qualified
+  proposalCount    Int @default(0) // contacts with proposals
+  negotiationCount Int @default(0) // contacts in negotiation
+  wonCount         Int @default(0) // deals won
+  lostCount        Int @default(0) // deals lost
 
   // Metrics
-  avgDaysInStage String   @default("{}") // JSON: { "qualified": 5.2, "proposal": 3.1, ... }
-  dropOffRates   String   @default("{}") // JSON: { "contact_to_qualified": 0.35, ... }
+  avgDaysInStage  String  @default("{}") // JSON: { "qualified": 5.2, "proposal": 3.1, ... }
+  dropOffRates    String  @default("{}") // JSON: { "contact_to_qualified": 0.35, ... }
   bottleneckStage String? // which stage has longest avg time
 
   // Value metrics
-  totalPipelineValue  Float @default(0) // sum of active deal values
-  wonValue            Float @default(0) // sum of won deal values in period
-  lostValue           Float @default(0) // sum of lost deal values in period
+  totalPipelineValue Float @default(0) // sum of active deal values
+  wonValue           Float @default(0) // sum of won deal values in period
+  lostValue          Float @default(0) // sum of lost deal values in period
 
-  createdAt      DateTime @default(now())
+  createdAt DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1276,7 +1283,7 @@ model FunnelSnapshot {
 
 model RateLimitEntry {
   id        String   @id @default(cuid())
-  key       String   @unique  // Composite key: e.g. "rl:192.168.1.1:login"
+  key       String   @unique // Composite key: e.g. "rl:192.168.1.1:login"
   count     Int      @default(0)
   lastReset DateTime @default(now())
   createdAt DateTime @default(now())
@@ -1284,4 +1291,102 @@ model RateLimitEntry {
 
   @@index([key])
   @@index([lastReset])
+}
+
+// ─────────────────────────────────────────────────────────────
+// MEMORY V2 — Multi-Layer Memory System (pgvector)
+// ─────────────────────────────────────────────────────────────
+
+model MemoryEmbedding {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String? // Optional: scope to contact
+  content     String   @db.Text // Original content
+  contentHash String // SHA-256 hash for deduplication
+  category    String   @default("general") // general, commercial, emotional, behavioral, preference, fact
+  source      String   @default("conversation") // conversation, manual, system, ai_extraction
+  importance  Int      @default(5) // 1-10
+  metadata    String   @default("{}") // JSON: extra context
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([category])
+  @@index([contentHash])
+  @@index([workspaceId, contactId])
+}
+
+// Vector search is done via raw SQL with pgvector
+// The actual vector column is added via SQL migration (Unsupported type in Prisma)
+
+model EpisodicMemory {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  contactId      String?
+  conversationId String?
+  episodeType    String   @default("message") // message, call, meeting, event, interaction
+  title          String? // Short title for the episode
+  summary        String?  @db.Text // AI-generated summary
+  rawContent     String?  @db.Text // Original raw content
+  emotionalTone  String? // positive, negative, neutral, mixed
+  keyTopics      String   @default("[]") // JSON array of topics
+  participants   String   @default("[]") // JSON array of participant IDs
+  occurredAt     DateTime // When the episode actually happened
+  createdAt      DateTime @default(now())
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([conversationId])
+  @@index([episodeType])
+  @@index([occurredAt])
+  @@index([workspaceId, contactId, occurredAt])
+}
+
+model EmotionalRecord {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String?
+  emotion     String // Primary emotion: joy, anger, sadness, fear, surprise, disgust, trust, anticipation, neutral
+  intensity   Float    @default(0.5) // 0.0 to 1.0
+  valence     Float    @default(0) // -1.0 (negative) to 1.0 (positive)
+  context     String?  @db.Text // What triggered this emotion
+  source      String   @default("conversation") // conversation, system, manual
+  detectedAt  DateTime // When the emotion was detected
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([emotion])
+  @@index([detectedAt])
+  @@index([workspaceId, contactId, detectedAt])
+}
+
+model BehavioralPattern {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  contactId     String?
+  patternType   String // response_time, communication_frequency, topic_preference, buying_behavior, engagement_level
+  patternValue  String   @db.Text // The detected pattern value (JSON for complex patterns)
+  confidence    Float    @default(0.5) // 0.0 to 1.0
+  sampleSize    Int      @default(1) // How many data points support this pattern
+  firstObserved DateTime @default(now())
+  lastObserved  DateTime @default(now())
+  metadata      String   @default("{}") // JSON
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, contactId, patternType])
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([patternType])
 }
