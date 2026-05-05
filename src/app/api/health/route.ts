@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { bootstrapApp } from '@/lib/bootstrap'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  // Bootstrap background systems on first health check
+  bootstrapApp()
   // In production, return minimal data to avoid information leakage
   if (process.env.NODE_ENV === 'production') {
     try {

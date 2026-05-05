@@ -462,7 +462,38 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     })
     : enrichedMessages
 
-  const engineResult = await engine.processConversation({
+  let aiReplyText: string | null = null
+  let detectedIntent: string | undefined
+  // Default empty engine result for when orchestrator is used
+  let engineResult: any = { response: null, action: null, agentRouting: { agentType: 'orchestrator', confidence: 0 }, crmUpdates: [] }
+
+  if (useOrchestrator) {
+    // ── ORCHESTRATOR MODE: Dual Agent (ValiAutoFlow + NEXUS) ──
+    try {
+      const { DualAgentOrchestrator } = await import('@/lib/orchestrator')
+      const orchestrator = new DualAgentOrchestrator()
+      const orchResult = await orchestrator.processMessage({
+        message: text,
+        contactId: contact?.id,
+        workspaceId: workspace.id,
+        conversationHistory: enrichedMessages.slice(0, -1),
+        contactName: contact ? `${contact.firstName} ${contact.lastName || ''}`.trim() : undefined,
+        businessName: workspace.name,
+        leadScore: contact?.leadScore,
+        tags: contact ? JSON.parse(contact.tags || '[]') : [],
+      })
+      aiReplyText = orchResult.response
+      detectedIntent = orchResult.intent
+    } catch (orchErr) {
+      // Orchestrator failed — fall back to RevenueEngine
+      console.warn('[Core] Orchestrator failed, falling back to RevenueEngine:', orchErr)
+      useOrchestrator = false
+    }
+  }
+
+  if (!aiReplyText) {
+    // ── REVENUE ENGINE MODE: Standard commercial pipeline ──
+  engineResult = await engine.processConversation({
     messages: messagesWithMemory,
     contactData: contact
       ? {
@@ -481,12 +512,11 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     dynamicContext,
     conversationHistory: enrichedMessages.slice(0, -1),
     conversationId: conversation.id,
-    leadProfileContext, // DIB: pass profile context for personalization
+    leadProfileContext,
   })
 
   // ── 9. Extract + post-process AI response ──
   debug(`[Core:7] 📤 Extracting response...`)
-  let aiReplyText: string | null = null
   if (engineResult.response) {
     const rawResponse =
       engineResult.response.rawResponse ||
@@ -502,16 +532,16 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       }
     }
   }
+  } // end RevenueEngine fallback block
 
   // ── EVENT BUS: agent.responded ──
   try {
     await eventBus.emit(EVENT_TYPES.AGENT_RESPONDED, {
-      agentId: 'revenue_engine',
-      agentType: engineResult.agentRouting.agentType,
+      agentId: useOrchestrator ? 'orchestrator' : 'revenue_engine',
+      agentType: useOrchestrator ? (detectedIntent || 'orchestrator') : 'revenue_engine',
       conversationId: conversation.id,
       response: aiReplyText || '',
       latencyMs: Date.now() - start,
-      confidence: engineResult.agentRouting.confidence,
     }, 'message_processor').catch(() => { /* non-critical */ })
   } catch { /* non-critical */ }
 
@@ -520,6 +550,34 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     await persistState(phone).catch(() => {
       // Non-fatal: L1 cache still works
     })
+  }
+
+  // ── TOOL CALLING: Check if AI wants to execute tools (fire-and-forget) ──
+  if (aiReplyText && useOrchestrator && contact?.id) {
+    try {
+      const { chatWithTools } = await import('@/lib/ai/tool-calling')
+      const toolResult = await chatWithTools(
+        text,
+        [{ role: 'user', content: text }, { role: 'assistant', content: aiReplyText }],
+        {
+          workspaceId: workspace.id,
+          contactId: contact.id,
+        }
+      )
+      if (toolResult.toolCalls && toolResult.toolCalls.length > 0) {
+        // Tools were executed — emit event
+        for (const tc of toolResult.toolCalls) {
+          eventBus.emit(EVENT_TYPES.TOOL_CALLED, {
+            toolName: typeof tc === 'string' ? tc : (tc as any).toolName || tc,
+            conversationId: conversation.id,
+            input: text,
+            success: true,
+          }, 'message_processor').catch(() => {})
+        }
+      }
+    } catch (toolErr) {
+      console.warn('[Core:Tool] Tool calling failed (non-critical):', toolErr instanceof Error ? toolErr.message : toolErr)
+    }
   }
 
   // ── MEMORY ENGINE: Extract memories from conversation (fire-and-forget) ──
