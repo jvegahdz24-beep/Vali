@@ -25,6 +25,10 @@ import { ensureStateLoaded, persistState } from '@/lib/ai/conversation-state'
 import { autoCreateOrUpdateDeal } from '@/lib/crm/auto-deal'
 import { leadProfiler } from '@/lib/ai/lead-profiler'
 import { normalizePhone } from '@/lib/utils'
+import { eventBus, EVENT_TYPES } from '@/lib/event-bus'
+import { getRelevantMemories, extractMemoriesFromConversation } from '@/lib/memory-engine'
+import { spawnFromEvent } from '@/lib/ephemeral-agents'
+import { computeEngagement } from '@/lib/analytics-advanced'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -109,6 +113,18 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   debug(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
   debug(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
 
+  // ── EVENT BUS: message.received ──
+  try {
+    await eventBus.emit(EVENT_TYPES.MESSAGE_RECEIVED, {
+      messageId: externalId || `msg_${Date.now()}`,
+      conversationId: forcedConversationId || '',
+      contactId: forcedContactId || undefined,
+      channel,
+      content: text,
+      externalId,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
   // ── FIX: Normalize phone number BEFORE any DB operation ──
   // This ensures consistent format regardless of how the phone arrives
   // (WhatsApp JID, webhook, manual input, CSV import, etc.)
@@ -120,6 +136,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 1. Find workspace via phone-to-workspace mapping ──
   let workspace
+  let useOrchestrator = false
   if (forcedWorkspaceId) {
     workspace = await db.workspace.findUnique({ where: { id: forcedWorkspaceId } })
   } else if (safePhone) {
@@ -163,6 +180,18 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
   debug(`[Core:2] ✅ Workspace: ${workspace.name} (id=${workspace.id})`)
 
+  // ── Check workspace settings for useOrchestrator flag ──
+  try {
+    const wsSettings = typeof workspace.settings === 'string'
+      ? JSON.parse(workspace.settings || '{}')
+      : (workspace.settings || {})
+    useOrchestrator = !!wsSettings.useOrchestrator
+  } catch { /* ignore */ }
+
+  // ── EVENT BUS: contact.updated after upsert ──
+  // We emit this after the contact upsert below, tracked with a flag
+  let contactWasUpserted = false
+
   // ── 2. Find or create contact (FIX P0: atomic upsert) ──
   // Uses DB-level unique constraint on (workspaceId, phone) to prevent
   // race-condition duplicates. Two concurrent requests for the same phone
@@ -171,6 +200,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   if (forcedContactId) {
     contact = await db.contact.findUnique({ where: { id: forcedContactId } })
   } else if (safePhone) {
+    contactWasUpserted = true
     contact = await db.contact.upsert({
       where: {
         contact_workspace_phone_key: { workspaceId: workspace.id, phone: safePhone },
@@ -198,6 +228,18 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       where: { workspaceId: workspace.id },
       orderBy: { createdAt: 'desc' },
     })
+  }
+
+  // ── EVENT BUS: contact.updated ──
+  if (contactWasUpserted && contact) {
+    try {
+      await eventBus.emit(EVENT_TYPES.CONTACT_UPDATED, {
+        contactId: contact.id,
+        workspaceId: workspace.id,
+        changes: { upsert: { old: null, new: true } },
+        reason: 'message_received',
+      }, 'message_processor').catch(() => { /* non-critical */ })
+    } catch { /* non-critical */ }
   }
 
   // ── 3. Find or create conversation ──
@@ -290,6 +332,24 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     content: m.content,
   }))
 
+  // ── MEMORY ENGINE: Get relevant memories before AI call ──
+  let memoryContextBlock = ''
+  if (contact?.id) {
+    try {
+      const relevantMemories = await getRelevantMemories(contact.id, text, 5)
+      if (relevantMemories.length > 0) {
+        const memLines = relevantMemories
+          .sort((a, b) => b.importance - a.importance)
+          .map(m => `[${m.category}] ${m.key}: ${m.value}`)
+          .join('\n')
+        memoryContextBlock = `\n--- MEMORIAS DEL CONTACTO ---\n${memLines}\n--- FIN MEMORIAS ---\n`
+        debug(`[Core:Memory] Injected ${relevantMemories.length} relevant memories`)
+      }
+    } catch (memErr) {
+      console.warn('[Core:Memory] Failed to get relevant memories (non-critical):', memErr instanceof Error ? memErr.message : memErr)
+    }
+  }
+
   // Middleware: inject context block after system prompt
   const enrichedMessages = injectContext(messages, middlewareResult.contextBlock)
 
@@ -380,9 +440,30 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     console.warn('[AI] Could not parse workspace settings:', e)
   }
 
+  // ── EVENT BUS: agent.invoked ──
+  try {
+    await eventBus.emit(EVENT_TYPES.AGENT_INVOKED, {
+      agentId: 'revenue_engine',
+      agentType: useOrchestrator ? 'orchestrator' : 'revenue_engine',
+      conversationId: conversation.id,
+      input: text,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
   const engine = new RevenueEngine()
+
+  // Inject memory context into the last user message
+  const messagesWithMemory = memoryContextBlock
+    ? enrichedMessages.map((m, i) => {
+      if (i === enrichedMessages.length - 1 && m.role === 'user') {
+        return { ...m, content: m.content + memoryContextBlock }
+      }
+      return m
+    })
+    : enrichedMessages
+
   const engineResult = await engine.processConversation({
-    messages: enrichedMessages,
+    messages: messagesWithMemory,
     contactData: contact
       ? {
           name: `${contact.firstName} ${contact.lastName || ''}`.trim(),
@@ -422,11 +503,60 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     }
   }
 
+  // ── EVENT BUS: agent.responded ──
+  try {
+    await eventBus.emit(EVENT_TYPES.AGENT_RESPONDED, {
+      agentId: 'revenue_engine',
+      agentType: engineResult.agentRouting.agentType,
+      conversationId: conversation.id,
+      response: aiReplyText || '',
+      latencyMs: Date.now() - start,
+      confidence: engineResult.agentRouting.confidence,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
   // ── 9.5 FIX P0.1: Persist conversation state to L2 (AgentMemory) ──
   if (contact?.id) {
     await persistState(phone).catch(() => {
       // Non-fatal: L1 cache still works
     })
+  }
+
+  // ── MEMORY ENGINE: Extract memories from conversation (fire-and-forget) ──
+  if (contact?.id && aiReplyText) {
+    try {
+      await extractMemoriesFromConversation(contact.id, [
+        { role: 'user', content: text },
+        { role: 'assistant', content: aiReplyText },
+      ], contact.id)
+    } catch (memExtractErr) {
+      console.warn('[Core:Memory] Memory extraction failed (non-critical):', memExtractErr instanceof Error ? memExtractErr.message : memExtractErr)
+    }
+  }
+
+  // ── EPHEMERAL AGENTS: Check intent and spawn if needed (fire-and-forget) ──
+  if (contact?.id && engineResult.agentRouting) {
+    const agentType = engineResult.agentRouting.agentType
+    const intentText = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    let spawnEventType: string | null = null
+
+    if (intentText.includes('caro') || intentText.includes('costo') || intentText.includes('no tengo presupuesto') || intentText.includes('muy caro')) {
+      spawnEventType = 'price_objection'
+    } else if (intentText.includes('no puedo pagar') || intentText.includes('no tengo dinero')) {
+      spawnEventType = 'payment_issue'
+    }
+
+    if (spawnEventType) {
+      try {
+        await spawnFromEvent(spawnEventType, workspace.id, contact.id, {
+          message: text,
+          agentType,
+          conversationId: conversation.id,
+        })
+      } catch (agentErr) {
+        console.warn('[Core:Ephemeral] Agent spawn failed (non-critical):', agentErr instanceof Error ? agentErr.message : agentErr)
+      }
+    }
   }
 
   // ── 10. Save outbound AI message to DB ──
@@ -515,6 +645,33 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 13. Track analytics ──
+
+  // ── EVENT BUS: message.sent ──
+  if (aiReplyText) {
+    try {
+      await eventBus.emit(EVENT_TYPES.MESSAGE_SENT, {
+        messageId: `out_${Date.now()}`,
+        conversationId: conversation.id,
+        contactId: contact?.id || undefined,
+        channel,
+        content: aiReplyText,
+        isAiGenerated: true,
+      }, 'message_processor').catch(() => { /* non-critical */ })
+    } catch { /* non-critical */ }
+  }
+
+  // ── ANALYTICS ADVANCED: Engagement score update (fire-and-forget) ──
+  if (contact?.id) {
+    Promise.allSettled([
+      computeEngagement(contact.id).catch(() => null),
+    ]).then(([engagementResult]) => {
+      if (engagementResult.status === 'fulfilled' && engagementResult.value) {
+        const score = engagementResult.value.score
+        debug(`[Core:Analytics] Engagement score: ${score} (energy: ${engagementResult.value.energyLevel})`)
+      }
+    }).catch(() => { /* non-critical */ })
+  }
+
   try {
     await db.analyticsEvent.create({
       data: {

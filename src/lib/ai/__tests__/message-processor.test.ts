@@ -97,6 +97,70 @@ vi.mock('@/lib/utils', () => ({
 
 vi.mock('@/lib/logger', () => ({
   debug: vi.fn(),
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+  logInfo: vi.fn(),
+  logTimer: () => ({ end: vi.fn(), elapsed: () => 0 }),
+}))
+
+vi.mock('@/lib/event-bus', () => ({
+  eventBus: {
+    emit: vi.fn().mockResolvedValue('evt_mock'),
+    on: vi.fn().mockReturnValue(vi.fn()),
+    off: vi.fn(),
+    once: vi.fn().mockReturnValue(vi.fn()),
+    use: vi.fn().mockReturnValue(vi.fn()),
+    clearMiddleware: vi.fn(),
+    removeAllListeners: vi.fn(),
+    getDLQ: vi.fn().mockReturnValue([]),
+    getDLQSize: vi.fn().mockReturnValue(0),
+    retryDLQ: vi.fn().mockResolvedValue({ retried: 0, failed: 0, discarded: 0 }),
+    clearDLQ: vi.fn(),
+    replayEvents: vi.fn().mockResolvedValue(0),
+    getFailedEvents: vi.fn().mockResolvedValue([]),
+  },
+  EVENT_TYPES: {
+    MESSAGE_RECEIVED: 'message.received',
+    MESSAGE_SENT: 'message.sent',
+    EMOTION_DETECTED: 'emotion.detected',
+    MEMORY_STORED: 'memory.stored',
+    AGENT_INVOKED: 'agent.invoked',
+    AGENT_RESPONDED: 'agent.responded',
+    CONTACT_UPDATED: 'contact.updated',
+    DEAL_STAGE_CHANGED: 'deal.stage_changed',
+    FOLLOWUP_CREATED: 'followup.created',
+    SYSTEM_ERROR: 'system.error',
+    TOOL_CALLED: 'tool.called',
+  },
+}))
+
+vi.mock('@/lib/memory-engine', () => ({
+  getRelevantMemories: vi.fn().mockResolvedValue([]),
+  extractMemoriesFromConversation: vi.fn().mockResolvedValue({ memories: [], contradictions: [] }),
+  storeMemory: vi.fn(),
+  searchMemories: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/ephemeral-agents', () => ({
+  spawnFromEvent: vi.fn().mockResolvedValue(null),
+  spawnAgent: vi.fn().mockResolvedValue(null),
+  resolveAgentType: vi.fn().mockReturnValue(null),
+  AGENT_TEMPLATES: {},
+}))
+
+vi.mock('@/lib/analytics-advanced', () => ({
+  computeEngagement: vi.fn().mockResolvedValue({
+    score: 50,
+    frequencyTrend: 'stable',
+    responseTimeTrend: 'stable',
+    messageLengthTrend: 'stable',
+    initiativeRatio: 0.5,
+    questionRatio: 0,
+    energyLevel: 'neutral',
+    messageFrequencyPerDay: 0,
+    avgResponseTimeMs: 0,
+    avgMessageLength: 0,
+  }),
 }))
 
 describe('processMessageCore', () => {

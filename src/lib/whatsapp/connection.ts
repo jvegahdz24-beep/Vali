@@ -16,6 +16,8 @@ import { DbAuthState } from './db-auth-state'
 import { detectMedia, downloadAndSaveMedia } from './media-handler'
 import { isDuplicateMessage } from './shared-dedup'
 import { normalizePhone } from '@/lib/utils'
+// Advanced humanizer (lazy import — async, server-only)
+import type { HumanizationContext as AdvHumanizationContext } from '@/lib/humanizer-advanced'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -680,27 +682,89 @@ class WhatsAppManager {
       debug(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
 
       if (aiReplyText && this.sock && this._connected) {
-        const humanizedText = humanizeResponse(aiReplyText)
-        const finalText = humanizedText.length > 600
-          ? humanizedText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
-          : humanizedText
-
-
-
-        // Typing indicator
-        try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
-        const delay = getRandomDelay(finalText.length)
-        await new Promise(resolve => setTimeout(resolve, delay))
-        try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
-
-        // Send
-        let sentMessageId: string | undefined
+        // ── Advanced Humanizer with fallback to basic humanizer ──
+        let finalText = aiReplyText
         try {
-          const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
-          sentMessageId = sendResult?.key?.id ?? undefined
-          debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
-        } catch (sendErr) {
-          console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+          const advHumanizer = await import('@/lib/humanizer-advanced')
+          const advContext: AdvHumanizationContext = {
+            contactId: coreResult.contactId || undefined,
+            workspaceId: undefined,
+            conversationId: coreResult.conversationId,
+            recentMessages: [text],
+          }
+
+          const humanizedText = await advHumanizer.humanize(
+            aiReplyText,
+            coreResult.contactId || undefined,
+            advContext,
+          )
+
+          // Use advanced split for long messages
+          const splitParts = await advHumanizer.getSplitMessages(
+            humanizedText,
+            coreResult.contactId || undefined,
+            advContext,
+          )
+
+          if (splitParts.length > 1) {
+            // Send multiple parts with per-part delays
+            for (const part of splitParts) {
+              try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+              await new Promise(resolve => setTimeout(resolve, part.delayMs))
+              try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+              let sentMessageId: string | undefined
+              try {
+                const sendResult = await this.sock.sendMessage(remoteJid!, { text: part.content })
+                sentMessageId = sendResult?.key?.id ?? undefined
+              } catch (sendErr) {
+                console.error(`[WhatsApp] Send failed to ${phone} (part):`, sendErr)
+              }
+            }
+            debug(`[WhatsApp] Reply sent to ${phone} (${splitParts.length} parts, ${Date.now() - pipelineStart}ms total)`)
+          } else {
+            finalText = humanizedText.length > 600
+              ? humanizedText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
+              : humanizedText
+
+            // Typing indicator with advanced delay
+            try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+            const delay = await advHumanizer.getSendDelay(finalText, coreResult.contactId || undefined, advContext)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+
+            // Send
+            let sentMessageId: string | undefined
+            try {
+              const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
+              sentMessageId = sendResult?.key?.id ?? undefined
+              debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
+            } catch (sendErr) {
+              console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+            }
+          }
+        } catch (advErr) {
+          // ── Fallback: Basic humanizer ──
+          console.warn('[WhatsApp] Advanced humanizer failed, using basic fallback')
+          finalText = humanizeResponse(aiReplyText)
+          finalText = finalText.length > 600
+            ? finalText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
+            : finalText
+
+          // Typing indicator with basic delay
+          try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+          const delay = getRandomDelay(finalText.length)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+
+          // Send
+          let sentMessageId: string | undefined
+          try {
+            const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
+            sentMessageId = sendResult?.key?.id ?? undefined
+            debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
+          } catch (sendErr) {
+            console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+          }
         }
       }
     } catch (error) {
