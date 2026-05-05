@@ -27,6 +27,7 @@ const publicApiRoutes = [
   '/api/whatsapp/ephemeral',  // Ephemeral sessions (auth via requireAuth in route)
   '/api/followups/worker',    // Cron worker (auth via X-Worker-Key header)
   '/api/cron',                // Cron endpoints (auth via worker keys)
+  '/api/metrics',             // Prometheus metrics (auth via Bearer token)
 ]
 
 // Rate-limited route prefixes (endpoint → { limit, windowMs })

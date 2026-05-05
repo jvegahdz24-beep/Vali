@@ -69,7 +69,7 @@ export async function GET() {
       status: overallHealthy && memoryHealthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      version: '5.2.0',
+      version: '3.0.0',
       node: process.version,
       environment: process.env.NODE_ENV,
       checks,

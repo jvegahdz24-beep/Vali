@@ -83,6 +83,11 @@ const demoSchema = z.object({
   DEMO_MODE: z.enum(['true', 'false']).default('false'),
 })
 
+const meilisearchSchema = z.object({
+  MEILI_SEARCH_URL: z.string().default('http://localhost:7700'),
+  MEILI_MASTER_KEY: z.string().default(''),
+})
+
 const observabilitySchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   LOG_FORMAT: z.enum(['json', 'pretty']).default('pretty'),
@@ -102,6 +107,7 @@ const fullConfigSchema = z.object({
   ...whatsappSchema.shape,
   ...stripeSchema.shape,
   ...demoSchema.shape,
+  ...meilisearchSchema.shape,
   ...observabilitySchema.shape,
 })
 
@@ -168,6 +174,7 @@ export const hasStripe = isConfigured(config.STRIPE_SECRET_KEY)
 export const hasGoogle = isConfigured(config.GOOGLE_CLIENT_ID) && isConfigured(config.GOOGLE_CLIENT_SECRET)
 export const hasEmail = isConfigured(config.RESEND_API_KEY)
 export const hasWhatsApp = isConfigured(config.EVOLUTION_API_URL)
+export const hasMeilisearch = isConfigured(config.MEILI_SEARCH_URL)
 export const demoEnabled = config.DEMO_MODE === 'true'
 
 export default config

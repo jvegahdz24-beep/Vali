@@ -172,7 +172,7 @@ export async function acquireLock(
     const lockKey = redisKeys.lock(resource)
     const lockValue = `lock_${Date.now()}_${Math.random().toString(36).slice(2)}`
 
-    const acquired = await redis.set(lockKey, lockValue, 'NX', 'EX', ttlSeconds)
+    const acquired = await redis.set(lockKey, lockValue, 'EX', ttlSeconds, 'NX')
 
     if (acquired === 'OK') {
       return {

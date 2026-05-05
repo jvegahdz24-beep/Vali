@@ -1,19 +1,43 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow CRM — Token Refresh Endpoint
 // POST /api/auth/refresh
-// Body: { refreshToken: string }
-// Response: { accessToken, refreshToken, expiresIn } | 401
+// Reads refresh token from cookie, rotates it, issues new access token
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyRefreshToken, rotateRefreshToken, createAccessToken } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { logError, logInfo } from '@/lib/logger'
+import { config } from '@/lib/config'
+import { logInfo, logOk, logWarn, logError } from '@/lib/logger'
+import {
+  createAccessToken,
+  verifyRefreshToken,
+  rotateRefreshToken,
+  SESSION_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+} from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
+
+// ─── Cookie Helpers ───────────────────────────────────────────
+
+const cookieBase = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+}
+
+const ACCESS_MAX_AGE = config.JWT_ACCESS_EXPIRY_SECONDS    // 900 seconds
+const REFRESH_MAX_AGE = config.JWT_REFRESH_EXPIRY_SECONDS  // 604800 seconds
+
+// ─── Route Handler ────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  logInfo('AUTH', 'refresh_start', {})
+
   try {
-    // Try cookie first, then body
-    const refreshTokenFromCookie = req.cookies.get('valiflow-refresh')?.value
+    // Read refresh token from cookie (primary) or request body (fallback)
+    const refreshTokenFromCookie = req.cookies.get(REFRESH_COOKIE_NAME)?.value
     let refreshToken = refreshTokenFromCookie
 
     if (!refreshToken) {
@@ -21,49 +45,53 @@ export async function POST(req: NextRequest) {
         const body = await req.json()
         refreshToken = body.refreshToken
       } catch {
-        // No body
+        // No body present — that's fine, just no token
       }
     }
 
     if (!refreshToken) {
+      logWarn('AUTH', 'refresh_no_token', {})
       return NextResponse.json(
-        { error: 'Refresh token requerido' },
+        { error: 'Refresh token required', code: 'MISSING_REFRESH_TOKEN' },
         { status: 401 },
       )
     }
 
-    // Verify refresh token
+    // ─── Verify refresh token ───────────────────────────────
     const userId = await verifyRefreshToken(refreshToken)
     if (!userId) {
+      logWarn('AUTH', 'refresh_invalid_token', {})
       return NextResponse.json(
-        { error: 'Refresh token invalido o expirado' },
+        { error: 'Invalid or expired refresh token', code: 'INVALID_REFRESH_TOKEN' },
         { status: 401 },
       )
     }
 
-    // Get user from DB
+    // ─── Fetch user from DB ─────────────────────────────────
     const user = await db.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true, name: true, role: true },
     })
 
     if (!user) {
+      logWarn('AUTH', 'refresh_user_not_found', { userId })
       return NextResponse.json(
-        { error: 'Usuario no encontrado' },
+        { error: 'User not found', code: 'USER_NOT_FOUND' },
         { status: 401 },
       )
     }
 
-    // Rotate refresh token
+    // ─── Rotate refresh token ───────────────────────────────
     const newRefreshData = await rotateRefreshToken(refreshToken, userId)
     if (!newRefreshData) {
+      logWarn('AUTH', 'refresh_rotation_failed', { userId })
       return NextResponse.json(
-        { error: 'Error al rotar refresh token' },
+        { error: 'Failed to rotate refresh token', code: 'ROTATION_FAILED' },
         { status: 401 },
       )
     }
 
-    // Create new access token
+    // ─── Create new access token ────────────────────────────
     const accessToken = await createAccessToken({
       userId: user.id,
       email: user.email,
@@ -71,42 +99,31 @@ export async function POST(req: NextRequest) {
       role: user.role,
     })
 
-    // Get active workspace
-    const activeMembership = await db.workspaceMember.findFirst({
-      where: { userId: user.id },
-      orderBy: { joinedAt: 'asc' },
-    })
-
-    logInfo('AUTH', 'token_refreshed', { userId: user.id })
-
+    // ─── Build response ─────────────────────────────────────
     const response = NextResponse.json({
       accessToken,
-      refreshToken: newRefreshData.token,
-      expiresIn: 15 * 60, // 15 minutes
+      expiresIn: ACCESS_MAX_AGE,
     })
 
-    // Set cookies
-    response.cookies.set('valiflow-session', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 15 * 60, // 15 minutes
+    // Set new access token cookie
+    response.cookies.set(SESSION_COOKIE_NAME, accessToken, {
+      ...cookieBase,
+      maxAge: ACCESS_MAX_AGE,
     })
 
-    response.cookies.set('valiflow-refresh', newRefreshData.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/api/auth/refresh',
-      maxAge: 7 * 24 * 3600, // 7 days
+    // Set rotated refresh token cookie
+    response.cookies.set(REFRESH_COOKIE_NAME, newRefreshData.token, {
+      ...cookieBase,
+      maxAge: REFRESH_MAX_AGE,
     })
+
+    logOk('AUTH', 'refresh_success', { userId: user.id })
 
     return response
   } catch (err) {
-    logError('AUTH', 'refresh_error', err)
+    logError('AUTH', 'refresh_unexpected_error', err)
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 },
     )
   }

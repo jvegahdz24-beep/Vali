@@ -6,9 +6,26 @@
 
 import bcrypt from 'bcryptjs'
 
-// Re-export edge-compatible JWT functions
-export { createSessionToken, verifySessionToken, SESSION_COOKIE_NAME } from './auth-edge'
-export type { SessionPayload } from './auth-edge'
+// Re-export edge-compatible JWT functions (legacy)
+export { createSessionToken, verifySessionToken } from './auth-edge'
+export type { SessionPayload as EdgeSessionPayload } from './auth-edge'
+
+// Re-export JWT auth functions from ./auth/ directory
+export {
+  createAccessToken,
+  verifyAccessToken,
+  createRefreshToken,
+  verifyRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserSessions,
+  revokeAccessToken,
+  createTokenPair,
+  revokeSession,
+  SESSION_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+} from './auth/index'
+export type { SessionPayload, TokenPair } from './auth/index'
 
 // ─── Password Operations (bcrypt) ────────────────────────────
 

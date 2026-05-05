@@ -56,15 +56,16 @@ function base64urlDecode(str: string): Uint8Array {
   return bytes
 }
 
-async function getSigningKey(): Promise<CryptoKey> {
+async function getSigningKey() {
   const encoder = new TextEncoder()
   const keyData = encoder.encode(config.NEXTAUTH_SECRET)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return crypto.subtle.importKey(
     'raw', keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign', 'verify'],
-  )
+  ) as any
 }
 
 // ─── Access Token ──────────────────────────────────────────────
@@ -110,7 +111,7 @@ export async function verifyAccessToken(token: string): Promise<SessionPayload |
     const sigBytes = base64urlDecode(sigB64)
 
     const key = await getSigningKey()
-    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(signingInput))
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes as any, encoder.encode(signingInput) as any)
     if (!valid) return null
 
     const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)))

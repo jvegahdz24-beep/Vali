@@ -39,6 +39,15 @@ export function bootstrapApp(): void {
     logError('SYSTEM', 'bootstrap: cron scheduler failed', err)
   }
 
+  try {
+    // 3. Start BullMQ workers (followups, events, AI tasks, sync, notifications)
+    const { startWorkers } = require('@/lib/workers')
+    startWorkers()
+    logOk('SYSTEM', 'bootstrap: bullmq workers started')
+  } catch (err) {
+    logError('SYSTEM', 'bootstrap: bullmq workers failed', err)
+  }
+
   logOk('SYSTEM', 'bootstrap: complete', { timestamp: new Date().toISOString() })
 }
 
