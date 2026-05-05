@@ -76,6 +76,7 @@ const nextConfig: NextConfig = {
     "bcryptjs",
     "jose",
     "qrcode",
+    "ioredis",
   ],
 
   // Production security headers

@@ -1,7 +1,57 @@
 version: '3.8'
 
 services:
-  valiautoflow:
+  # ─── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: valiflow-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: valiflow
+      POSTGRES_PASSWORD: valiflow_prod_2026
+      POSTGRES_DB: valiautoflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U valiflow -d valiautoflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ─── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: valiflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 64M
+
+  # ─── ValiAutoFlow CRM App ────────────────────────────────────
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,42 +59,67 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/custom.db
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production-32chars-min}
+      # PostgreSQL (pooled connection via PgBouncer-like Prisma pool)
+      - DATABASE_URL=postgresql://valiflow:valiflow_prod_2026@postgres:5432/valiautoflow?connection_limit=10&pool_timeout=30
+      - DIRECT_URL=postgresql://valiflow:valiflow_prod_2026@postgres:5432/valiautoflow
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PREFIX=valiflow:
+      # Auth
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production-32chars-minimum!!}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      - DEMO_EMAIL=${DEMO_EMAIL:-jvegahdz24@gmail.com}
-      - DEMO_PASSWORD=${DEMO_PASSWORD:-valiflow2026}
+      # AI
       - ZAI_API_KEY=${ZAI_API_KEY:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      # Email
       - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@valiautoflow.com}
+      # Google
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      # Stripe
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      # WhatsApp
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
+      - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME:-}
+      # Security
       - SEED_PIN=${SEED_PIN:-}
       - WORKER_KEY=${WORKER_KEY:-}
       - CRON_SECRET=${CRON_SECRET:-}
+      # Observability
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=json
       - PRISMA_LOG=false
+      # Demo (disable in production!)
+      - DEMO_MODE=false
     volumes:
-      - valiautoflow-data:/app/data
       - valiautoflow-uploads:/app/uploads
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
         reservations:
-          memory: 256M
+          memory: 512M
 
 volumes:
-  valiautoflow-data:
+  postgres-data:
+    driver: local
+  redis-data:
     driver: local
   valiautoflow-uploads:
     driver: local

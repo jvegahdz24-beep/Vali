@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiFlow Pro — Fused Architecture Schema (v2.0)
-// Next.js 16 + Prisma + SQLite (production-ready)
-// PostgreSQL migration ready: see supabase/migration.sql
+// ValiAutoFlow CRM v5.2.0 — Fused Architecture Schema (v3.0)
+// Next.js 16 + Prisma + PostgreSQL (production)
 // ═══════════════════════════════════════════════════════════════
 
 generator client {
@@ -9,8 +8,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ model Conversation {
 model Message {
   id             String   @id @default(cuid())
   conversationId String
-  content        String
+  content        String   @db.Text
   type           String   @default("text") // text, image, audio, video, document, location, interactive
   direction      String   @default("inbound") // inbound, outbound
   senderType     String   @default("contact") // contact, agent, human, system
@@ -292,7 +292,7 @@ model Agent {
   modelName    String   @default("glm-4.5-flash")
   temperature  Float    @default(0.7)
   maxTokens    Int      @default(4096)
-  systemPrompt String   @default("")
+  systemPrompt String   @default("") @db.Text
   personality  String   @default("JHON") // JHON, professional, friendly, aggressive
   priority     Int      @default(0)
   config       String   @default("{}") // JSON: hooks, steering, fallback behavior
@@ -316,7 +316,7 @@ model AgentPersona {
   name         String
   slug         String
   description  String?
-  systemPrompt String
+  systemPrompt String   @db.Text
   tone         String   @default("professional") // professional, casual, aggressive, empathetic
   language     String   @default("es")
   hooks        String   @default("[]") // JSON: pre-processing hooks
@@ -338,8 +338,8 @@ model AgentLog {
   id             String   @id @default(cuid())
   agentId        String
   conversationId String
-  inputMessage   String
-  outputMessage  String?
+  inputMessage   String   @db.Text
+  outputMessage  String?  @db.Text
   model          String?
   tokensUsed     Int      @default(0)
   latencyMs      Int      @default(0)
@@ -776,7 +776,7 @@ model Appointment {
 model WhatsAppAuth {
   id          String   @id @default(cuid())
   workspaceId String   @unique
-  authData    String
+  authData    String   @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -791,7 +791,7 @@ model EventLog {
   id        String   @id @default(cuid())
   type      String   // event type: message.received, emotion.detected, etc.
   source    String   @default("system") // who emitted: system, engine, whatsapp, ai, automation
-  payload   String   // JSON-serialized event payload
+  payload   String   @db.Text  // JSON-serialized event payload
   createdAt DateTime @default(now())
   processed Boolean  @default(false) // true = handled successfully, false = pending/DLQ
   error     String?  // error message if processing failed
@@ -809,7 +809,7 @@ model EventLog {
 model TelegramBot {
   id          String   @id @default(cuid())
   workspaceId String   @unique
-  botToken    String   // Telegram Bot API token (stored encrypted at rest via env)
+  botToken    String   @db.Text // Telegram Bot API token (stored encrypted at rest via env)
   chatId      String?  // The chat ID where commands are sent from (authorized user)
   isActive    Boolean  @default(true)
   pausedAt    DateTime? // When automations were paused via /pause
@@ -872,7 +872,7 @@ model NexusMessage {
   id             String   @id @default(cuid())
   conversationId String
   role           String // user, assistant, system
-  content        String
+  content        String   @db.Text
   tokens         Int      @default(0)
   model          String?
   latencyMs      Int      @default(0)
@@ -975,7 +975,7 @@ model NexusInsight {
   workspaceId String?  // Optional: scope NEXUS data to a workspace
   type        String // pattern, suggestion, anomaly, learning
   title       String
-  content     String
+  content     String   @db.Text
   confidence  Float    @default(0)
   isRead      Boolean  @default(false)
   metadata    String   @default("{}") // JSON
@@ -1042,8 +1042,8 @@ model NexusTemperatureLog {
   metadata  String   @default("{}") // JSON
   createdAt DateTime @default(now())
 
-  profile NexusProfile @relation("TempLogProfile", fields: [userId], references: [userId], onDelete: Cascade)
-  user    User         @relation("TempLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  profile NexusProfile @relation("TempLogProfile", fields: [userId], references: [userId], onDelete: Cascade, map: "NexusTemperatureLog_profile_fkey")
+  user    User         @relation("TempLogUser", fields: [userId], references: [id], onDelete: Cascade, map: "NexusTemperatureLog_user_fkey")
 
   @@index([userId])
   @@index([createdAt])
@@ -1060,8 +1060,8 @@ model NexusWhatsAppLog {
   error     String?
   createdAt DateTime  @default(now())
 
-  profile NexusProfile @relation("WhatsAppLogProfile", fields: [userId], references: [userId], onDelete: Cascade)
-  user    User         @relation("WhatsAppLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  profile NexusProfile @relation("WhatsAppLogProfile", fields: [userId], references: [userId], onDelete: Cascade, map: "NexusWhatsAppLog_profile_fkey")
+  user    User         @relation("WhatsAppLogUser", fields: [userId], references: [id], onDelete: Cascade, map: "NexusWhatsAppLog_user_fkey")
 
   @@index([userId])
   @@index([status])
