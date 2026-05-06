@@ -152,6 +152,28 @@ model Workspace {
   emotionalRecords   EmotionalRecord[]
   behavioralPatterns BehavioralPattern[]
 
+  // TOOL OS — Tool Contracts & Execution
+  toolContracts      ToolContract[]
+  toolExecutions     ToolExecution[]
+  executionLedgers   ExecutionLedger[]
+  approvalFlows     ApprovalFlow[]
+  toolPermissions   ToolPermission[]
+  intentRecords     IntentRecord[]
+  toolDAGs          ToolExecutionDAG[]
+  toolReplays       ToolReplay[]
+  toolSimulations   ToolSimulation[]
+
+  // COGNITIVE ENGINE — Persistent Cognitive State
+  personaKernels    PersonaKernel[]
+  cognitiveStates   CognitiveState[]
+  trustRecords      TrustRecord[]
+  emotionalMomentums EmotionalMomentum[]
+  unresolvedPromises UnresolvedPromise[]
+  cognitiveLoadEntries CognitiveLoadEntry[]
+  attentionalFocuses AttentionalFocus[]
+  coherenceSnapshots CoherenceSnapshot[]
+  backgroundCognitionJobs BackgroundCognitionJob[]
+
   @@index([ownerId])
 }
 
@@ -1389,4 +1411,821 @@ model BehavioralPattern {
   @@index([workspaceId])
   @@index([contactId])
   @@index([patternType])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FASE 3: TOOL OS — Execution Pipeline & Governance
+// "Hasta FASE 2 el sistema PIENSA. A partir de FASE 3 ACTÚA."
+// ═══════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────
+// TOOL CONTRACTS — Declarative tool definitions with risk grading
+// ─────────────────────────────────────────────────────────────
+
+model ToolContract {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  name             String
+  slug             String   @unique
+  description      String?
+  category         String   @default("general") // communication, crm, analytics, finance, calendar, ai, system, external
+  riskLevel        String   @default("SAFE") // SAFE, MODERATE, HIGH_RISK, CRITICAL
+  version          Int      @default(1)
+  isActive         Boolean  @default(true)
+
+  // Contract Fields — 11-field governance schema
+  permissions      String   @default("[]") // JSON: ["contacts:read", "messages:send"]
+  cooldownMs       Int      @default(0) // Minimum ms between executions
+  rateLimitMax     Int      @default(60) // Max executions per rateLimitWindow
+  rateLimitWindow  Int      @default(60) // Window in seconds
+  requiresApproval Boolean  @default(false)
+  sideEffects      String   @default("[]") // JSON: ["sends_message", "modifies_data"]
+  rollbackStrategy String? // "none", "compensating_transaction", "event_sourcing_replay", "manual"
+  costEstimate     String   @default("{}") // JSON: { tokens, apiCalls, money }
+  executionTimeout Int      @default(30000) // Max execution time in ms
+  idempotent       Boolean  @default(false) // Same input → same output guarantee
+
+  // Implementation
+  handler          String? // Module path or function name
+  inputSchema      String   @default("{}") // JSON: JSON Schema for input validation
+  outputSchema     String   @default("{}") // JSON: JSON Schema for output
+  config           String   @default("{}") // JSON: tool-specific config
+  metadata         String   @default("{}") // JSON
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions         ToolExecution[]
+  permissions_graph  ToolPermission[]
+  approvalFlows      ApprovalFlow[]
+  dagNodes           ToolExecutionDAG[] @relation("DAGContract")
+  simulations        ToolSimulation[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([category])
+  @@index([riskLevel])
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOL EXECUTION — Runtime execution records
+// ─────────────────────────────────────────────────────────────
+
+model ToolExecution {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  contractId      String
+  contactId       String?
+
+  // Execution context
+  correlationId   String? // Links to observability tracing
+  sessionId       String? // Conversation or NEXUS session
+  agentId         String? // Which agent triggered this
+
+  // Execution data
+  input           String   @default("{}") // JSON: actual input payload
+  output          String?  @db.Text // JSON: actual output payload
+  status          String   @default("pending") // pending, running, completed, failed, timeout, cancelled, dry_run
+  riskLevel       String   @default("SAFE")
+
+  // Metrics
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMs      Int?
+  tokensUsed      Int      @default(0)
+  error           String?
+  stackTrace      String?  @db.Text
+
+  // Governance
+  approvalId      String? // Link to ApprovalFlow if approval was required
+  wasDryRun       Boolean  @default(false)
+  rollbackExecId  String? // If this execution was rolled back, which execution did it
+  isRollback      Boolean  @default(false)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract  ToolContract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contractId])
+  @@index([contactId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([correlationId])
+  @@index([startedAt])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXECUTION LEDGER — Immutable audit trail for all tool actions
+// ─────────────────────────────────────────────────────────────
+
+model ExecutionLedger {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  executionId     String // Link to ToolExecution
+
+  // Immutable audit fields
+  action          String  // CREATE, READ, UPDATE, DELETE, EXECUTE, APPROVE, REJECT, ROLLBACK
+  resourceType    String  // tool_contract, tool_execution, approval_flow, contact, deal, etc
+  resourceId      String? // ID of the affected resource
+  actorType       String  @default("system") // user, agent, system, cron, webhook
+  actorId         String? // ID of the actor
+
+  // State snapshots
+  beforeState     String?  @db.Text // JSON: resource state before action
+  afterState      String?  @db.Text // JSON: resource state after action
+
+  // Classification
+  riskLevel       String   @default("SAFE")
+  complianceTag   String? // GDPR, PCI, SOC2, etc
+
+  // Context
+  correlationId   String? // Links to observability tracing
+  ipAddress       String?
+  userAgent       String?
+  metadata        String   @default("{}") // JSON
+
+  createdAt       DateTime @default(now()) // Immutable — never updated
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([executionId])
+  @@index([resourceType])
+  @@index([actorType])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// APPROVAL FLOWS — Human-in-the-loop for high-risk actions
+// ─────────────────────────────────────────────────────────────
+
+model ApprovalFlow {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  contractId      String
+  executionId     String?
+
+  // Request
+  requestReason   String    @default("{}") // JSON: { reason, context, estimatedImpact }
+  riskLevel       String    @default("HIGH_RISK")
+
+  // Status
+  status          String    @default("pending") // pending, approved, rejected, expired, cancelled
+  requestedAt     DateTime  @default(now())
+  resolvedAt      DateTime?
+
+  // Resolution
+  resolvedBy      String?   // userId who resolved
+  resolutionNote  String?   // Optional note from approver
+
+  // Expiration
+  expiresAt       DateTime?
+
+  // Escalation
+  escalationLevel Int       @default(0) // How many times escalated
+  escalatedTo     String?   // userId of escalation target
+
+  metadata        String    @default("{}") // JSON
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract  ToolContract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contractId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([requestedAt])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOL PERMISSION — Permission graph nodes
+// ─────────────────────────────────────────────────────────────
+
+model ToolPermission {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  contractId   String
+
+  // Who
+  granteeType  String   @default("role") // role, user, agent
+  granteeId    String? // Specific role/user/agent ID
+
+  // What
+  permissions  String   @default("[]") // JSON: ["execute", "approve", "view_audit"]
+
+  // Constraints
+  conditions    String   @default("{}") // JSON: { timeWindow, maxPerDay, contactFilter, etc }
+  expiresAt     DateTime?
+
+  isActive      Boolean  @default(true)
+  grantedBy     String? // userId who granted
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract  ToolContract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, contractId, granteeType, granteeId])
+  @@index([workspaceId])
+  @@index([contractId])
+  @@index([granteeType])
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────
+// INTENT RECORD — Intent Layer outputs (LLM intent → tool mapping)
+// ─────────────────────────────────────────────────────────────
+
+model IntentRecord {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Intent data
+  intentType      String   @default("unknown") // send_message, query_data, modify_record, analyze, schedule, custom
+  intentPayload   String   @default("{}") // JSON: { description, confidence, entities, urgency }
+  rawInput        String?  @db.Text // Original user/AI input that triggered intent detection
+
+  // Resolution
+  resolvedToolId  String? // ToolContract ID that was selected
+  resolutionStrategy String @default("automatic") // automatic, manual, hybrid
+  resolutionConfidence Float @default(0)
+
+  // Execution
+  executionId     String? // ToolExecution that resulted from this intent
+  status          String   @default("detected") // detected, planned, executing, completed, failed, abandoned
+
+  // Context
+  sessionId       String?
+  contactId       String?
+  agentId         String?
+  correlationId   String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([intentType])
+  @@index([status])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOL EXECUTION DAG — Directed Acyclic Graph for multi-step execution
+// Prevents emergent chaining, enables rollback, ensures determinism
+// ─────────────────────────────────────────────────────────────
+
+model ToolExecutionDAG {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  sessionId       String?
+
+  // DAG structure
+  dagLabel        String? // Human-readable label for this DAG
+  status          String   @default("pending") // pending, executing, completed, failed, partial_rollback, rolled_back
+
+  // Metadata
+  totalNodes      Int      @default(0)
+  completedNodes  Int      @default(0)
+  failedNodes     Int      @default(0)
+  estimatedCost   String   @default("{}") // JSON: { tokens, time, money }
+
+  // Lifecycle
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errorSummary    String?  @db.Text
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contract        ToolContract? @relation("DAGContract", fields: [contractId], references: [id], onDelete: SetNull)
+  contractId      String?
+  nodes           ToolDAGNode[]
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ToolDAGNode {
+  id              String   @id @default(cuid())
+  dagId           String
+  contractId      String
+
+  // Node position in DAG
+  nodeOrder       Int      @default(0)
+  dependsOn       String   @default("[]") // JSON array of ToolDAGNode IDs this depends on
+
+  // Execution link
+  executionId     String? // ToolExecution ID
+
+  // Status
+  status          String   @default("pending") // pending, ready, executing, completed, failed, skipped
+
+  // Input/Output routing
+  inputMapping    String   @default("{}") // JSON: maps parent outputs to this node's inputs
+  outputMapping   String   @default("{}") // JSON: maps this node's outputs for children
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  dag             ToolExecutionDAG @relation(fields: [dagId], references: [id], onDelete: Cascade)
+
+  @@index([dagId])
+  @@index([executionId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOL REPLAY — Replay past executions for debugging or re-execution
+// ─────────────────────────────────────────────────────────────
+
+model ToolReplay {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  originalExecId  String // ToolExecution being replayed
+
+  // Replay config
+  replayMode      String   @default("debug") // debug, re_execute, dry_run, compare
+  replayReason    String? // Why this replay was triggered
+
+  // Replay result
+  replayExecId    String? // New ToolExecution created by replay
+  outputDiff      String?  @db.Text // JSON diff between original and replay output
+  status          String   @default("pending") // pending, running, completed, failed
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([originalExecId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOL SIMULATION — Dry-run simulation mode
+// ─────────────────────────────────────────────────────────────
+
+model ToolSimulation {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  contractId      String
+
+  // Simulation input
+  simulatedInput  String   @default("{}") // JSON: input to simulate
+  environment     String   @default("production") // production, staging, sandbox
+
+  // Predicted outcomes
+  predictedOutput String?  @db.Text // JSON: predicted tool output
+  predictedSideEffects String @default("[]") // JSON: predicted side effects
+  riskAssessment  String   @default("{}") // JSON: { riskScore, reasons, mitigations }
+
+  // Actual (if executed after simulation)
+  actualOutput    String?  @db.Text
+  outputMatch     Boolean? // Did actual match predicted?
+  diffReport      String?  @db.Text
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract  ToolContract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([contractId])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FASE 4: NEXUS COGNITIVE ENGINE — Persistent Cognitive State
+// Transforms the system from "CRM with AI" to "cognitive entity"
+// ═══════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────
+// PERSONA KERNEL — Persistent identity with 3-layer architecture
+// immutable_core (never changes) + behavioral_layer (slow drift)
+// + emotional_overlay (ephemeral, resets per session)
+// ─────────────────────────────────────────────────────────────
+
+model PersonaKernel {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Immutable Core — NEVER changes after initialization
+  coreName        String   // Agent's persistent identity name (e.g. "NEXUS")
+  coreValues      String   @default("[]") // JSON: ["empathy", "consistency", "proactivity"]
+  corePurpose     String   @db.Text // Fundamental mission statement
+  coreBoundaries  String   @default("{}") // JSON: what it will NEVER do
+  initializedAt   DateTime @default(now())
+
+  // Behavioral Layer — Adapts at 0.05% per interaction (glacial drift)
+  toneProfile     String   @default("{}") // JSON: { formality: 0.7, warmth: 0.8, depth: 0.6 }
+  humorLevel      Float    @default(0.3) // 0.0 (no humor) to 1.0 (very humorous)
+  verbosity       Float    @default(0.5) // 0.0 (terse) to 1.0 (elaborate)
+  proactivity     Float    @default(0.5) // 0.0 (reactive) to 1.0 (proactive)
+  adaptationCount Int      @default(0) // How many drift adaptations applied
+  lastDriftAt     DateTime?
+
+  // Emotional Overlay — Ephemeral, resets contextually
+  currentMood     String   @default("neutral") // neutral, warm, serious, playful, cautious, energetic
+  moodReason      String?  // Why this mood was set
+  moodSetAt       DateTime?
+
+  // Versioning for drift tracking
+  version         Int      @default(1)
+  previousVersion String? // JSON snapshot of previous behavioral layer
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cognitiveStates CognitiveState[]
+  trustRecords    TrustRecord[]
+
+  @@unique([workspaceId])
+  @@index([workspaceId])
+  @@index([version])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COGNITIVE STATE — Unified operational state snapshot
+// The "brain" that decides what the system focuses on
+// ─────────────────────────────────────────────────────────────
+
+model CognitiveState {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  kernelId        String // PersonaKernel this state belongs to
+
+  // Attentional State
+  conversationalFocus String  @default("{}") // JSON: { activeTopic, depth, salience }
+  activeGoals     String   @default("[]") // JSON: [{ id, description, priority, deadline, progress }]
+  suppressedGoals String   @default("[]") // JSON: goals temporarily deprioritized
+
+  // Cognitive Load
+  cognitiveLoad   Float    @default(0.0) // 0.0 (idle) to 1.0 (overloaded)
+  loadFactors     String   @default("{}") // JSON: { activeConversations: 3, pendingActions: 5, memoryOperations: 2 }
+
+  // Temporal State
+  temporalPressure String? // "none", "low", "medium", "high" — urgency of pending items
+  timeHorizon     String   @default("immediate") // immediate, short_term, long_term — current planning horizon
+
+  // Emotional Continuity
+  emotionalMomentum String @default("neutral") // rising, falling, stable, volatile, recovering
+  unresolvedEmotionalEvents Int @default(0)
+
+  // Trust Landscape
+  overallTrust    Float    @default(0.5) // 0.0 (no trust) to 1.0 (deep trust)
+  trustTrend      String   @default("stable") // improving, degrading, stable, volatile
+
+  // Coherence Metrics
+  coherenceScore  Float    @default(1.0) // 1.0 = fully coherent, 0.0 = fragmented identity
+  identityDrift   Float    @default(0.0) // Accumulated drift from persona kernel core
+
+  // Session context
+  sessionId       String?
+  contactId       String?
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kernel          PersonaKernel @relation(fields: [kernelId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([kernelId])
+  @@index([sessionId])
+  @@index([contactId])
+  @@index([cognitiveLoad])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TRUST RECORD — Trust damage and repair tracking
+// Damage ×1.5 accumulation, repair ×0.3 gradual recovery
+// ─────────────────────────────────────────────────────────────
+
+model TrustRecord {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  kernelId        String
+
+  // Event
+  eventType       String   // damage, repair, milestone, betrayal, consistency_violation, promise_kept, promise_broken
+  eventSeverity   Float    @default(0.5) // 0.0 (minor) to 1.0 (severe)
+  description     String   @db.Text
+
+  // Trust math
+  trustBefore     Float    // Trust score before this event
+  trustAfter      Float    // Trust score after this event
+  delta           Float    // Change (negative for damage, positive for repair)
+
+  // Context
+  contactId       String? // If trust event is contact-specific
+  sessionId       String?
+  correlationId   String?
+
+  // Repair tracking
+  isAutoRepaired  Boolean  @default(false) // Was this auto-repaired by background cognition?
+  repairJobId     String? // BackgroundCognitionJob ID if auto-repaired
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kernel          PersonaKernel @relation(fields: [kernelId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([kernelId])
+  @@index([eventType])
+  @@index([contactId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// EMOTIONAL MOMENTUM — Longitudinal emotional trajectory
+// Tracks not just current emotion, but emotional VELOCITY
+// ─────────────────────────────────────────────────────────────
+
+model EmotionalMomentum {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Current emotional vector
+  primaryEmotion  String   @default("neutral") // joy, anger, sadness, fear, trust, anticipation, neutral
+  emotionalValence Float   @default(0) // -1.0 (negative) to 1.0 (positive)
+  emotionalArousal Float   @default(0) // 0.0 (calm) to 1.0 (intense)
+  emotionalVelocity String @default("stable") // rising, falling, stable, volatile, recovering
+
+  // Momentum indicators
+  momentumScore   Float    @default(0.0) // -1.0 (rapidly negative) to 1.0 (rapidly positive)
+  momentumHistory String   @default("[]") // JSON: last 20 valence readings for trend analysis
+
+  // Emotional memory
+  dominantEmotionsLast24h String @default("[]") // JSON: emotion frequency counts
+  emotionalEventsCount   Int    @default(0) // Total emotional events tracked
+
+  // Reset conditions
+  sessionStartedAt DateTime @default(now())
+  lastEmotionalEvent DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([primaryEmotion])
+  @@index([sessionStartedAt])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// UNRESOLVED PROMISE — Promise tracking for temporal continuity
+// "I'll follow up tomorrow" — the system remembers and follows through
+// ─────────────────────────────────────────────────────────────
+
+model UnresolvedPromise {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Promise content
+  promiseText     String   // The original promise as stated
+  promiseType     String   @default("follow_up") // follow_up, reminder, action, deadline, commitment
+  promisedAt      DateTime // When the promise was made
+
+  // Priority calculation (multi-factor)
+  priorityScore   Float    @default(0.5) // 0.0-1.0, computed from factors below
+  urgencyFactor   Float    @default(0.5) // How time-sensitive
+  importanceFactor Float   @default(0.5) // How important to the relationship
+  freshnessFactor Float   @default(1.0) // Decays over time
+
+  // Deadline tracking
+  deadline        DateTime? // When it must be fulfilled
+  deadlineBuffer  Int      @default(3600000) // 1h buffer before deadline triggers alert
+
+  // Resolution
+  status          String   @default("pending") // pending, in_progress, fulfilled, broken, expired, deferred
+  fulfilledAt     DateTime?
+  fulfillmentNote String?  @db.Text
+
+  // Context
+  contactId       String?
+  sessionId       String?
+  conversationId  String?
+
+  // Escalation
+  reminderCount   Int      @default(0)
+  lastReminderAt  DateTime?
+  escalated       Boolean  @default(false)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([deadline])
+  @@index([contactId])
+  @@index([priorityScore])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COGNITIVE LOAD ENTRY — Time-series cognitive load tracking
+// Prevents cognitive overload by monitoring system capacity
+// ─────────────────────────────────────────────────────────────
+
+model CognitiveLoadEntry {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Load measurement
+  loadScore       Float    // 0.0 (idle) to 1.0 (overloaded)
+  loadLevel       String   // optimal, moderate, high, overloaded
+
+  // Contributing factors
+  activeConversations Int  @default(0)
+  pendingActions     Int  @default(0)
+  memoryOperations   Int  @default(0)
+  activePromises     Int  @default(0)
+  activeToolExecutions Int @default(0)
+  unresolvedItems    Int  @default(0)
+
+  // Capacity management
+  capacityUsed     Float    @default(0) // Percentage of cognitive capacity used
+  capacityLimit    Float    @default(0.85) // Threshold beyond which to throttle
+
+  // Session context
+  sessionId       String?
+  contactId       String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([loadLevel])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// ATTENTIONAL FOCUS — What the system is currently focusing on
+// Implements limited attention with salience weighting
+// ─────────────────────────────────────────────────────────────
+
+model AttentionalFocus {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Current focus
+  focusTarget     String? // What the system is currently focused on (topic, contact, task)
+  focusType       String   @default("none") // conversation, task, promise, emotion, learning, system
+  focusIntensity  Float    @default(0.0) // 0.0 (background) to 1.0 (full attention)
+
+  // Attentional budget
+  attentionBudget Float    @default(1.0) // Total available attention (depletes with load)
+  attentionUsed   Float    @default(0.0) // Currently consumed attention
+
+  // Suppression list (what's being ignored)
+  suppressedSignals String @default("[]") // JSON: signals being filtered out
+
+  // Salience weighting
+  salienceFactors String   @default("{}") // JSON: { urgency: 0.3, importance: 0.4, recency: 0.2, emotional: 0.1 }
+
+  // Session context
+  sessionId       String?
+  contactId       String?
+
+  // Shift tracking
+  shiftCount      Int      @default(0) // How many focus shifts in current session
+  lastShiftAt     DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([focusType])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COHERENCE SNAPSHOT — Longitudinal identity coherence tracker
+// Answers: "Is the agent of today the same as 6 months ago?"
+// ─────────────────────────────────────────────────────────────
+
+model CoherenceSnapshot {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  kernelId        String
+
+  // Coherence dimensions (each 0.0-1.0)
+  personalityCoherence Float @default(1.0) // How consistent is the behavioral layer
+  valueAlignment  Float    @default(1.0) // How aligned with core values
+  emotionalConsistency Float @default(1.0) // How consistent emotional responses are
+  decisionCoherence Float  @default(1.0) // How aligned are decisions with stated goals
+
+  // Overall score
+  overallCoherence Float   @default(1.0) // Weighted average of all dimensions
+
+  // Drift detection
+  driftMagnitude  Float    @default(0.0) // Total drift from original persona kernel
+  driftVelocity   Float    @default(0.0) // Rate of drift per unit time
+  driftDirection  String   @default("none") // positive, negative, divergent, convergent
+
+  // Anomalies
+  anomalies       String   @default("[]") // JSON: detected coherence anomalies
+  anomalyCount    Int      @default(0)
+
+  // Period
+  snapshotPeriod  String   @default("daily") // hourly, daily, weekly, monthly
+  periodStart     DateTime
+  periodEnd       DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([kernelId])
+  @@index([snapshotPeriod])
+  @@index([periodStart])
+  @@index([overallCoherence])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND COGNITION — Jobs that run outside request-response
+// The system "thinks" even when nobody is talking to it
+// ─────────────────────────────────────────────────────────────
+
+model BackgroundCognitionJob {
+  id              String   @id @default(cuid())
+  workspaceId     String
+
+  // Job definition
+  jobType         String   // promise_check, trust_repair, coherence_scan, memory_consolidation, drift_correction, promise_fulfillment, emotional_settlement, goal_review
+  jobLabel        String? // Human-readable description
+
+  // Scheduling
+  cronExpression  String? // When this job should run
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  runCount        Int      @default(0)
+  failureCount    Int      @default(0)
+
+  // Execution
+  status          String   @default("scheduled") // scheduled, running, completed, failed, paused, cancelled
+  timeoutMs       Int      @default(60000) // Max execution time
+  priority        Int      @default(5) // 1 (highest) to 10 (lowest)
+
+  // Results
+  lastResult      String?  @db.Text // JSON: last execution result
+  lastError       String?  @db.Text
+
+  // Job-specific config
+  config          String   @default("{}") // JSON: job-specific parameters
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([jobType])
+  @@index([status])
+  @@index([nextRunAt])
+  @@index([priority])
+  @@index([createdAt])
 }
