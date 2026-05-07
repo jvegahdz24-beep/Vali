@@ -1,157 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════
+# ValiAutoFlow CRM — Local Development Infrastructure
+# PostgreSQL 16 + Redis 7
+# ═══════════════════════════════════════════════════════════════════
+#
+# USAGE:
+#   docker compose up -d          Start services in background
+#   docker compose down           Stop and remove containers
+#   docker compose logs -f        Stream all logs
+#   docker compose logs -f postgres   Stream only Postgres logs
+#   docker compose down -v        Stop AND delete persisted data volumes
+#
+# DATABASE_URL (add to your .env):
+#   DATABASE_URL=postgresql://valiflow:valiflow_secret_2024@localhost:5432/valiflow_crm
+#   DIRECT_URL=postgresql://valiflow:valiflow_secret_2024@localhost:5432/valiflow_crm
+#
+# REDIS_URL (add to your .env):
+#   REDIS_URL=redis://localhost:6379
+#
+# NOTES:
+#   - Data persists in Docker volumes (postgres_data, redis_data)
+#   - Redis is capped at 256MB with LRU eviction
+#   - Healthchecks ensure services are ready before your app connects
+# ═══════════════════════════════════════════════════════════════════
+
 version: '3.8'
 
 services:
-  # ─── PostgreSQL ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: valiflow-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: valiflow
-      POSTGRES_PASSWORD: valiflow_prod_2026
-      POSTGRES_DB: valiautoflow
+      POSTGRES_PASSWORD: valiflow_secret_2024
+      POSTGRES_DB: valiflow_crm
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U valiflow -d valiautoflow"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U valiflow"]
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
 
-  # ─── Redis ───────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: valiflow-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes --appendfsync everysec
     volumes:
-      - redis-data:/data
+      - redis_data:/data
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 5s
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-        reservations:
-          memory: 64M
-
-  # ─── Meilisearch ─────────────────────────────────────────────
-  meilisearch:
-    image: getmeili/meilisearch:v1.12
-    container_name: valiflow-meilisearch
-    restart: unless-stopped
-    ports:
-      - "7700:7700"
-    environment:
-      MEILI_ENV: production
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-valiflow_search_2026_master_key}
-    volumes:
-      - meilisearch-data:/meili_data
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
-
-  # ─── ValiAutoFlow CRM App ────────────────────────────────────
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: valiautoflow-crm
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
-    environment:
-      - NODE_ENV=production
-      # PostgreSQL (pooled connection via PgBouncer-like Prisma pool)
-      - DATABASE_URL=postgresql://valiflow:valiflow_prod_2026@postgres:5432/valiautoflow?connection_limit=10&pool_timeout=30
-      - DIRECT_URL=postgresql://valiflow:valiflow_prod_2026@postgres:5432/valiautoflow
-      # Redis
-      - REDIS_URL=redis://redis:6379
-      - REDIS_PREFIX=valiflow:
-      # Auth
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production-32chars-minimum!!}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      # AI
-      - ZAI_API_KEY=${ZAI_API_KEY:-}
-      # Email
-      - RESEND_API_KEY=${RESEND_API_KEY:-}
-      - EMAIL_FROM=${EMAIL_FROM:-noreply@valiautoflow.com}
-      # Google
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      # Stripe
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
-      # WhatsApp
-      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
-      - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME:-}
-      # Security
-      - SEED_PIN=${SEED_PIN:-}
-      - WORKER_KEY=${WORKER_KEY:-}
-      - CRON_SECRET=${CRON_SECRET:-}
-      # Observability
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FORMAT=json
-      - PRISMA_LOG=false
-      # Demo (disable in production!)
-      - DEMO_MODE=false
-      # Meilisearch
-      - MEILI_SEARCH_URL=http://meilisearch:7700
-      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-valiflow_search_2026_master_key}
-    volumes:
-      - valiautoflow-uploads:/app/uploads
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
 
 volumes:
-  postgres-data:
-    driver: local
-  redis-data:
-    driver: local
-  valiautoflow-uploads:
-    driver: local
-  meilisearch-data:
-    driver: local
+  postgres_data:
+  redis_data:
