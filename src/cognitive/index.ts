@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow CRM v3.0 — FASE 4: NEXUS Cognitive Engine
-// Barrel Export — Sprint 1 + Sprint 2
+// Barrel Export — Sprint 1 + Sprint 2 + Sprint 3
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Sprint 1: Persona Kernel + Baseline + Drift + Coherence ───
@@ -17,6 +17,15 @@ export { SalienceEngine } from './salience-engine'
 export { AttentionalBudgetManager } from './attentional-budget'
 export { CognitiveLoadManager } from './cognitive-load'
 export type { LoadLevel } from './cognitive-load'
+
+// ─── Sprint 3: Coherence Meter ────────────────────────────────
+
+export { CoherenceMeter } from './coherence-meter'
+export type {
+  CoherenceHealthReport,
+  LongitudinalComparisonReport,
+} from './coherence-meter'
+export type { CoherenceHealthGrade } from './coherence-meter'
 
 // ─── Type Definitions ──────────────────────────────────────────
 
@@ -88,6 +97,7 @@ import CognitiveStateManager from './cognitive-state'
 import SalienceEngine from './salience-engine'
 import AttentionalBudgetManager from './attentional-budget'
 import CognitiveLoadManager from './cognitive-load'
+import CoherenceMeter from './coherence-meter'
 
 export default {
   // Sprint 1
@@ -100,4 +110,6 @@ export default {
   SalienceEngine,
   AttentionalBudgetManager,
   CognitiveLoadManager,
+  // Sprint 3
+  CoherenceMeter,
 }

@@ -655,7 +655,7 @@ export class CoherenceSnapshots {
     return anomalies
   }
 
-  private static computeOverallCoherence(dimensions: CoherenceDimensions): number {
+  static computeOverallCoherence(dimensions: CoherenceDimensions): number {
     // Weighted average: personality is most important, followed by values
     const weights = {
       personalityCoherence: 0.35,
