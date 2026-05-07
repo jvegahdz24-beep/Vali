@@ -104,3 +104,25 @@ Stage Summary:
 - Docker Compose listo para levantar infraestructura
 - Seed data con IDs deterministas (ws_demo_001, contact_demo_001, etc.)
 - Git: commit 003caad, pushed to origin/main
+
+---
+Task ID: jhon-prompt-v2-multiagente
+Agent: Main Agent
+Task: Actualizar JHON_SYSTEM_PROMPT a Sistema Multi-Agente v2
+
+Work Log:
+- Audit del prompt anterior (108 líneas, orientado a concesionarias, genérico)
+- Reemplazo completo con Sistema Multi-Agente ValiAutoFlow (206 líneas)
+- Actualización de personalities.ts (keyBehaviors, prohibitedPhrases, responseStructure)
+- Verificación TypeScript: 0 errores
+- Commit a0e3ca4, pushed to main
+
+Stage Summary:
+- JHON_SYSTEM_PROMPT v1 → v2: genérico → dominio-específico ValiAutoFlow
+- Sistema Multi-Agente: DIAGNÓSTICO → ESTRATEGIA → CIERRE
+- Principio central: "No es que no funcione... es que se está fugando"
+- Detección de etapa automática (exploración, interés, intención)
+- 5 objeciones resueltas con respuestas directas
+- Planes ValiFlow integrados como contexto de cierre
+- Filtro pre-respuesta (5 preguntas de validación)
+- Git: commit a0e3ca4, pushed to origin/main
