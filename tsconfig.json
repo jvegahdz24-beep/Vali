@@ -40,6 +40,13 @@
   "exclude": [
     "node_modules",
     "skills",
-    "scripts"
+    "scripts",
+    "src",
+    "vali-crm",
+    "vali-repo",
+    "Vali/node_modules",
+    "Vali/skills",
+    "Vali/scripts",
+    "Vali/src"
   ]
 }
