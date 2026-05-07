@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow CRM v3.0 — FASE 4: NEXUS Cognitive Engine
-// Barrel Export — Sprint 1 + Sprint 2 + Sprint 3
+// Barrel Export — Complete: Sprint 1 + Sprint 2 + Sprint 3 + Sprint 4
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Sprint 1: Persona Kernel + Baseline + Drift + Coherence ───
@@ -24,8 +24,15 @@ export { CoherenceMeter } from './coherence-meter'
 export type {
   CoherenceHealthReport,
   LongitudinalComparisonReport,
+  CoherenceHealthGrade,
 } from './coherence-meter'
-export type { CoherenceHealthGrade } from './coherence-meter'
+
+// ─── Sprint 4: Runtime Integration + Trust Engine ─────────────
+
+export { CognitiveRuntime } from './cognitive-runtime'
+export type { GateDecision, GateResult, ExecutionModifiers } from './cognitive-runtime'
+
+export { TrustEngine } from './trust-engine'
 
 // ─── Type Definitions ──────────────────────────────────────────
 
@@ -98,18 +105,23 @@ import SalienceEngine from './salience-engine'
 import AttentionalBudgetManager from './attentional-budget'
 import CognitiveLoadManager from './cognitive-load'
 import CoherenceMeter from './coherence-meter'
+import CognitiveRuntime from './cognitive-runtime'
+import TrustEngine from './trust-engine'
 
 export default {
-  // Sprint 1
+  // Sprint 1: Identity Foundation
   PersonaKernel,
   BaselineGenerator,
   DriftTracker,
   CoherenceSnapshots,
-  // Sprint 2
+  // Sprint 2: Cognitive Processing
   CognitiveStateManager,
   SalienceEngine,
   AttentionalBudgetManager,
   CognitiveLoadManager,
-  // Sprint 3
+  // Sprint 3: Coherence Monitoring
   CoherenceMeter,
+  // Sprint 4: Runtime Integration
+  CognitiveRuntime,
+  TrustEngine,
 }
