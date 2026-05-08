@@ -4,6 +4,7 @@
 // Generate → Follow-up → CRM → Route → Deliver
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import type {
   LeadAnalysis,
   RevenueEngineDecision,
@@ -634,8 +635,10 @@ export class RevenueEngine {
 
     // Build the system prompt with full context
     let systemPrompt: string
+    // FIX: Always use JHON personality identity — custom prompt should be APPENDED, not replace identity
+    const identityBlock = `IDENTIDAD FIJA: Te llamas JHON. Siempre te presentas como "Jhon" del equipo de ValiAutoFlow. NUNCA digas ser Carlos, Vali, ni ningún otro nombre. NUNCA cambies tu nombre.`
     if (customSystemPrompt && customSystemPrompt.trim()) {
-      systemPrompt = customSystemPrompt
+      systemPrompt = `${identityBlock}\n\n${customSystemPrompt}`
     } else {
       systemPrompt = getSystemPrompt(
         personalityName,
@@ -665,9 +668,10 @@ export class RevenueEngine {
       { role: 'system', content: systemPrompt },
     ]
 
-    // Add recent conversation history (last 10 messages) for natural flow
+    // Add recent conversation history (last 30 messages) for natural flow
+    // FIX: Increased from 10 to 30 to prevent context loss in long conversations
     if (context?.conversationHistory && context.conversationHistory.length > 0) {
-      const recentHistory = context.conversationHistory.slice(-10)
+      const recentHistory = context.conversationHistory.slice(-30)
       for (const msg of recentHistory) {
         messages.push({
           role: msg.role === 'contact' ? 'user' : 'assistant',
@@ -676,21 +680,26 @@ export class RevenueEngine {
       }
     }
 
-    // Add current message with minimal context (the system prompt handles strategy)
-    messages.push({
-      role: 'user',
-      content: userMessage,
-    })
+    // FIX: Only add current message if it's NOT already the last message in history
+    // This prevents sending the user's message twice to the LLM
+    const lastHistoryMsg = context?.conversationHistory?.[context.conversationHistory.length - 1]
+    const alreadyInHistory = lastHistoryMsg && lastHistoryMsg.role === 'contact' && lastHistoryMsg.content === userMessage
+    if (!alreadyInHistory) {
+      messages.push({
+        role: 'user',
+        content: userMessage,
+      })
+    }
 
     try {
-      console.log(`[RevenueEngine] generateResponse → calling chatWithAI (${messages.length} messages, provider: ${aiProvider}, last: "${(context?.lastMessage || '').slice(0, 50)}")`)
+      debug(`[RevenueEngine] generateResponse → calling chatWithAI (${messages.length} messages, provider: ${aiProvider}, last: "${(context?.lastMessage || '').slice(0, 50)}")`)
 
       const result = await chatWithAI(messages, aiProvider, undefined, {
         temperature: dynamicTemperature,
         maxTokens: 2048,
       })
 
-      console.log(`[RevenueEngine] generateResponse → got ${result.content.length} chars from ${result.model} (${result.latencyMs}ms)`)
+      debug(`[RevenueEngine] generateResponse → got ${result.content.length} chars from ${result.model} (${result.latencyMs}ms)`)
 
       return this.parseJHONResponse(result.content, analysis)
     } catch (error) {
@@ -741,7 +750,7 @@ export class RevenueEngine {
 
     if (hasTags) {
       const insightMatch = cleaned.match(/\[INSIGHT\]\s*([\s\S]*?)(?=\[DIRECC[OÓ]N\]|\[DIRECCION\]|$)/i)
-      const directionMatch = cleaned.match(/\[DIRECC[OÓ]N\]|\[DIRECCION\]\s*([\s\S]*?)(?=\[PREGUNTA\]|$)/i)
+      const directionMatch = cleaned.match(/\[(?:DIRECC[OÓ]N|DIRECCION)\]\s*([\s\S]*?)(?=\[PREGUNTA\]|$)/i)
       const questionMatch = cleaned.match(/\[PREGUNTA\]\s*([\s\S]*?)(?=\[REPLIES\]|$)/i)
       const repliesMatch = cleaned.match(/\[REPLIES\]\s*([\s\S]*?)$/i)
 
@@ -1018,17 +1027,17 @@ export class RevenueEngine {
 
     // Step 1: Analyze lead
     const analysis = this.analyzeLead(messages, contactData)
-    console.log(`[RevenueEngine] Lead analysis: score=${analysis.score}, stage=${analysis.stage}, temperature=${analysis.temperature}`)
+    debug(`[RevenueEngine] Lead analysis: score=${analysis.score}, stage=${analysis.stage}, temperature=${analysis.temperature}`)
 
     // Step 2: Detect triggers
     const trigger = this.detectTrigger(analysis)
     if (trigger.isActive) {
-      console.log(`[RevenueEngine] Trigger active: ${trigger.triggerType} (${trigger.confidence})`)
+      debug(`[RevenueEngine] Trigger active: ${trigger.triggerType} (${trigger.confidence})`)
     }
 
     // Step 3: Make decision
     const decision = this.makeDecision(analysis, trigger)
-    console.log(`[RevenueEngine] Decision: ${decision.action} — ${decision.strategy.slice(0, 80)}`)
+    debug(`[RevenueEngine] Decision: ${decision.action} — ${decision.strategy.slice(0, 80)}`)
 
     // Step 4: Handle objection (if applicable)
     let response: JHONResponse
@@ -1079,7 +1088,7 @@ export class RevenueEngine {
     // Step 8: Route to agent
     const agentRouting = this.routeToAgent(analysis, messages)
 
-    console.log(`[RevenueEngine] Agent routing: ${agentRouting.agentType} (confidence: ${agentRouting.confidence})`)
+    debug(`[RevenueEngine] Agent routing: ${agentRouting.agentType} (confidence: ${agentRouting.confidence})`)
 
     return {
       action: decision.action as RevenueEngineDecision['action'],

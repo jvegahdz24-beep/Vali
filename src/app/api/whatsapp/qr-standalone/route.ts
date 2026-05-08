@@ -1,9 +1,10 @@
-// TEMPORARY: QR standalone endpoint — no auth required
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { whatsAppManager } from '@/lib/whatsapp/connection'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireAuth(request)
     // Start connection if not started
     const status = whatsAppManager.getStatus()
     if (!status.connecting && !status.connected) {
@@ -39,6 +40,6 @@ export async function GET() {
       connecting: true 
     }, { status: 503 })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    return errorResponse(error, 'Error al obtener QR de WhatsApp')
   }
 }

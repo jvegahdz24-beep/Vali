@@ -8,12 +8,16 @@ import pino from 'pino'
 import path from 'path'
 import fs from 'fs'
 import QRCode from 'qrcode'
+import { debug } from '@/lib/logger'
 import { humanizeResponse, getRandomDelay } from '@/lib/ai/humanizer'
 import { enqueueMessage } from '@/lib/ai/conversation-middleware'
 import { processMessageCore } from '@/lib/ai/message-processor'
 import { DbAuthState } from './db-auth-state'
 import { detectMedia, downloadAndSaveMedia } from './media-handler'
 import { isDuplicateMessage } from './shared-dedup'
+import { normalizePhone } from '@/lib/utils'
+// Advanced humanizer (lazy import — async, server-only)
+import type { HumanizationContext as AdvHumanizationContext } from '@/lib/humanizer-advanced'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -31,6 +35,7 @@ export interface WhatsAppStatus {
   qrCode: string | null
   phone: string | null
   lastActivity: string | null
+  lastError: string | null
 }
 
 type StatusEventCallback = (status: WhatsAppStatus) => void
@@ -93,6 +98,7 @@ class WhatsAppManager {
   private _lastActivity: string | null = null
   private _reconnectAttempts = 0
   private _maxReconnectAttempts = 10
+  private _lastError: string | null = null
 
   // FIX P5: Per-phone processing lock to prevent concurrent processing
   // Dedup is now handled by shared-dedup.ts (used by both connection + webhook)
@@ -111,7 +117,7 @@ class WhatsAppManager {
 
   private async acquireProcessingLock(phone: string): Promise<boolean> {
     if (this._processingLocks.get(phone)) {
-      console.log(`[WhatsApp] Processing lock held for ${phone}, skipping`)
+      debug(`[WhatsApp] Processing lock held for ${phone}, skipping`)
       return false
     }
     this._processingLocks.set(phone, true)
@@ -187,6 +193,7 @@ class WhatsAppManager {
 
     this._connecting = true
     this._reconnectAttempts = 0
+    this._lastError = null
     this.emitStatus()
 
     // 🔥 NON-BLOCKING: Launch connection in background, return immediately
@@ -211,18 +218,18 @@ class WhatsAppManager {
         DisconnectReason,
       } = await loadBaileys()
 
-      console.log('[WhatsApp] Baileys loaded, creating socket...')
+      debug('[WhatsApp] Baileys loaded, creating socket...')
 
       // ─── DB Auth: Load credentials from DB → tmpdir ───
       dbAuth = new DbAuthState(_WORKSPACE_ID)
       const authDir = await dbAuth.load()
-      console.log('[WhatsApp] Auth dir:', authDir)
+      debug('[WhatsApp] Auth dir:', authDir)
 
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Baileys function, not React
       const { state, saveCreds } = await useMultiFileAuthState(authDir)
       const { version } = await fetchLatestBaileysVersion()
 
-      console.log('[WhatsApp] Baileys version:', version)
+      debug('[WhatsApp] Baileys version:', version)
 
       const logger = pino({ level: 'silent' })
 
@@ -236,7 +243,7 @@ class WhatsAppManager {
         version,
         auth: authState,
         logger,
-        printQRInTerminal: true,
+        printQRInTerminal: process.env.NODE_ENV !== 'production',
         generateHighQualityLinkPreview: true,
         browser: ['ValiAutoFlow', 'Chrome', '120.0.0'],
         getMessage: async () => undefined as any,
@@ -255,15 +262,15 @@ class WhatsAppManager {
       this.sock.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update
 
-        console.log('[WhatsApp] STATUS:', connection || update)
+        debug('[WhatsApp] STATUS:', connection || update)
 
         // QR code received — convert raw QR string to base64 PNG
         if (qr) {
-          console.log('═══════════════════════════════════════════════')
-          console.log('📱 ESCANEA ESTE QR CON WHATSAPP:')
-          console.log('═══════════════════════════════════════════════')
-          console.log(qr)
-          console.log('═══════════════════════════════════════════════')
+          debug('═══════════════════════════════════════════════')
+          debug('📱 ESCANEA ESTE QR CON WHATSAPP:')
+          debug('═══════════════════════════════════════════════')
+          debug(qr)
+          debug('═══════════════════════════════════════════════')
           try {
             const qrPngDataUrl = await QRCode.toDataURL(qr, {
               width: 300,
@@ -276,7 +283,7 @@ class WhatsAppManager {
               code: base64Png,
               timestamp: Date.now(),
             }
-            console.log('[WhatsApp] QR code received and converted to PNG')
+            debug('[WhatsApp] QR code received and converted to PNG')
             this.emitQR(base64Png)
             this.emitStatus()
           } catch (err) {
@@ -293,9 +300,9 @@ class WhatsAppManager {
 
         // Connection established
         if (connection === 'open') {
-          console.log('═══════════════════════════════════════════════')
-          console.log('✅ WHATSAPP CONECTADO')
-          console.log('═══════════════════════════════════════════════')
+          debug('═══════════════════════════════════════════════')
+          debug('✅ WHATSAPP CONECTADO')
+          debug('═══════════════════════════════════════════════')
           this._connected = true
           this._connecting = false
           this._reconnectAttempts = 0
@@ -310,7 +317,7 @@ class WhatsAppManager {
             this._phone = 'connected'
           }
 
-          console.log('[WhatsApp] Connected! Phone:', this._phone)
+          debug('[WhatsApp] Connected! Phone:', this._phone)
           this.emitStatus()
         }
 
@@ -323,18 +330,18 @@ class WhatsAppManager {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
 
           if (statusCode === DisconnectReason.loggedOut) {
-            console.log('[WhatsApp] Logged out, need new QR scan')
+            debug('[WhatsApp] Logged out, need new QR scan')
             this.qrData = null
             this._phone = null
             this._reconnectAttempts = 0
           } else if (statusCode === DisconnectReason.connectionClosed) {
-            console.log('[WhatsApp] Connection closed, reconnecting...')
+            debug('[WhatsApp] Connection closed, reconnecting...')
             this.scheduleReconnect(3000)
           } else if (statusCode === DisconnectReason.connectionLost) {
-            console.log('[WhatsApp] Connection lost, reconnecting...')
+            debug('[WhatsApp] Connection lost, reconnecting...')
             this.scheduleReconnect(2000)
           } else {
-            console.log('[WhatsApp] Connection closed with code:', statusCode)
+            debug('[WhatsApp] Connection closed with code:', statusCode)
             if (statusCode !== DisconnectReason.loggedOut) {
               this.scheduleReconnect(5000)
             }
@@ -364,7 +371,7 @@ class WhatsAppManager {
           const messageId = msg.key.id
           if (messageId && isDuplicateMessage(messageId)) return
 
-          const phone = remoteJid.split('@')[0]
+          const phone = normalizePhone(remoteJid.split('@')[0])
           const pushName = msg.pushName || undefined
 
           // ─── MEDIA DETECTION ──────────────────────────────
@@ -374,7 +381,7 @@ class WhatsAppManager {
           if (!text && !mediaInfo) return
 
           const displayText = text || `[${mediaInfo?.type || 'media'}]`
-          console.log(`[WhatsApp] Message from ${phone}: ${displayText.slice(0, 80)}...${mediaInfo ? ` [MEDIA: ${mediaInfo.type}]` : ''}`)
+          debug(`[WhatsApp] Message from ${phone}: ${displayText.slice(0, 80)}...${mediaInfo ? ` [MEDIA: ${mediaInfo.type}]` : ''}`)
           this._lastActivity = new Date().toISOString()
 
           this.emitMessage({ from: phone, message: displayText, pushName })
@@ -383,7 +390,7 @@ class WhatsAppManager {
           if (mediaInfo && this.sock) {
             downloadAndSaveMedia(this.sock, msg, mediaInfo)
               .then((id) => {
-                if (id) console.log(`[WhatsApp] Media downloaded: ${id} (${mediaInfo.type})`)
+                if (id) debug(`[WhatsApp] Media downloaded: ${id} (${mediaInfo.type})`)
               })
               .catch((err) => {
                 console.warn('[WhatsApp] Media download failed (non-critical):', err)
@@ -418,13 +425,14 @@ class WhatsAppManager {
         }
       })
 
-      console.log('[WhatsApp] Socket created, waiting for QR or connection...')
+      debug('[WhatsApp] Socket created, waiting for QR or connection...')
       // Socket events handle the rest (QR generation, connection, messages)
       // No return needed — events drive the lifecycle
 
     } catch (error) {
       this._connecting = false
       this._connected = false
+      this._lastError = error instanceof Error ? error.message : String(error)
       console.error('[WhatsApp] Failed to start:', error)
       this.emitStatus()
       // Don't throw — this runs in background, log and recover
@@ -482,7 +490,7 @@ class WhatsAppManager {
       }
 
       ensureAuthDir()
-      console.log('[WhatsApp] Disconnected and auth cleared')
+      debug('[WhatsApp] Disconnected and auth cleared')
       this.emitStatus()
       return true
     } catch (error) {
@@ -507,7 +515,7 @@ class WhatsAppManager {
       const result = await this.sock.sendMessage(jid, { text })
 
       this._lastActivity = new Date().toISOString()
-      console.log(`[WhatsApp] Message sent to ${phone}, id: ${result?.key?.id}`)
+      debug(`[WhatsApp] Message sent to ${phone}, id: ${result?.key?.id}`)
 
       return {
         success: true,
@@ -536,6 +544,7 @@ class WhatsAppManager {
       qrCode,
       phone: this._phone,
       lastActivity: this._lastActivity,
+      lastError: this._lastError,
     }
   }
 
@@ -628,7 +637,7 @@ class WhatsAppManager {
     try {
       const result = await this.sock.sendMessage(jid, content)
       this._lastActivity = new Date().toISOString()
-      console.log(`[WhatsApp] Raw message sent to ${jid}, id: ${result?.key?.id}`)
+      debug(`[WhatsApp] Raw message sent to ${jid}, id: ${result?.key?.id}`)
       return { success: true, id: result?.key?.id ?? undefined }
     } catch (error) {
       console.error(`[WhatsApp] Failed to send raw message:`, error)
@@ -670,30 +679,92 @@ class WhatsAppManager {
 
       // ── WHATSAPP-SPECIFIC: Humanize + send via socket ──
       const { aiReplyText } = coreResult
-      console.log(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
+      debug(`[WhatsApp] Reply generated for ${phone} (${Date.now() - pipelineStart}ms, ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'})`)
 
       if (aiReplyText && this.sock && this._connected) {
-        const humanizedText = humanizeResponse(aiReplyText)
-        const finalText = humanizedText.length > 600
-          ? humanizedText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
-          : humanizedText
-
-
-
-        // Typing indicator
-        try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
-        const delay = getRandomDelay(finalText.length)
-        await new Promise(resolve => setTimeout(resolve, delay))
-        try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
-
-        // Send
-        let sentMessageId: string | undefined
+        // ── Advanced Humanizer with fallback to basic humanizer ──
+        let finalText = aiReplyText
         try {
-          const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
-          sentMessageId = sendResult?.key?.id ?? undefined
-          console.log(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
-        } catch (sendErr) {
-          console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+          const advHumanizer = await import('@/lib/humanizer-advanced')
+          const advContext: AdvHumanizationContext = {
+            contactId: coreResult.contactId || undefined,
+            workspaceId: undefined,
+            conversationId: coreResult.conversationId,
+            recentMessages: [text],
+          }
+
+          const humanizedText = await advHumanizer.humanize(
+            aiReplyText,
+            coreResult.contactId || undefined,
+            advContext,
+          )
+
+          // Use advanced split for long messages
+          const splitParts = await advHumanizer.getSplitMessages(
+            humanizedText,
+            coreResult.contactId || undefined,
+            advContext,
+          )
+
+          if (splitParts.length > 1) {
+            // Send multiple parts with per-part delays
+            for (const part of splitParts) {
+              try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+              await new Promise(resolve => setTimeout(resolve, part.delayMs))
+              try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+              let sentMessageId: string | undefined
+              try {
+                const sendResult = await this.sock.sendMessage(remoteJid!, { text: part.content })
+                sentMessageId = sendResult?.key?.id ?? undefined
+              } catch (sendErr) {
+                console.error(`[WhatsApp] Send failed to ${phone} (part):`, sendErr)
+              }
+            }
+            debug(`[WhatsApp] Reply sent to ${phone} (${splitParts.length} parts, ${Date.now() - pipelineStart}ms total)`)
+          } else {
+            finalText = humanizedText.length > 600
+              ? humanizedText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
+              : humanizedText
+
+            // Typing indicator with advanced delay
+            try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+            const delay = await advHumanizer.getSendDelay(finalText, coreResult.contactId || undefined, advContext)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+
+            // Send
+            let sentMessageId: string | undefined
+            try {
+              const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
+              sentMessageId = sendResult?.key?.id ?? undefined
+              debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
+            } catch (sendErr) {
+              console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+            }
+          }
+        } catch (advErr) {
+          // ── Fallback: Basic humanizer ──
+          console.warn('[WhatsApp] Advanced humanizer failed, using basic fallback')
+          finalText = humanizeResponse(aiReplyText)
+          finalText = finalText.length > 600
+            ? finalText.slice(0, 600).replace(/\s+[^.!?]*$/, '')
+            : finalText
+
+          // Typing indicator with basic delay
+          try { await this.sock.sendPresenceUpdate('composing', remoteJid) } catch { /* ignore */ }
+          const delay = getRandomDelay(finalText.length)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          try { await this.sock.sendPresenceUpdate('paused', remoteJid) } catch { /* ignore */ }
+
+          // Send
+          let sentMessageId: string | undefined
+          try {
+            const sendResult = await this.sock.sendMessage(remoteJid!, { text: finalText })
+            sentMessageId = sendResult?.key?.id ?? undefined
+            debug(`[WhatsApp] Reply sent to ${phone} (${finalText.length} chars, ${Date.now() - pipelineStart}ms total)`)
+          } catch (sendErr) {
+            console.error(`[WhatsApp] Send failed to ${phone}:`, sendErr)
+          }
         }
       }
     } catch (error) {
@@ -720,11 +791,11 @@ let whatsAppManager: WhatsAppManager
 if (globalForWhatsApp.whatsAppManager?.isSocketAlive()) {
   // Reuse existing instance only if the underlying WebSocket is truly OPEN
   whatsAppManager = globalForWhatsApp.whatsAppManager
-  console.log('[WhatsApp] Reusing live instance from hot-reload')
+  debug('[WhatsApp] Reusing live instance from hot-reload')
 } else {
   // Stale or dead instance — create fresh
   if (globalForWhatsApp.whatsAppManager) {
-    console.log('[WhatsApp] Discarding stale instance (socket dead or not connected)')
+    debug('[WhatsApp] Discarding stale instance (socket dead or not connected)')
   }
   whatsAppManager = new WhatsAppManager()
 }

@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       data: {
         workspaceId,
         eventType: 'deal_created',
-        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage.name }),
+        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage?.name }),
       },
     })
 
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const body = await req.json()
     const { id, stageId, title, value, currency, description, status, contactId, assignedTo, lostReason, expectedCloseDate, order } = body
 
@@ -131,6 +131,9 @@ export async function PUT(req: NextRequest) {
     if (!existing) {
       return Response.json({ error: 'Deal not found' }, { status: 404 })
     }
+
+    // Verify workspace ownership — prevent cross-tenant modification
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     const updateData: Record<string, unknown> = {}
     if (stageId !== undefined) updateData.stageId = stageId
@@ -179,7 +182,7 @@ export async function PUT(req: NextRequest) {
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage.name,
+            stage: deal.stage?.name,
           }),
         },
       })

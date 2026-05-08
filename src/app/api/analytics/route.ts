@@ -249,6 +249,59 @@ export async function GET(req: NextRequest) {
     const prevResponseRate = prevTotalMessages > 0 ? prevAiMessages / prevTotalMessages : 0
     const prevConversionRate = prevTotalLeads > 0 ? prevWon / prevTotalLeads : 0
 
+    // ─── Avg Response Time & Distribution (real from DB) ──
+    let avgResponseTime = 0
+    let responseTimeDistribution = [
+      { bucket: '< 1 min', count: 0, color: '#10b981' },
+      { bucket: '1-5 min', count: 0, color: '#34d399' },
+      { bucket: '5-15 min', count: 0, color: '#fbbf24' },
+      { bucket: '15-60 min', count: 0, color: '#f97316' },
+      { bucket: '60+ min', count: 0, color: '#ef4444' },
+    ]
+    try {
+      const allMessages = await db.message.findMany({
+        where: {
+          conversation: { workspaceId: workspaceId! },
+          createdAt: { gte: startDate },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, direction: true, isAiGenerated: true },
+      })
+
+      // Calculate real avgResponseTime: gap between inbound user messages and next outbound AI response
+      const responseGaps: number[] = []
+      for (let i = 0; i < allMessages.length - 1; i++) {
+        const msg = allMessages[i]
+        const next = allMessages[i + 1]
+        if (
+          msg.direction === 'inbound' && !msg.isAiGenerated &&
+          next.direction === 'outbound' && next.isAiGenerated
+        ) {
+          const gapMs = next.createdAt.getTime() - msg.createdAt.getTime()
+          if (gapMs > 0 && gapMs < 3600000) { // Only count gaps under 1 hour
+            responseGaps.push(gapMs)
+          }
+        }
+      }
+      if (responseGaps.length > 0) {
+        avgResponseTime = Math.round(
+          (responseGaps.reduce((a, b) => a + b, 0) / responseGaps.length / 1000) * 10
+        ) / 10
+      }
+
+      // Build real distribution from the same gaps
+      for (const gapMs of responseGaps) {
+        const gapSec = gapMs / 1000
+        if (gapSec < 60) responseTimeDistribution[0].count++
+        else if (gapSec < 300) responseTimeDistribution[1].count++
+        else if (gapSec < 900) responseTimeDistribution[2].count++
+        else if (gapSec < 3600) responseTimeDistribution[3].count++
+        else responseTimeDistribution[4].count++
+      }
+    } catch (err) {
+      console.error('[Analytics] responseTime calc error:', err)
+    }
+
     const summary = {
       period,
       startDate: startDate.toISOString(),
@@ -264,14 +317,46 @@ export async function GET(req: NextRequest) {
     const keyMetrics = {
       totalMessages: totalMessagesCount,
       responseRate,
-      avgResponseTime: 2.4,
+      avgResponseTime,
       conversionRate: conversionRateRaw,
+    }
+
+    // Previous period avg response time (real calculation)
+    let prevAvgResponseTime = 0
+    try {
+      const prevMessages = await db.message.findMany({
+        where: {
+          conversation: { workspaceId: workspaceId! },
+          createdAt: { gte: prevStartDate, lt: prevEndDate },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, direction: true, isAiGenerated: true },
+      })
+      const prevGaps: number[] = []
+      for (let i = 0; i < prevMessages.length - 1; i++) {
+        const msg = prevMessages[i]
+        const next = prevMessages[i + 1]
+        if (
+          msg.direction === 'inbound' && !msg.isAiGenerated &&
+          next.direction === 'outbound' && next.isAiGenerated
+        ) {
+          const gapMs = next.createdAt.getTime() - msg.createdAt.getTime()
+          if (gapMs > 0 && gapMs < 3600000) prevGaps.push(gapMs)
+        }
+      }
+      if (prevGaps.length > 0) {
+        prevAvgResponseTime = Math.round(
+          (prevGaps.reduce((a, b) => a + b, 0) / prevGaps.length / 1000) * 10
+        ) / 10
+      }
+    } catch (err) {
+      console.error('[Analytics] prevResponseTime calc error:', err)
     }
 
     const previousPeriodKeyMetrics = {
       totalMessages: prevTotalMessages,
       responseRate: prevResponseRate,
-      avgResponseTime: 3.1,
+      avgResponseTime: prevAvgResponseTime,
       conversionRate: prevConversionRate,
     }
 
@@ -299,17 +384,6 @@ export async function GET(req: NextRequest) {
     } catch (err) {
       console.error('[Analytics] topContacts error:', err)
     }
-
-    // ─── Response Time Distribution ─────────────────────────
-    // Simulated but realistic distribution based on avg response time
-    const totalMessagesForDist = Math.max(totalMessagesCount, 50)
-    const responseTimeDistribution = [
-      { bucket: '< 1 min', count: Math.round(totalMessagesForDist * 0.42), color: '#10b981' },
-      { bucket: '1-5 min', count: Math.round(totalMessagesForDist * 0.28), color: '#34d399' },
-      { bucket: '5-15 min', count: Math.round(totalMessagesForDist * 0.15), color: '#fbbf24' },
-      { bucket: '15-60 min', count: Math.round(totalMessagesForDist * 0.10), color: '#f97316' },
-      { bucket: '60+ min', count: Math.round(totalMessagesForDist * 0.05), color: '#ef4444' },
-    ]
 
     // ─── Agent Workload ────────────────────────────────────
     const agentWorkload = topAgentsData.map((a: any) => ({

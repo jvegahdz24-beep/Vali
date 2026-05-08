@@ -6,13 +6,14 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { rbac } from '@/lib/rbac'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const { searchParams } = new URL(req.url)
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 100)
@@ -23,6 +24,9 @@ export async function GET(
     if (!automation) {
       return Response.json({ error: 'Automatización no encontrada' }, { status: 404 })
     }
+
+    // RBAC: Any workspace member can view logs
+    await rbac.canRead(session, automation.workspaceId)
 
     const [logs, total] = await Promise.all([
       db.automationLog.findMany({
@@ -50,7 +54,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { status, action, message, contactId, contactName, metadata } = body
@@ -59,6 +63,9 @@ export async function POST(
     if (!automation) {
       return Response.json({ error: 'Automatización no encontrada' }, { status: 404 })
     }
+
+    // RBAC: Creating logs requires member or higher
+    await rbac.canWrite(session, automation.workspaceId)
 
     const log = await db.automationLog.create({
       data: {

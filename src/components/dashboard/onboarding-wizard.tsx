@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { ArchetypeSelector } from '@/components/archetype-selector'
 import { cn } from '@/lib/utils'
 import {
   Bot,
@@ -28,6 +29,7 @@ interface OnboardingWizardProps {
   onComplete: () => void
 }
 
+// Industries kept for backward compatibility
 const industries = [
   { id: 'services', label: 'Servicios Generales', icon: '💼' },
   { id: 'real-estate', label: 'Bienes Raíces', icon: '🏠' },
@@ -39,6 +41,19 @@ const industries = [
   { id: 'education', label: 'Educación', icon: '📚' },
   { id: 'other', label: 'Otro', icon: '🔧' },
 ]
+
+// Map archetype IDs to industry IDs for backward compatibility
+const archetypeIndustryMap: Record<string, string> = {
+  dentista: 'health',
+  abogado: 'professional',
+  escuela: 'education',
+  inmobiliaria: 'real-estate',
+  autos: 'retail',
+  pasteleria: 'retail',
+  barberia: 'services',
+  restaurante: 'restaurants',
+  gimnasio: 'services',
+}
 
 const personalities = [
   {
@@ -92,6 +107,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
   })
   const [selectedIndustry, setSelectedIndustry] = useState('')
   const [selectedPersonality, setselectedPersonality] = useState('JHON')
+  const [showManualIndustry, setShowManualIndustry] = useState(false)
   const [whatsappStatus, setWhatsappStatus] = useState<'idle' | 'connecting' | 'connected' | 'qr_ready'>('idle')
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -299,11 +315,11 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
             </div>
           )}
 
-          {/* Step 1: Business Info */}
+          {/* Step 1: Business Info + Archetype Selection */}
           {currentStep === 1 && (
             <div>
               <h2 className="text-xl font-bold text-zinc-900 mb-1">Tu Negocio</h2>
-              <p className="text-sm text-zinc-500 mb-6">Cuéntanos sobre tu empresa para personalizar la experiencia.</p>
+              <p className="text-sm text-zinc-500 mb-4">Cuéntanos sobre tu empresa. Elige una plantilla preconfigurada o personaliza manualmente.</p>
 
               <div className="space-y-5">
                 <div>
@@ -316,9 +332,27 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
                   />
                 </div>
 
+                {/* Archetype Quick-Select */}
                 <div>
-                  <label className="text-sm font-medium text-zinc-700 mb-2 block">Industria</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <label className="text-sm font-medium text-zinc-700 mb-2 block">
+                    🎯 ¿Listo para usar? Elige una plantilla preconfigurada:
+                  </label>
+                  <ArchetypeSelector
+                    onSelect={(archetype) => {
+                      if (!businessName) setBusinessName(archetype.name)
+                      setSelectedIndustry(archetypeIndustryMap[archetype.id] || archetype.industry)
+                      localStorage.setItem('valiflow_archetype', archetype.id)
+                    }}
+                    compact
+                  />
+                </div>
+
+                {/* Manual Industry (fallback) */}
+                <details>
+                  <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-600">
+                    O seleccionar industria manualmente ▾
+                  </summary>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
                     {industries.map((ind) => (
                       <button
                         key={ind.id}
@@ -336,7 +370,7 @@ export function OnboardingWizard({ workspaceId, onComplete }: OnboardingWizardPr
                       </button>
                     ))}
                   </div>
-                </div>
+                </details>
               </div>
 
               <div className="flex items-center justify-between mt-8">

@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processMessageCore } from '@/lib/ai/message-processor'
 import { isDuplicateMessage } from '@/lib/whatsapp/shared-dedup'
+import { normalizePhone } from '@/lib/utils'
 
 // Evolution API message format
 interface EvolutionMessage {
@@ -37,7 +38,8 @@ interface EvolutionMessage {
 }
 
 function extractPhoneFromJid(jid: string): string {
-  return jid.split('@')[0]
+  const rawPhone = jid.split('@')[0]
+  return normalizePhone(rawPhone)
 }
 
 function extractMessageText(data: EvolutionMessage['data']): string | null {
@@ -49,9 +51,10 @@ function extractMessageText(data: EvolutionMessage['data']): string | null {
 }
 
 // ─── Webhook Secret Verification ─────────────────────────────
+// FIX L10: If no secret configured, REJECT all (not allow all)
 function verifyWebhookSecret(req: NextRequest): boolean {
   const configuredSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.WHATSAPP_WEBHOOK_SECRET
-  if (!configuredSecret) return true
+  if (!configuredSecret) return false // FIX: deny by default when no secret set
   const incomingSecret = req.headers.get('x-webhook-secret')
   if (!incomingSecret) return false
   const a = Buffer.from(configuredSecret)

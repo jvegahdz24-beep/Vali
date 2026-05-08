@@ -3,7 +3,7 @@
 // Use these in all API routes to require authentication & workspace access
 // ═══════════════════════════════════════════════════════════════
 
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { db } from '@/lib/db'
 import { NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
@@ -85,6 +85,61 @@ export class ApiError extends Error {
 }
 
 /**
+ * Unified workspace access check: auth + membership + RBAC in one call.
+ * Verifies the authenticated user belongs to the workspace AND has the required role.
+ *
+ * Role hierarchy (higher number = more privileges):
+ *   viewer: 0, member: 1, admin: 2, owner: 3
+ *
+ * Usage:
+ *   const session = await requireAuth(request)
+ *   const member = await ensureWorkspaceAccess(session.userId, workspaceId, 'admin')
+ *   // member.role is the user's actual role
+ */
+export async function ensureWorkspaceAccess(
+  userId: string,
+  workspaceId: string,
+  requiredRole?: 'viewer' | 'member' | 'admin' | 'owner'
+) {
+  if (!workspaceId) {
+    throw new ApiError(400, 'workspaceId es requerido')
+  }
+
+  if (!userId) {
+    throw new ApiError(401, 'Usuario no autenticado')
+  }
+
+  const member = await db.workspaceMember.findUnique({
+    where: {
+      userId_workspaceId: { userId, workspaceId },
+    },
+  })
+
+  if (!member) {
+    throw new ApiError(403, 'No tienes acceso a este workspace')
+  }
+
+  if (requiredRole) {
+    const ROLE_LEVELS: Record<string, number> = {
+      viewer: 0,
+      member: 1,
+      admin: 2,
+      owner: 3,
+    }
+    const userLevel = ROLE_LEVELS[member.role] ?? 0
+    const requiredLevel = ROLE_LEVELS[requiredRole] ?? 0
+    if (userLevel < requiredLevel) {
+      throw new ApiError(
+        403,
+        `Rol insuficiente. Se requiere '${requiredRole}' pero tu rol es '${member.role}'.`
+      )
+    }
+  }
+
+  return member
+}
+
+/**
  * Extract client IP from request headers.
  * Works behind proxies (X-Forwarded-For, X-Real-IP).
  */
@@ -114,7 +169,7 @@ export function errorResponse(error: unknown, fallbackMessage = 'Error interno d
   console.error('[API Error]', errMsg, error)
 
   return Response.json(
-    { error: fallbackMessage, code: 'INTERNAL_ERROR', details: errMsg },
+    { error: fallbackMessage, code: 'INTERNAL_ERROR' },
     { status: 500 }
   )
 }

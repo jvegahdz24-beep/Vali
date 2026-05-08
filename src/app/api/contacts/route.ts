@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { enforcePlanLimit } from '@/lib/plan-enforcer'
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,8 +19,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || undefined
     const source = searchParams.get('source') || undefined
-    const sortBy = searchParams.get('sortBy') || 'lastMessageAt'
-    const sortOrder = searchParams.get('sortOrder') || 'desc'
+    const ALLOWED_SORT_COLUMNS = ['lastMessageAt', 'createdAt', 'updatedAt', 'firstName', 'lastName', 'leadScore', 'phone', 'email']
+    const sortBy = ALLOWED_SORT_COLUMNS.includes(searchParams.get('sortBy') || '') ? searchParams.get('sortBy')! : 'lastMessageAt'
+    const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc'
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1)
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 100)
     const leadScoreMin = searchParams.get('leadScoreMin') ? parseInt(searchParams.get('leadScoreMin')!, 10) : undefined
@@ -103,6 +105,16 @@ export async function POST(req: NextRequest) {
         { error: 'Missing required fields: firstName' },
         { status: 400 }
       )
+    }
+
+    // Enforce plan limit
+    try {
+      await enforcePlanLimit(workspaceId, 'contacts')
+    } catch (planErr) {
+      if (planErr && typeof planErr === 'object' && 'statusCode' in planErr && (planErr as any).statusCode === 403) {
+        return Response.json((planErr as any).toJSON(), { status: 403 })
+      }
+      throw planErr
     }
 
     // Check for duplicate phone

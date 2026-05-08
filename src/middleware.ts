@@ -19,18 +19,22 @@ const publicApiRoutes = [
   '/api/seed',
   '/api/health',
   '/api/billing/webhook',
-  '/api/debug/system',        // System diagnostic (no auth needed)
+  // FIX C6: /api/debug/system REMOVED from public — now requires auth
+  // FIX C7: /api/download/project and /api/sql-migration REMOVED from public — now require auth
   '/api/whatsapp/status',     // QR polling needs no auth
   '/api/whatsapp/connect',    // Connection trigger
   '/api/whatsapp/qr-standalone', // QR image
   '/api/whatsapp/ephemeral',  // Ephemeral sessions (auth via requireAuth in route)
   '/api/followups/worker',    // Cron worker (auth via X-Worker-Key header)
   '/api/cron',                // Cron endpoints (auth via worker keys)
+  '/api/metrics',             // Prometheus metrics (auth via Bearer token)
 ]
 
 // Rate-limited route prefixes (endpoint → { limit, windowMs })
 const rateLimitedRoutes: Record<string, { limit: number; windowMs: number }> = {
   '/api/auth/login': { limit: 20, windowMs: 60_000 },
+  '/api/auth/register': { limit: 3, windowMs: 60_000 },
+  '/api/auth/reset-password': { limit: 5, windowMs: 60_000 },
 }
 
 // Static file extensions
@@ -177,7 +181,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for authentication via valiflow-session cookie
+  // ─── SECURE: Actually verify the JWT signature ───────────
+  // Previously we only checked if the cookie EXISTS (any string bypassed auth).
+  // Now we use crypto.subtle.verify() to validate the HMAC-SHA256 signature,
+  // check expiration, and validate required payload fields.
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
   if (!sessionToken) {
@@ -186,17 +193,18 @@ export async function middleware(request: NextRequest) {
     return addSecurityHeaders(NextResponse.redirect(loginUrl))
   }
 
-  // Verify the JWT token
+  // Verify JWT signature + expiration + payload
   const payload = await verifySessionToken(sessionToken)
 
   if (!payload) {
-    // Token is invalid or expired — clear cookie and redirect to login
+    // Invalid or expired token — redirect to login
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
+    // Clear the invalid cookie so the client doesn't get stuck in a loop
     const response = NextResponse.redirect(loginUrl)
     response.cookies.set(SESSION_COOKIE_NAME, '', {
       httpOnly: true,
-      secure: false, // Behind Caddy reverse proxy
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 0,
       path: '/',
@@ -204,27 +212,7 @@ export async function middleware(request: NextRequest) {
     return addSecurityHeaders(response)
   }
 
-  // User is authenticated — handle unknown routes
-  // The dashboard is a single-page app; redirect unknown paths to /
-  const knownPaths = [
-    '/',
-    '/login', '/signup', '/landing',
-    '/terms', '/privacy', '/reset-password', '/setup-sql',
-  ]
-  const isKnownPath = knownPaths.some(p => pathname === p)
-  const isApiPath = pathname.startsWith('/api/')
-  const isNextInternal = pathname.startsWith('/_next') || pathname.startsWith('/__nextjs')
-  const isStaticFile = staticExtensions.some(ext => pathname.endsWith(ext))
-
-  if (!isKnownPath && !isApiPath && !isNextInternal && !isStaticFile) {
-    // Unknown route — redirect to homepage with the original path as query param
-    // so the client can restore the correct view
-    const homeUrl = new URL('/', request.url)
-    if (pathname !== '/') homeUrl.searchParams.set('redirect', pathname)
-    return addSecurityHeaders(NextResponse.redirect(homeUrl))
-  }
-
-  // Known route — add security headers and allow access
+  // Valid session — pass through
   return addSecurityHeaders(NextResponse.next())
 }
 

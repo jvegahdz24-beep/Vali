@@ -17,11 +17,18 @@ interface PersonalityCacheEntry {
 const _personalityCache = new Map<string, PersonalityCacheEntry>()
 const PERSONALITY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 import { RevenueEngine } from '@/lib/ai'
 import { preProcess, postProcess, injectContext } from '@/lib/ai/conversation-middleware'
+import { ensureStateLoaded, persistState } from '@/lib/ai/conversation-state'
 import { autoCreateOrUpdateDeal } from '@/lib/crm/auto-deal'
 import { leadProfiler } from '@/lib/ai/lead-profiler'
+import { normalizePhone } from '@/lib/utils'
+import { eventBus, EVENT_TYPES } from '@/lib/event-bus'
+import { getRelevantMemories, extractMemoriesFromConversation } from '@/lib/memory-engine'
+import { spawnFromEvent } from '@/lib/ephemeral-agents'
+import { computeEngagement } from '@/lib/analytics-advanced'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -102,15 +109,61 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     skipAI = false,
   } = input
 
-  console.log(`[CORE 1] Iniciando procesamiento`)
-  console.log(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
-  console.log(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
+  debug(`[CORE 1] Iniciando procesamiento`)
+  debug(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
+  debug(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
 
-  // ── 1. Find workspace ──
+  // ── EVENT BUS: message.received ──
+  try {
+    await eventBus.emit(EVENT_TYPES.MESSAGE_RECEIVED, {
+      messageId: externalId || `msg_${Date.now()}`,
+      conversationId: forcedConversationId || '',
+      contactId: forcedContactId || undefined,
+      channel,
+      content: text,
+      externalId,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
+  // ── FIX: Normalize phone number BEFORE any DB operation ──
+  // This ensures consistent format regardless of how the phone arrives
+  // (WhatsApp JID, webhook, manual input, CSV import, etc.)
+  const normalizedPhone = normalizePhone(phone)
+  if (normalizedPhone !== phone) {
+    debug(`[Core:1] Phone normalized: "${phone}" → "${normalizedPhone}"`)
+  }
+  const safePhone = normalizedPhone
+
+  // ── 1. Find workspace via phone-to-workspace mapping ──
   let workspace
+  let useOrchestrator = false
   if (forcedWorkspaceId) {
     workspace = await db.workspace.findUnique({ where: { id: forcedWorkspaceId } })
-  } else {
+  } else if (safePhone) {
+    // Look up workspace via PhoneWorkspaceMapping (uses normalized phone)
+    const mapping = await db.phoneWorkspaceMapping.findFirst({
+      where: {
+        phoneNumber: safePhone,
+        channel,
+        isActive: true,
+      },
+      include: { workspace: true },
+    })
+    if (mapping?.workspace) {
+      workspace = mapping.workspace
+      debug(`[Core:1] Workspace resolved via phone mapping: ${workspace.name} (phone=${safePhone})`)
+    }
+  }
+
+  // Fallback: if no mapping found, try first active workspace
+  if (!workspace) {
+    if (safePhone && !forcedWorkspaceId) {
+      console.warn(
+        `[Multi-Tenancy] No phone workspace mapping found for phone=${safePhone} channel=${channel}. ` +
+        `Falling back to first active workspace. ` +
+        `Create a PhoneWorkspaceMapping to route this phone to the correct workspace.`
+      )
+    }
     workspace = await db.workspace.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } })
     // Fallback: if no active workspace, reactivate the first one
     if (!workspace) {
@@ -125,7 +178,19 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   if (!workspace) {
     throw new Error('No workspace found')
   }
-  console.log(`[Core:2] ✅ Workspace: ${workspace.name}`)
+  debug(`[Core:2] ✅ Workspace: ${workspace.name} (id=${workspace.id})`)
+
+  // ── Check workspace settings for useOrchestrator flag ──
+  try {
+    const wsSettings = typeof workspace.settings === 'string'
+      ? JSON.parse(workspace.settings || '{}')
+      : (workspace.settings || {})
+    useOrchestrator = !!wsSettings.useOrchestrator
+  } catch { /* ignore */ }
+
+  // ── EVENT BUS: contact.updated after upsert ──
+  // We emit this after the contact upsert below, tracked with a flag
+  let contactWasUpserted = false
 
   // ── 2. Find or create contact (FIX P0: atomic upsert) ──
   // Uses DB-level unique constraint on (workspaceId, phone) to prevent
@@ -134,10 +199,11 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   let contact
   if (forcedContactId) {
     contact = await db.contact.findUnique({ where: { id: forcedContactId } })
-  } else if (phone) {
+  } else if (safePhone) {
+    contactWasUpserted = true
     contact = await db.contact.upsert({
       where: {
-        contact_workspace_phone_key: { workspaceId: workspace.id, phone },
+        contact_workspace_phone_key: { workspaceId: workspace.id, phone: safePhone },
       },
       update: {
         lastMessageAt: new Date(),
@@ -151,7 +217,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       create: {
         workspaceId: workspace.id,
         firstName: pushName || 'Contacto WhatsApp',
-        phone,
+        phone: safePhone,
         source: channel,
         tags: JSON.stringify(['whatsapp_incoming']),
       },
@@ -162,6 +228,18 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       where: { workspaceId: workspace.id },
       orderBy: { createdAt: 'desc' },
     })
+  }
+
+  // ── EVENT BUS: contact.updated ──
+  if (contactWasUpserted && contact) {
+    try {
+      await eventBus.emit(EVENT_TYPES.CONTACT_UPDATED, {
+        contactId: contact.id,
+        workspaceId: workspace.id,
+        changes: { upsert: { old: null, new: true } },
+        reason: 'message_received',
+      }, 'message_processor').catch(() => { /* non-critical */ })
+    } catch { /* non-critical */ }
   }
 
   // ── 3. Find or create conversation ──
@@ -213,7 +291,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 6. Skip AI for media-only messages ──
   if (skipAI) {
-    console.log(`[Core] skipAI=true, skipping AI pipeline for media message`)
+    debug(`[Core] skipAI=true, skipping AI pipeline for media message`)
     return {
       success: true,
       conversationId: conversation.id,
@@ -225,7 +303,13 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 7. Middleware: pre-process ──
-  console.log(`[Core:5] 🔄 Pre-processing...`)
+  debug(`[Core:5] 🔄 Pre-processing...`)
+  
+  // FIX P0.1: Load conversation state from DB (L2) into L1 cache before processing
+  if (contact?.id) {
+    await ensureStateLoaded(phone, contact.id)
+  }
+  
   const middlewareResult = preProcess({
     phone,
     text,
@@ -247,6 +331,24 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     role: m.senderType === 'contact' ? 'user' : 'assistant',
     content: m.content,
   }))
+
+  // ── MEMORY ENGINE: Get relevant memories before AI call ──
+  let memoryContextBlock = ''
+  if (contact?.id) {
+    try {
+      const relevantMemories = await getRelevantMemories(contact.id, text, 5)
+      if (relevantMemories.length > 0) {
+        const memLines = relevantMemories
+          .sort((a, b) => b.importance - a.importance)
+          .map(m => `[${m.category}] ${m.key}: ${m.value}`)
+          .join('\n')
+        memoryContextBlock = `\n--- MEMORIAS DEL CONTACTO ---\n${memLines}\n--- FIN MEMORIAS ---\n`
+        debug(`[Core:Memory] Injected ${relevantMemories.length} relevant memories`)
+      }
+    } catch (memErr) {
+      console.warn('[Core:Memory] Failed to get relevant memories (non-critical):', memErr instanceof Error ? memErr.message : memErr)
+    }
+  }
 
   // Middleware: inject context block after system prompt
   const enrichedMessages = injectContext(messages, middlewareResult.contextBlock)
@@ -279,7 +381,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
       if (profile) {
         leadProfileContext = leadProfiler.buildProfileContext(profile)
-        console.log(`[Core:DIB] Profile built: archetype=${profile.archetype} temp=${profile.temperature}`)
+        debug(`[Core:DIB] Profile built: archetype=${profile.archetype} temp=${profile.temperature}`)
       }
     } catch (profileErr) {
       console.warn('[Core:DIB] Lead profiling failed (non-critical):', profileErr instanceof Error ? profileErr.message : profileErr)
@@ -287,8 +389,8 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 8. Revenue Engine (AI pipeline) ──
-  console.log(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
-  console.log(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
+  debug(`[CORE 3] Historial length: ${enrichedMessages.length} mensajes`)  
+  debug(`[Core:6] 🤖 RevenueEngine (${enrichedMessages.length} messages)...`)
 
   // Read workspace AI settings — FIX P1: Use personality cache to avoid
   // personality flip during hot-reloads. Cache persists across requests for 5 min.
@@ -309,7 +411,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       aiProvider = cached.provider
       customSystemPrompt = cached.customPrompt
       dynamicContext = cached.dynamicContext
-      console.log(`[AI] Using cached personality: ${personalityName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
+      debug(`[AI] Using cached personality: ${personalityName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
     } else {
       // Cache miss or expired — read from workspace settings
       const wsSettings = typeof workspace.settings === 'string'
@@ -332,15 +434,67 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
         workspaceId: workspace.id,
         timestamp: now,
       })
-      console.log(`[AI] Personality loaded and cached: ${personalityName}`)
+      debug(`[AI] Personality loaded and cached: ${personalityName}`)
     }
   } catch (e) {
     console.warn('[AI] Could not parse workspace settings:', e)
   }
 
+  // ── EVENT BUS: agent.invoked ──
+  try {
+    await eventBus.emit(EVENT_TYPES.AGENT_INVOKED, {
+      agentId: 'revenue_engine',
+      agentType: useOrchestrator ? 'orchestrator' : 'revenue_engine',
+      conversationId: conversation.id,
+      input: text,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
   const engine = new RevenueEngine()
-  const engineResult = await engine.processConversation({
-    messages: enrichedMessages,
+
+  // Inject memory context into the last user message
+  const messagesWithMemory = memoryContextBlock
+    ? enrichedMessages.map((m, i) => {
+      if (i === enrichedMessages.length - 1 && m.role === 'user') {
+        return { ...m, content: m.content + memoryContextBlock }
+      }
+      return m
+    })
+    : enrichedMessages
+
+  let aiReplyText: string | null = null
+  let detectedIntent: string | undefined
+  // Default empty engine result for when orchestrator is used
+  let engineResult: any = { response: null, action: null, agentRouting: { agentType: 'orchestrator', confidence: 0 }, crmUpdates: [] }
+
+  if (useOrchestrator) {
+    // ── ORCHESTRATOR MODE: Dual Agent (ValiAutoFlow + NEXUS) ──
+    try {
+      const { DualAgentOrchestrator } = await import('@/lib/orchestrator')
+      const orchestrator = new DualAgentOrchestrator()
+      const orchResult = await orchestrator.processMessage({
+        message: text,
+        contactId: contact?.id,
+        workspaceId: workspace.id,
+        conversationHistory: enrichedMessages.slice(0, -1),
+        contactName: contact ? `${contact.firstName} ${contact.lastName || ''}`.trim() : undefined,
+        businessName: workspace.name,
+        leadScore: contact?.leadScore,
+        tags: contact ? JSON.parse(contact.tags || '[]') : [],
+      })
+      aiReplyText = orchResult.response
+      detectedIntent = orchResult.intent
+    } catch (orchErr) {
+      // Orchestrator failed — fall back to RevenueEngine
+      console.warn('[Core] Orchestrator failed, falling back to RevenueEngine:', orchErr)
+      useOrchestrator = false
+    }
+  }
+
+  if (!aiReplyText) {
+    // ── REVENUE ENGINE MODE: Standard commercial pipeline ──
+  engineResult = await engine.processConversation({
+    messages: messagesWithMemory,
     contactData: contact
       ? {
           name: `${contact.firstName} ${contact.lastName || ''}`.trim(),
@@ -358,12 +512,11 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     dynamicContext,
     conversationHistory: enrichedMessages.slice(0, -1),
     conversationId: conversation.id,
-    leadProfileContext, // DIB: pass profile context for personalization
+    leadProfileContext,
   })
 
   // ── 9. Extract + post-process AI response ──
-  console.log(`[Core:7] 📤 Extracting response...`)
-  let aiReplyText: string | null = null
+  debug(`[Core:7] 📤 Extracting response...`)
   if (engineResult.response) {
     const rawResponse =
       engineResult.response.rawResponse ||
@@ -375,7 +528,91 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       const postResult = postProcess(rawResponse, middlewareResult.state)
       aiReplyText = postResult.filteredResponse
       if (postResult.wasModified) {
-        console.log(`[Core] Response post-processed (${rawResponse.length} → ${aiReplyText.length} chars)`)
+        debug(`[Core] Response post-processed (${rawResponse.length} → ${aiReplyText.length} chars)`)
+      }
+    }
+  }
+  } // end RevenueEngine fallback block
+
+  // ── EVENT BUS: agent.responded ──
+  try {
+    await eventBus.emit(EVENT_TYPES.AGENT_RESPONDED, {
+      agentId: useOrchestrator ? 'orchestrator' : 'revenue_engine',
+      agentType: useOrchestrator ? (detectedIntent || 'orchestrator') : 'revenue_engine',
+      conversationId: conversation.id,
+      response: aiReplyText || '',
+      latencyMs: Date.now() - start,
+    }, 'message_processor').catch(() => { /* non-critical */ })
+  } catch { /* non-critical */ }
+
+  // ── 9.5 FIX P0.1: Persist conversation state to L2 (AgentMemory) ──
+  if (contact?.id) {
+    await persistState(phone).catch(() => {
+      // Non-fatal: L1 cache still works
+    })
+  }
+
+  // ── TOOL CALLING: Check if AI wants to execute tools (fire-and-forget) ──
+  if (aiReplyText && useOrchestrator && contact?.id) {
+    try {
+      const { chatWithTools } = await import('@/lib/ai/tool-calling')
+      const toolResult = await chatWithTools(
+        text,
+        [{ role: 'user', content: text }, { role: 'assistant', content: aiReplyText }],
+        {
+          workspaceId: workspace.id,
+          contactId: contact.id,
+        }
+      )
+      if (toolResult.toolCalls && toolResult.toolCalls.length > 0) {
+        // Tools were executed — emit event
+        for (const tc of toolResult.toolCalls) {
+          eventBus.emit(EVENT_TYPES.TOOL_CALLED, {
+            toolName: typeof tc === 'string' ? tc : (tc as any).toolName || tc,
+            conversationId: conversation.id,
+            input: text,
+            success: true,
+          }, 'message_processor').catch(() => {})
+        }
+      }
+    } catch (toolErr) {
+      console.warn('[Core:Tool] Tool calling failed (non-critical):', toolErr instanceof Error ? toolErr.message : toolErr)
+    }
+  }
+
+  // ── MEMORY ENGINE: Extract memories from conversation (fire-and-forget) ──
+  if (contact?.id && aiReplyText) {
+    try {
+      await extractMemoriesFromConversation(contact.id, [
+        { role: 'user', content: text },
+        { role: 'assistant', content: aiReplyText },
+      ], contact.id)
+    } catch (memExtractErr) {
+      console.warn('[Core:Memory] Memory extraction failed (non-critical):', memExtractErr instanceof Error ? memExtractErr.message : memExtractErr)
+    }
+  }
+
+  // ── EPHEMERAL AGENTS: Check intent and spawn if needed (fire-and-forget) ──
+  if (contact?.id && engineResult.agentRouting) {
+    const agentType = engineResult.agentRouting.agentType
+    const intentText = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    let spawnEventType: string | null = null
+
+    if (intentText.includes('caro') || intentText.includes('costo') || intentText.includes('no tengo presupuesto') || intentText.includes('muy caro')) {
+      spawnEventType = 'price_objection'
+    } else if (intentText.includes('no puedo pagar') || intentText.includes('no tengo dinero')) {
+      spawnEventType = 'payment_issue'
+    }
+
+    if (spawnEventType) {
+      try {
+        await spawnFromEvent(spawnEventType, workspace.id, contact.id, {
+          message: text,
+          agentType,
+          conversationId: conversation.id,
+        })
+      } catch (agentErr) {
+        console.warn('[Core:Ephemeral] Agent spawn failed (non-critical):', agentErr instanceof Error ? agentErr.message : agentErr)
       }
     }
   }
@@ -403,13 +640,13 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 11. Update contact lead score + tags ──
-  if (contact && engineResult.action) {
-    const existingTags: string[] = JSON.parse(contact.tags || '[]')
-    const newTags = engineResult.crmUpdates
-      ?.filter((u) => u.type === 'tags')
-      .flatMap((u) => u.value)
-      .filter((t) => !existingTags.includes(t as string)) as string[]
+  const existingTags: string[] = contact ? JSON.parse(contact.tags || '[]') : []
+  const newTags = engineResult.crmUpdates
+    ?.filter((u) => u.type === 'tags')
+    .flatMap((u) => u.value)
+    .filter((t) => !existingTags.includes(t as string)) as string[] ?? []
 
+  if (contact && engineResult.action) {
     await db.contact.update({
       where: { id: contact.id },
       data: {
@@ -422,7 +659,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 11b. Auto-create/update deal in pipeline ──
   if (contact) {
-    const currentTags: string[] = JSON.parse(contact.tags || '[]')
+    const currentTags: string[] = [...existingTags, ...newTags]
     await autoCreateOrUpdateDeal({
       workspaceId: workspace.id,
       contactId: contact.id,
@@ -466,6 +703,33 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
 
   // ── 13. Track analytics ──
+
+  // ── EVENT BUS: message.sent ──
+  if (aiReplyText) {
+    try {
+      await eventBus.emit(EVENT_TYPES.MESSAGE_SENT, {
+        messageId: `out_${Date.now()}`,
+        conversationId: conversation.id,
+        contactId: contact?.id || undefined,
+        channel,
+        content: aiReplyText,
+        isAiGenerated: true,
+      }, 'message_processor').catch(() => { /* non-critical */ })
+    } catch { /* non-critical */ }
+  }
+
+  // ── ANALYTICS ADVANCED: Engagement score update (fire-and-forget) ──
+  if (contact?.id) {
+    Promise.allSettled([
+      computeEngagement(contact.id).catch(() => null),
+    ]).then(([engagementResult]) => {
+      if (engagementResult.status === 'fulfilled' && engagementResult.value) {
+        const score = engagementResult.value.score
+        debug(`[Core:Analytics] Engagement score: ${score} (energy: ${engagementResult.value.energyLevel})`)
+      }
+    }).catch(() => { /* non-critical */ })
+  }
+
   try {
     await db.analyticsEvent.create({
       data: {
@@ -484,7 +748,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     console.warn('[Core:13] ⚠️ analyticsEvent.create failed (non-critical):', analyticsErr instanceof Error ? analyticsErr.message : analyticsErr)
   }
 
-  console.log(`[Core:✅] Done in ${Date.now() - start}ms | Reply: ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'}`)
+  debug(`[Core:✅] Done in ${Date.now() - start}ms | Reply: ${aiReplyText ? aiReplyText.length + ' chars' : 'NULL'}`)
 
   return {
     success: true,

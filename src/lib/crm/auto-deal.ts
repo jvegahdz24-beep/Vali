@@ -4,6 +4,7 @@
 // Called from message-processor after CRM updates
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -83,7 +84,7 @@ export async function autoCreateOrUpdateDeal(input: AutoDealInput): Promise<void
     })
 
     if (!pipeline) {
-      console.log('[AutoDeal] No pipeline found, skipping')
+      debug('[AutoDeal] No pipeline found, skipping')
       return
     }
 
@@ -120,7 +121,7 @@ export async function autoCreateOrUpdateDeal(input: AutoDealInput): Promise<void
             } : {}),
           },
         })
-        console.log(`[AutoDeal] Updated: ${existingDeal.title} → ${targetStageName}`)
+        debug(`[AutoDeal] Updated: ${existingDeal.title} → ${targetStageName}`)
       }
     } else {
       const dealTitle = vehicle
@@ -142,7 +143,7 @@ export async function autoCreateOrUpdateDeal(input: AutoDealInput): Promise<void
           expectedCloseDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
         },
       })
-      console.log(`[AutoDeal] Created: ${dealTitle} (${targetStageName}) — $${budget.toLocaleString('es-MX')} MXN`)
+      debug(`[AutoDeal] Created: ${dealTitle} (${targetStageName}) — $${budget.toLocaleString('es-MX')} MXN`)
     }
   } catch (err) {
     console.warn('[AutoDeal] Error (non-critical):', err instanceof Error ? err.message : err)

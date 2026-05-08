@@ -7,14 +7,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const contact = await db.contact.findUnique({
@@ -33,6 +33,8 @@ export async function GET(
       return Response.json({ error: 'Contact not found' }, { status: 404 })
     }
 
+    await requireWorkspace(contact.workspaceId, session.userId)
+
     return Response.json({ contact })
   } catch (error) {
     return errorResponse(error)
@@ -44,7 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
     const { firstName, lastName, phone, email, source, tags, notes, leadScore, status, customFields } = body
@@ -53,6 +55,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Contact not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     // Check duplicate phone if changed
     if (phone && phone !== existing.phone) {
@@ -100,13 +104,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const existing = await db.contact.findUnique({ where: { id } })
     if (!existing) {
       return Response.json({ error: 'Contact not found' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     // Soft delete: set status to archived
     const contact = await db.contact.update({

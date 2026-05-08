@@ -1,0 +1,28 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - name: "Warmup"
+      duration: 10
+      arrivalRate: 1
+    - name: "Moderate"
+      duration: 20
+      arrivalRate: 2
+    - name: "Sustained"
+      duration: 20
+      arrivalRate: 3
+scenarios:
+  - name: "Health check"
+    weight: 3
+    flow:
+      - get:
+          url: "/api/health"
+  - name: "Dashboard stats"
+    weight: 2
+    flow:
+      - get:
+          url: "/api/dashboard/stats"
+  - name: "Login page"
+    weight: 1
+    flow:
+      - get:
+          url: "/login"

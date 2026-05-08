@@ -112,6 +112,8 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
   const userInitials = getInitials(userName)
   const userImage = user?.image
   const workspaceName = user?.workspaceName || 'Mi Negocio'
+  const workspacePlan = user?.workspacePlan || 'free'
+  const showPlanBadge = workspacePlan !== 'free' && !!workspacePlan
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
@@ -233,9 +235,11 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
                   <p className="text-[10px] font-semibold text-zinc-400 truncate">{workspaceName}</p>
                 </div>
               </div>
-              <Badge className="h-4 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/20 shrink-0">
-                Pro
-              </Badge>
+              {showPlanBadge && (
+                <Badge className="h-4 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/20 shrink-0">
+                  {workspacePlan.charAt(0).toUpperCase() + workspacePlan.slice(1)}
+                </Badge>
+              )}
             </div>
           </>
         ) : (
@@ -260,9 +264,11 @@ function SidebarContent({ activeView, onViewChange, onNavClick, collapsed }: {
               </Avatar>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#0a0a0a] animate-pulse-dot" />
             </div>
-            <Badge className="h-4 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/20">
-              Pro
-            </Badge>
+            {showPlanBadge && (
+              <Badge className="h-4 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/20">
+                {workspacePlan.charAt(0).toUpperCase() + workspacePlan.slice(1)}
+              </Badge>
+            )}
           </div>
         )}
       </div>

@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
           ID: d.id,
           Título: d.title,
           Contacto: d.contact ? `${d.contact.firstName} ${d.contact.lastName || ''}` : '',
-          Etapa: d.stage.name,
+          Etapa: d.stage?.name,
           Valor: d.value,
           Moneda: d.currency,
           Estado: d.status,

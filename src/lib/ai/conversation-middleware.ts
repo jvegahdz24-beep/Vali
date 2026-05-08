@@ -4,6 +4,7 @@
 // Arquitectura: INPUT → debounce → extractor → modelo → post-procesador → OUTPUT
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import {
   type ConversationState,
   type ConversationStage,
@@ -80,14 +81,14 @@ export function enqueueMessage(phone: string, text: string, pushName?: string): 
     if (existing) {
       // Agregar al batch existente
       existing.messages.push({ text, pushName })
-      console.log(`[Middleware] Batch +1 para ${phone} (total: ${existing.messages.length})`)
+      debug(`[Middleware] Batch +1 para ${phone} (total: ${existing.messages.length})`)
 
       // Resetear timer (dar más tiempo para que lleguen más mensajes)
       clearTimeout(existing.timer)
       existing.timer = setTimeout(() => {
         const consolidated = consolidateMessages(existing.messages)
         pendingBatches.delete(phone)
-        console.log(`[Middleware] Batch listo para ${phone}: ${existing.messages.length} mensajes → ${consolidated.length} chars`)
+        debug(`[Middleware] Batch listo para ${phone}: ${existing.messages.length} mensajes → ${consolidated.length} chars`)
         resolve(consolidated)
       }, DEBOUNCE_MS)
     } else {
@@ -97,13 +98,13 @@ export function enqueueMessage(phone: string, text: string, pushName?: string): 
         timer: setTimeout(() => {
           const consolidated = consolidateMessages(batch.messages)
           pendingBatches.delete(phone)
-          console.log(`[Middleware] Batch listo para ${phone}: ${batch.messages.length} mensajes → ${consolidated.length} chars`)
+          debug(`[Middleware] Batch listo para ${phone}: ${batch.messages.length} mensajes → ${consolidated.length} chars`)
           resolve(consolidated)
         }, DEBOUNCE_MS),
         resolve,
       }
       pendingBatches.set(phone, batch)
-      console.log(`[Middleware] Nuevo batch para ${phone}, esperando ${DEBOUNCE_MS}ms...`)
+      debug(`[Middleware] Nuevo batch para ${phone}, esperando ${DEBOUNCE_MS}ms...`)
     }
   })
 }
@@ -163,7 +164,7 @@ export function preProcess(input: MiddlewareInput): MiddlewareOutput {
   const hadCorrection = detectarCorreccion(state, input.text)
   if (hadCorrection) {
     // Si el usuario corrige, no retroceder etapa pero permitir sobrescritura de datos
-    console.log(`[Middleware] Corrección detectada para ${input.phone}, permitiendo sobrescritura de datos`)
+    debug(`[Middleware] Corrección detectada para ${input.phone}, permitiendo sobrescritura de datos`)
   }
 
   // 2. Extraer información del texto consolidado
@@ -180,7 +181,7 @@ export function preProcess(input: MiddlewareInput): MiddlewareOutput {
   // 4. Detectar y avanzar etapa
   const detectedStage = detectStage(state, input.text)
   if (detectedStage !== state.etapa) {
-    console.log(`[Middleware] Etapa avanzó: ${state.etapa} → ${detectedStage} para ${input.phone}`)
+    debug(`[Middleware] Etapa avanzó: ${state.etapa} → ${detectedStage} para ${input.phone}`)
     advanceStage(state, detectedStage)
   }
 
@@ -192,7 +193,7 @@ export function preProcess(input: MiddlewareInput): MiddlewareOutput {
     state.turnosSinProgreso++
   }
 
-  console.log(`[Middleware] Pre-procesamiento completo para ${input.phone}:`, {
+  debug(`[Middleware] Pre-procesamiento completo para ${input.phone}:`, {
     etapa: state.etapa,
     datosConfirmados: state.datos_confirmados.length,
     nombre: state.nombre,
@@ -245,13 +246,13 @@ export function postProcess(response: string, state: ConversationState): PostPro
   // 4. Si después de todo el filtrado queda muy corto (< 20 chars),
   // devolver la respuesta original (es mejor que nada)
   if (filtered.trim().length < 20 && original.trim().length > 30) {
-    console.log('[Middleware] Post-proceso filtró demasiado, usando original')
+    debug('[Middleware] Post-proceso filtró demasiado, usando original')
     filtered = original
   }
 
   const wasModified = filtered !== original
   if (wasModified) {
-    console.log(`[Middleware] Respuesta post-procesada (${original.length} → ${filtered.length} chars)`)
+    debug(`[Middleware] Respuesta post-procesada (${original.length} → ${filtered.length} chars)`)
   }
 
   // 5. Registrar la pregunta de la respuesta final para futuro anti-repetición
@@ -301,7 +302,7 @@ function removeContradictions(text: string, state: ConversationState): string {
     const patron = /\b(?:a qué te dedicas|qué tipo de negocio tienes|en qué sector estás)\b/i
     if (patron.test(normalized)) {
       result = result.replace(new RegExp(patron.source, 'gi'), '')
-      console.log(`[Middleware] Contradicción eliminada: preguntaba tipo de negocio pero ya sabemos "${state.tipo_negocio}"`)
+      debug(`[Middleware] Contradicción eliminada: preguntaba tipo de negocio pero ya sabemos "${state.tipo_negocio}"`)
     }
   }
 
@@ -310,7 +311,7 @@ function removeContradictions(text: string, state: ConversationState): string {
     const patron = /\b(?:cuántos mensajes recibes|cuál es tu volumen|cuántos leads tienes)\b/i
     if (patron.test(normalized)) {
       result = result.replace(new RegExp(patron.source, 'gi'), '')
-      console.log(`[Middleware] Contradicción eliminada: preguntaba volumen pero ya sabemos ~${state.leads_semanales}`)
+      debug(`[Middleware] Contradicción eliminada: preguntaba volumen pero ya sabemos ~${state.leads_semanales}`)
     }
   }
 
@@ -319,7 +320,7 @@ function removeContradictions(text: string, state: ConversationState): string {
     const patron = /\b(?:cuál es tu mayor (?:problema|desafío|reto|dolor)|qué se te dificulta más)\b/i
     if (patron.test(normalized)) {
       result = result.replace(new RegExp(patron.source, 'gi'), '')
-      console.log(`[Middleware] Contradicción eliminada: preguntaba dolor pero ya sabemos "${state.dolor?.slice(0, 40)}"`)
+      debug(`[Middleware] Contradicción eliminada: preguntaba dolor pero ya sabemos "${state.dolor?.slice(0, 40)}"`)
     }
   }
 
@@ -373,7 +374,7 @@ export function injectContext(
 export function resetConversation(phone: string): void {
   flushBatch(phone)
   clearState(phone)
-  console.log(`[Middleware] Estado reseteado para ${phone}`)
+  debug(`[Middleware] Estado reseteado para ${phone}`)
 }
 
 /**

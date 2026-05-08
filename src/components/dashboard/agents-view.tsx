@@ -17,7 +17,7 @@ import {
   TrendingUp,
   Activity,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, timeAgoStr } from '@/lib/utils'
 import { AGENT_TYPES } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -153,19 +153,6 @@ function MiniSparkline({ data, maxVal }: { data: number[]; maxVal: number }) {
   )
 }
 
-function formatTimeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Sin actividad'
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = now - then
-
-  if (diff < 60000) return 'Ahora'
-  if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)}m`
-  if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)}h`
-  if (diff < 604800000) return `Hace ${Math.floor(diff / 86400000)}d`
-  return new Date(dateStr).toLocaleDateString('es-MX')
-}
-
 function AgentCard({
   agent,
   metrics,
@@ -234,7 +221,7 @@ function AgentCard({
               <Clock className="h-3 w-3" />
               Última actividad
             </span>
-            <span className="text-muted-foreground">{formatTimeAgo(metrics?.lastActivity ?? null)}</span>
+            <span className="text-muted-foreground">{timeAgoStr(metrics?.lastActivity ?? null)}</span>
           </div>
         </div>
       </CardContent>
@@ -826,7 +813,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
                           <TableCell className="py-3 text-center text-xs font-medium">{m.leadsQualified}</TableCell>
                           <TableCell className="py-3 text-center text-xs font-medium">{m.dealsClosed}</TableCell>
                           <TableCell className="py-3 text-center text-[10px] text-muted-foreground">
-                            {formatTimeAgo(m.lastActivity)}
+                            {timeAgoStr(m.lastActivity)}
                           </TableCell>
                         </TableRow>
                       ))}

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
 import crypto from 'crypto'
 import { randomPick, randomInt, randomDaysBack } from '@/lib/seeded-random'
@@ -159,10 +160,11 @@ function randomEmail(name: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── Production guard ───────────────────────────────────
-    if (process.env.NODE_ENV === 'production' && !process.env.SEED_PIN) {
+    // ─── Production guard: ALWAYS disabled in production ────
+    // Demo seed is permanently disabled. Real leads come from WhatsApp only.
+    if (process.env.NODE_ENV === 'production') {
       return NextResponse.json(
-        { error: 'Seed endpoint is disabled in production' },
+        { error: 'Seed endpoint is permanently disabled in production. Real contacts are created via WhatsApp.', code: 'SEED_DISABLED' },
         { status: 404 }
       )
     }
@@ -173,7 +175,13 @@ export async function POST(req: NextRequest) {
 
     if (isReset) {
       const providedPin = searchParams.get('pin')
-      const expectedPin = process.env.SEED_PIN || 'VALIFLOW_DEMO_2024'
+      const expectedPin = process.env.SEED_PIN
+      if (!expectedPin) {
+        return NextResponse.json(
+          { error: 'SEED_PIN no configurado. No se permite reset sin PIN.', code: 'FORBIDDEN' },
+          { status: 403 }
+        )
+      }
       if (providedPin !== expectedPin) {
         return NextResponse.json(
           { error: 'PIN de seguridad requerido para reset. Contacta al administrador.', code: 'FORBIDDEN' },
@@ -730,8 +738,7 @@ export async function POST(req: NextRequest) {
 // GET endpoint to check seed status
 export async function GET(req: NextRequest) {
   try {
-    // GET status check — always allow (needed by frontend to detect if DB is ready)
-    // Only POST (actual seeding) is guarded in production
+    await requireAuth(req)
 
     const workspaceCount = await db.workspace.count()
     const contactCount = await db.contact.count()
@@ -753,6 +760,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error('[Seed Status Error]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse(error, 'Internal server error')
   }
 }

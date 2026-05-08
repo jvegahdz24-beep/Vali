@@ -3,10 +3,12 @@
 // GET /api/whatsapp/diagnostic — Shows real-time connection state
 // ═══════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireAuth(request)
     const { whatsAppManager } = await import('@/lib/whatsapp/connection')
     const status = whatsAppManager.getStatus()
 
@@ -41,11 +43,7 @@ export async function GET() {
       singletonAlive: true,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: any) {
-    return NextResponse.json({
-      error: error.message,
-      singletonAlive: false,
-      timestamp: new Date().toISOString(),
-    }, { status: 500 })
+  } catch (error) {
+    return errorResponse(error, 'Error al obtener diagnóstico de WhatsApp')
   }
 }

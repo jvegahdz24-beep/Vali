@@ -3,6 +3,7 @@
 // 6 psychological angles + 4 automatic cycles for cold leads
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 import { leadProfiler, type LeadProfileData } from './lead-profiler'
 
@@ -204,11 +205,11 @@ export class ReactivationEngine {
       // Get all reactivable leads
       const profiles = await leadProfiler.getReactivableLeads(workspaceId)
       if (profiles.length === 0) {
-        console.log('[ReactivationEngine] No reactivable leads found')
+        debug('[ReactivationEngine] No reactivable leads found')
         return []
       }
 
-      console.log(`[ReactivationEngine] Found ${profiles.length} reactivable leads`)
+      debug(`[ReactivationEngine] Found ${profiles.length} reactivable leads`)
 
       const now = new Date()
 
@@ -223,7 +224,7 @@ export class ReactivationEngine {
           if (profile.lastReactivateAt) {
             const hoursSinceReactivation = (now.getTime() - new Date(profile.lastReactivateAt).getTime()) / (1000 * 60 * 60)
             if (hoursSinceReactivation < 24) {
-              console.log(`[ReactivationEngine] Skipping ${profile.contactId}: reactivated ${hoursSinceReactivation.toFixed(0)}h ago (< 24h)`)
+              debug(`[ReactivationEngine] Skipping ${profile.contactId}: reactivated ${hoursSinceReactivation.toFixed(0)}h ago (< 24h)`)
               continue
             }
           }
@@ -235,7 +236,7 @@ export class ReactivationEngine {
 
           // After cycle 4, mark as non-reactivable (max 4 cycles)
           if (profile.reactivationCycle >= 4) {
-            console.log(`[ReactivationEngine] Skipping ${profile.contactId}: max cycles reached (4)`)
+            debug(`[ReactivationEngine] Skipping ${profile.contactId}: max cycles reached (4)`)
             await db.leadProfile.update({
               where: { contactId: profile.contactId },
               data: { isReactivable: false },
@@ -286,13 +287,13 @@ export class ReactivationEngine {
             workspaceId,
           })
 
-          console.log(`[ReactivationEngine] Reactivation prepared: ${contact.firstName} | angle: ${angle.name} | cycle: ${cycleConfig.cycle}`)
+          debug(`[ReactivationEngine] Reactivation prepared: ${contact.firstName} | angle: ${angle.name} | cycle: ${cycleConfig.cycle}`)
         } catch (err) {
           console.error(`[ReactivationEngine] Error processing profile ${profile.contactId}:`, err)
         }
       }
 
-      console.log(`[ReactivationEngine] Prepared ${results.length} reactivation messages`)
+      debug(`[ReactivationEngine] Prepared ${results.length} reactivation messages`)
       return results
 
     } catch (error) {

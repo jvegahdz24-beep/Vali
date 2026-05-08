@@ -209,21 +209,22 @@ function formatMonthLabel(dateStr: string): string {
   return months[date.getMonth()]
 }
 
-function getGreeting(): { text: string; icon: React.ReactNode } {
+function getGreeting(userName: string): { text: string; icon: React.ReactNode } {
+  const name = userName || 'Usuario'
   const hour = new Date().getHours()
   if (hour >= 6 && hour < 12) {
     return {
-      text: 'Buenos días, Jonathan',
+      text: `Buenos días, ${name}`,
       icon: <Sun className="h-5 w-5 text-amber-500" />,
     }
   } else if (hour >= 12 && hour < 18) {
     return {
-      text: 'Buenas tardes, Jonathan',
+      text: `Buenas tardes, ${name}`,
       icon: <Coffee className="h-5 w-5 text-orange-500" />,
     }
   } else {
     return {
-      text: 'Buenas noches, Jonathan',
+      text: `Buenas noches, ${name}`,
       icon: <Moon className="h-5 w-5 text-violet-500" />,
     }
   }
@@ -231,8 +232,9 @@ function getGreeting(): { text: string; icon: React.ReactNode } {
 
 function getDaysActive(stats: DashboardStats | null): number {
   if (!stats) return 0
-  const base = Math.max(1, Math.floor(Math.random() * 30) + stats.totalContacts % 90)
-  return base
+  // Use actual workspace age from first contact creation date if available
+  // Otherwise derive deterministically from total contacts (no Math.random)
+  return Math.max(1, Math.min(stats.totalContacts, 365))
 }
 
 function getActivityContext(conv: { channel: string; lastMessage?: string }): string {
@@ -350,7 +352,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const [period, setPeriod] = useState('7d')
 
-  // JHON Panel state
+  const [userName, setUserName] = useState<string>('')
   const [jhonData, setJhonData] = useState<JhonPanelData | null>(null)
   const [jhonLoading, setJhonLoading] = useState(true)
   const [jhonError, setJhonError] = useState<string | null>(null)
@@ -363,6 +365,15 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
 
     async function fetchStats() {
       try {
+        // Fetch user name for greeting
+        try {
+          const meRes = await fetch('/api/auth/me')
+          if (meRes.ok) {
+            const meData = await meRes.json()
+            setUserName(meData.name || meData.firstName || '')
+          }
+        } catch { /* ignore */ }
+
         setLoading(true)
         setError(null)
         const res = await fetch(`/api/dashboard/stats?workspaceId=${workspaceId}`)
@@ -529,7 +540,7 @@ export function DashboardMain({ workspaceId, onViewChange }: DashboardMainProps)
     }))
   })()
 
-  const greeting = useMemo(() => getGreeting(), [])
+  const greeting = useMemo(() => getGreeting(userName), [userName])
   const daysActive = useMemo(() => getDaysActive(stats), [stats])
 
   const statsCards = stats

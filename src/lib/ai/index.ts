@@ -86,3 +86,26 @@ export type {
   ReactivationAngle,
   ReactivationResult,
 } from './reactivation-engine'
+
+// ─── Tool Calling / Function Calling ────────────────────────
+export {
+  chatWithTools,
+  getToolDefinitions,
+  getToolDefinition,
+  getToolNames,
+  executeTool,
+  onToolCallEvent,
+  emitToolCall,
+  TOOL_DEFINITIONS,
+} from './tool-calling'
+
+export type {
+  ToolDefinition,
+  ToolParameter,
+  ToolCall,
+  ToolCallMessage,
+  ToolResultMessage,
+  ToolCallLog,
+  ChatWithToolsOptions,
+  ChatWithToolsResult,
+} from './tool-calling'

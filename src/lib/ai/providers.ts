@@ -3,6 +3,7 @@
 // All providers route through z-ai-web-dev-sdk
 // ═══════════════════════════════════════════════════════════════
 
+import { debug } from '@/lib/logger'
 import ZAI from 'z-ai-web-dev-sdk'
 import crypto from 'crypto'
 import { AI_PROVIDERS } from '@/lib/constants'
@@ -63,7 +64,7 @@ export interface AIProviderInstance {
 // When the z.ai SDK proxy returns 401 (missing X-Token),
 // fall back to calling the GLM API directly with JWT auth.
 
-function generateGLMToken(apiKey: string): string {
+export function generateGLMToken(apiKey: string): string {
   const [id, secret] = apiKey.split('.')
   const header = { alg: 'HS256', sign_type: 'SIGN' }
   const payload = {
@@ -91,7 +92,7 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
 
   for (const model of GLM_DIRECT_MODELS) {
     try {
-      console.log(`[AI 1] Llamando modelo GLM: ${model}...`)
+      debug(`[AI 1] Llamando modelo GLM: ${model}...`)
       const res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -100,6 +101,9 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
           messages: messages.map(m => ({ role: m.role, content: m.content })),
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
+          // FIX: Add penalties to prevent repetitive responses
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
       })
       if (!res.ok) {
@@ -107,14 +111,14 @@ async function callGLMDirect(messages: AIMessage[], options?: AICompletionOption
         continue
       }
       const data = await res.json()
-      console.log(`[AI 2] Response RAW (${model}):`, JSON.stringify(data, null, 2))
+      debug(`[AI 2] Response RAW (${model}):`, JSON.stringify(data, null, 2))
       const content = extractGLMContent(data)
       if (content && content.trim()) {
-        console.log(`[AI] GLM direct ${model} success (${Date.now() - start}ms, ${content.length} chars)`)
+        debug(`[AI] GLM direct ${model} success (${Date.now() - start}ms, ${content.length} chars)`)
         return {
           content,
           model,
-          provider: 'groq' as const,
+          provider: 'glm' as const,
           tokensUsed: data.usage?.total_tokens ?? 0,
           latencyMs: Date.now() - start,
           raw: data,
@@ -142,9 +146,9 @@ export class GLMProvider implements AIProviderInstance {
 
     // PRIMARY: Call GLM API directly
     try {
-      console.log('[AI] GLMProvider → trying GLM direct (primary)...')
+      debug('[AI] GLMProvider → trying GLM direct (primary)...')
       const result = await callGLMDirect(messages, { ...options, maxTokens: targetMaxTokens })
-      console.log(`[AI] GLMProvider → GLM direct success in ${Date.now() - start}ms`)
+      debug(`[AI] GLMProvider → GLM direct success in ${Date.now() - start}ms`)
       return result
     } catch (glmErr) {
       const msg = glmErr instanceof Error ? glmErr.message : String(glmErr)
@@ -163,8 +167,8 @@ export class GLMProvider implements AIProviderInstance {
           temperature: options?.temperature ?? 0.7,
           max_tokens: targetMaxTokens,
           top_p: options?.topP,
-          frequency_penalty: options?.frequencyPenalty,
-          presence_penalty: options?.presencePenalty,
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('SDK timeout')), GLM_SDK_TIMEOUT)
@@ -173,7 +177,7 @@ export class GLMProvider implements AIProviderInstance {
 
       const content = extractGLMContent(completion)
       if (content && content.trim()) {
-        console.log(`[AI] SDK fallback success in ${Date.now() - start}ms`)
+        debug(`[AI] SDK fallback success in ${Date.now() - start}ms`)
         return {
           content,
           model,
@@ -204,9 +208,9 @@ export class GroqProvider implements AIProviderInstance {
 
     // PRIMARY: Call GLM API directly (free models, reliable, no proxy dependency)
     try {
-      console.log('[AI] GroqProvider → trying GLM direct (primary)...')
+      debug('[AI] GroqProvider → trying GLM direct (primary)...')
       const result = await callGLMDirect(messages, { ...options, maxTokens: targetMaxTokens })
-      console.log(`[AI] GroqProvider → GLM direct success in ${Date.now() - start}ms`)
+      debug(`[AI] GroqProvider → GLM direct success in ${Date.now() - start}ms`)
       return result
     } catch (glmErr) {
       const msg = glmErr instanceof Error ? glmErr.message : String(glmErr)
@@ -226,8 +230,8 @@ export class GroqProvider implements AIProviderInstance {
           temperature: options?.temperature ?? 0.7,
           max_tokens: targetMaxTokens,
           top_p: options?.topP,
-          frequency_penalty: options?.frequencyPenalty,
-          presence_penalty: options?.presencePenalty,
+          frequency_penalty: options?.frequencyPenalty ?? 0.5,
+          presence_penalty: options?.presencePenalty ?? 0.3,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('SDK timeout')), GLM_SDK_TIMEOUT)
@@ -236,7 +240,7 @@ export class GroqProvider implements AIProviderInstance {
 
       const content = extractGLMContent(completion)
       if (content && content.trim()) {
-        console.log(`[AI] SDK fallback success in ${Date.now() - start}ms`)
+        debug(`[AI] SDK fallback success in ${Date.now() - start}ms`)
         return {
           content,
           model,
@@ -266,15 +270,21 @@ export class DeepSeekProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty,
-      presence_penalty: options?.presencePenalty,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DeepSeek timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start
@@ -301,13 +311,21 @@ export class GeminiProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start
@@ -334,15 +352,21 @@ export class OpenAIProvider implements AIProviderInstance {
     const zai = await ZAI.create()
     const model = options?.model || this.defaultModel
 
-    const completion = await zai.chat.completions.create({
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      model,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      top_p: options?.topP,
-      frequency_penalty: options?.frequencyPenalty,
-      presence_penalty: options?.presencePenalty,
-    })
+    // FIX H10: Add timeout to prevent indefinite blocking
+    const completion = await Promise.race([
+      zai.chat.completions.create({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 4096,
+        top_p: options?.topP,
+        frequency_penalty: options?.frequencyPenalty ?? 0.5,
+        presence_penalty: options?.presencePenalty ?? 0.3,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('OpenAI timeout (15s)')), 15_000)
+      ),
+    ])
 
     const content = extractGLMContent(completion)
     const latencyMs = Date.now() - start

@@ -12,10 +12,18 @@ import { whatsAppManager } from '@/lib/whatsapp/connection'
 import { ephemeralManager } from '@/lib/whatsapp/ephemeral-client'
 import { reactivationEngine } from '@/lib/ai/reactivation-engine'
 
-const WORKER_KEY = process.env.WORKER_KEY || 'valiflow-worker-2024'
+const WORKER_KEY = process.env.WORKER_KEY || ''
 
+// FIX M9: Timing-safe worker key comparison
 function verifyWorkerKey(request: NextRequest): boolean {
-  return request.headers.get('x-worker-key') === WORKER_KEY
+  const incoming = request.headers.get('x-worker-key')
+  if (!incoming) return false
+  const a = Buffer.from(WORKER_KEY)
+  const b = Buffer.from(incoming)
+  if (a.length !== b.length) return false
+  let result = 0
+  for (let i = 0; i < a.length; i++) { result |= a[i] ^ b[i] }
+  return result === 0
 }
 
 interface WorkerResult {

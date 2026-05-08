@@ -1,0 +1,178 @@
+{
+  "aggregate": {
+    "counters": {
+      "vusers.created_by_name.Dashboard stats": 37,
+      "vusers.created": 110,
+      "http.requests": 110,
+      "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 37,
+      "errors.ECONNREFUSED": 110,
+      "vusers.failed": 110,
+      "vusers.created_by_name.Health check": 54,
+      "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 54,
+      "vusers.created_by_name.Login page": 19,
+      "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 19
+    },
+    "rates": {
+      "http.request_rate": 3
+    },
+    "firstCounterAt": 1777049675475,
+    "lastCounterAt": 1777049724578,
+    "firstMetricAt": 1777049675475,
+    "lastMetricAt": 1777049724578,
+    "period": 1777049720000,
+    "summaries": {},
+    "histograms": {}
+  },
+  "intermediate": [
+    {
+      "counters": {
+        "vusers.created_by_name.Dashboard stats": 1,
+        "vusers.created": 5,
+        "http.requests": 5,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 1,
+        "errors.ECONNREFUSED": 5,
+        "vusers.failed": 5,
+        "vusers.created_by_name.Health check": 2,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 2,
+        "vusers.created_by_name.Login page": 2,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 2
+      },
+      "rates": {
+        "http.request_rate": 1
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049675475,
+      "lastCounterAt": 1777049679477,
+      "firstMetricAt": 1777049675475,
+      "lastMetricAt": 1777049679477,
+      "period": "1777049670000",
+      "summaries": {},
+      "histograms": {}
+    },
+    {
+      "counters": {
+        "vusers.created_by_name.Health check": 8,
+        "vusers.created": 15,
+        "http.requests": 15,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 8,
+        "errors.ECONNREFUSED": 15,
+        "vusers.failed": 15,
+        "vusers.created_by_name.Dashboard stats": 5,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 5,
+        "vusers.created_by_name.Login page": 2,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 2
+      },
+      "rates": {
+        "http.request_rate": 2
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049680474,
+      "lastCounterAt": 1777049689529,
+      "firstMetricAt": 1777049680474,
+      "lastMetricAt": 1777049689529,
+      "period": "1777049680000",
+      "summaries": {},
+      "histograms": {}
+    },
+    {
+      "counters": {
+        "vusers.created_by_name.Health check": 14,
+        "vusers.created": 20,
+        "http.requests": 20,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 14,
+        "errors.ECONNREFUSED": 20,
+        "vusers.failed": 20,
+        "vusers.created_by_name.Dashboard stats": 4,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 4,
+        "vusers.created_by_name.Login page": 2,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 2
+      },
+      "rates": {
+        "http.request_rate": 2
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049690476,
+      "lastCounterAt": 1777049699528,
+      "firstMetricAt": 1777049690476,
+      "lastMetricAt": 1777049699528,
+      "period": "1777049690000",
+      "summaries": {},
+      "histograms": {}
+    },
+    {
+      "counters": {
+        "vusers.created_by_name.Health check": 12,
+        "vusers.created": 25,
+        "http.requests": 25,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 12,
+        "errors.ECONNREFUSED": 25,
+        "vusers.failed": 25,
+        "vusers.created_by_name.Dashboard stats": 10,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 10,
+        "vusers.created_by_name.Login page": 3,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 3
+      },
+      "rates": {
+        "http.request_rate": 3
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049700476,
+      "lastCounterAt": 1777049709578,
+      "firstMetricAt": 1777049700476,
+      "lastMetricAt": 1777049709578,
+      "period": "1777049700000",
+      "summaries": {},
+      "histograms": {}
+    },
+    {
+      "counters": {
+        "vusers.created_by_name.Health check": 12,
+        "vusers.created": 30,
+        "http.requests": 30,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 12,
+        "errors.ECONNREFUSED": 30,
+        "vusers.failed": 30,
+        "vusers.created_by_name.Dashboard stats": 11,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 11,
+        "vusers.created_by_name.Login page": 7,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 7
+      },
+      "rates": {
+        "http.request_rate": 3
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049710477,
+      "lastCounterAt": 1777049719577,
+      "firstMetricAt": 1777049710477,
+      "lastMetricAt": 1777049719577,
+      "period": "1777049710000",
+      "summaries": {},
+      "histograms": {}
+    },
+    {
+      "counters": {
+        "vusers.created_by_name.Health check": 6,
+        "vusers.created": 15,
+        "http.requests": 15,
+        "plugins.metrics-by-endpoint./api/health.errors.ECONNREFUSED": 6,
+        "errors.ECONNREFUSED": 15,
+        "vusers.failed": 15,
+        "vusers.created_by_name.Dashboard stats": 6,
+        "plugins.metrics-by-endpoint./api/dashboard/stats.errors.ECONNREFUSED": 6,
+        "vusers.created_by_name.Login page": 3,
+        "plugins.metrics-by-endpoint./login.errors.ECONNREFUSED": 3
+      },
+      "rates": {
+        "http.request_rate": 3
+      },
+      "http.request_rate": null,
+      "firstCounterAt": 1777049720477,
+      "lastCounterAt": 1777049724578,
+      "firstMetricAt": 1777049720477,
+      "lastMetricAt": 1777049724578,
+      "period": "1777049720000",
+      "summaries": {},
+      "histograms": {}
+    }
+  ]
+}

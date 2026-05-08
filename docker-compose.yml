@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════
+# ValiAutoFlow CRM — Local Development Infrastructure
+# PostgreSQL 16 + Redis 7
+# ═══════════════════════════════════════════════════════════════════
+#
+# USAGE:
+#   docker compose up -d          Start services in background
+#   docker compose down           Stop and remove containers
+#   docker compose logs -f        Stream all logs
+#   docker compose logs -f postgres   Stream only Postgres logs
+#   docker compose down -v        Stop AND delete persisted data volumes
+#
+# DATABASE_URL (add to your .env):
+#   DATABASE_URL=postgresql://valiflow:valiflow_secret_2024@localhost:5432/valiflow_crm
+#   DIRECT_URL=postgresql://valiflow:valiflow_secret_2024@localhost:5432/valiflow_crm
+#
+# REDIS_URL (add to your .env):
+#   REDIS_URL=redis://localhost:6379
+#
+# NOTES:
+#   - Data persists in Docker volumes (postgres_data, redis_data)
+#   - Redis is capped at 256MB with LRU eviction
+#   - Healthchecks ensure services are ready before your app connects
+# ═══════════════════════════════════════════════════════════════════
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: valiflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: valiflow
+      POSTGRES_PASSWORD: valiflow_secret_2024
+      POSTGRES_DB: valiflow_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U valiflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: valiflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

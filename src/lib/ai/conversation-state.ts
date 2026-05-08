@@ -1,8 +1,14 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Conversation State Manager
-// In-memory structured state per conversation (by phone number)
-// Tracks extracted data, prevents repetition, detects stage
+// ValiAutoFlow — Conversation State Manager (PERSISTED v2)
+// FIX P0.1: Now uses dual-layer persistence
+//   L1: In-memory Map for fast reads (hot cache)
+//   L2: AgentMemory (key: conversation_state_v2) for real persistence
+//   Write-through: every update writes to both L1 and L2
+//   Read-miss: loads from DB if not in L1
 // ═══════════════════════════════════════════════════════════════
+
+import { debug } from '@/lib/logger'
+import { db } from '@/lib/db'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -35,9 +41,10 @@ export type ConversationStage =
   | 'cierre'
   | 'desconocido'
 
-// ─── State Store (in-memory, per phone) ────────────────────
+// ─── State Store (L1 in-memory, per phone) ─────────────────
 
 const states = new Map<string, ConversationState>()
+const stateContactMap = new Map<string, string>() // phone -> contactId for L2 writes
 
 // Limpieza automática cada 30 min (conversaciones inactivas > 2h)
 const STATE_TTL_MS = 2 * 60 * 60 * 1000
@@ -47,11 +54,152 @@ setInterval(() => {
   states.forEach((state, phone) => {
     if (now - state.ultimoTurnoAI > STATE_TTL_MS) {
       states.delete(phone)
+      stateContactMap.delete(phone)
     }
   })
 }, 30 * 60 * 1000)
 
-// ─── Get or Create State ───────────────────────────────────
+// ─── L2 Persistence: AgentMemory ──────────────────────────
+
+const MEMORY_KEY = 'conversation_state_v2'
+const MEMORY_SOURCE = 'conversation_state_manager'
+
+/**
+ * Load conversation state from AgentMemory (L2 DB layer).
+ * Returns null if no persisted state exists.
+ */
+async function loadFromDB(contactId: string): Promise<ConversationState | null> {
+  try {
+    const record = await db.agentMemory.findFirst({
+      where: { contactId, key: MEMORY_KEY },
+    })
+    if (!record || !record.value) return null
+
+    const parsed = JSON.parse(record.value)
+    // Reconstruct with defaults for any missing fields
+    return {
+      ...createEmptyState(),
+      ...parsed,
+      // Ensure arrays are properly initialized
+      datos_confirmados: Array.isArray(parsed.datos_confirmados) ? parsed.datos_confirmados : [],
+      preguntasHechas: Array.isArray(parsed.preguntasHechas) ? parsed.preguntasHechas : [],
+      // Restore timestamp to now so it doesn't get immediately evicted
+      ultimoTurnoAI: Date.now(),
+    }
+  } catch (err) {
+    console.warn(`[ConvState] Failed to load from DB for contact ${contactId}:`, err)
+    return null
+  }
+}
+
+/**
+ * Save conversation state to AgentMemory (L2 DB layer).
+ * Non-fatal: L1 cache still works if DB write fails.
+ * Uses the JHON qualifier agent ID (looked up dynamically).
+ */
+async function saveToDB(phone: string, contactId: string): Promise<void> {
+  try {
+    const state = states.get(phone)
+    if (!state) return
+
+    // Look up the qualifier agent ID (JHON) for the FK reference
+    const agentId = await getConversationAgentId()
+    if (!agentId) return
+
+    const serializable = { ...state }
+    // Remove processing lock from persisted data
+    delete (serializable as any).estaProcesando
+
+    await db.agentMemory.upsert({
+      where: {
+        agentId_contactId_key: {
+          agentId,
+          contactId,
+          key: MEMORY_KEY,
+        },
+      },
+      create: {
+        agentId,
+        contactId,
+        key: MEMORY_KEY,
+        value: JSON.stringify(serializable),
+        source: MEMORY_SOURCE,
+        confidence: 1.0,
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h TTL
+      },
+      update: {
+        value: JSON.stringify(serializable),
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // Extend TTL
+        updatedAt: new Date(),
+      },
+    })
+  } catch (err) {
+    console.warn(`[ConvState] Failed to save to DB for contact ${contactId}:`, err)
+  }
+}
+
+/**
+ * Get the qualifier agent ID for conversation state storage.
+ * Cached to avoid repeated DB lookups.
+ */
+let _cachedAgentId: string | null = null
+
+async function getConversationAgentId(): Promise<string | null> {
+  if (_cachedAgentId) return _cachedAgentId
+  try {
+    const agent = await db.agent.findFirst({
+      where: { type: 'qualifier' },
+      select: { id: true },
+    })
+    if (agent) {
+      _cachedAgentId = agent.id
+      return agent.id
+    }
+    // Fallback: use first agent
+    const firstAgent = await db.agent.findFirst({ select: { id: true } })
+    if (firstAgent) {
+      _cachedAgentId = firstAgent.id
+      return firstAgent.id
+    }
+  } catch (err) {
+    console.warn('[ConvState] Failed to lookup agent ID:', err)
+  }
+  return null
+}
+
+/**
+ * Pre-load state from DB into L1 cache. Call this before preProcess().
+ * If L1 cache miss, loads from L2 (AgentMemory) and populates cache.
+ */
+export async function ensureStateLoaded(phone: string, contactId: string): Promise<void> {
+  // Already in L1 cache — skip DB read
+  if (states.has(phone)) return
+
+  // Store contactId mapping for future saves
+  stateContactMap.set(phone, contactId)
+
+  // Load from L2
+  const dbState = await loadFromDB(contactId)
+  if (dbState) {
+    states.set(phone, dbState)
+    debug(`[ConvState] L2 cache hit for ${phone} — etapa: ${dbState.etapa}, nombre: ${dbState.nombre || 'N/A'}`)
+  } else {
+    // Create empty state in L1 only
+    states.set(phone, createEmptyState())
+  }
+}
+
+/**
+ * Persist current state to L2. Call this after postProcess().
+ * Best-effort: won't throw if DB is unavailable.
+ */
+export async function persistState(phone: string): Promise<void> {
+  const contactId = stateContactMap.get(phone)
+  if (!contactId) return
+  await saveToDB(phone, contactId)
+}
+
+// ─── Get or Create State (L1 only — synchronous) ──────────
 
 export function getState(phone: string): ConversationState {
   let state = states.get(phone)
@@ -405,7 +553,7 @@ export function filterRepetitions(response: string, state: ConversationState): s
         if (sentenceNorm.includes(preguntaNorm) || 
             preguntaNorm.includes(sentenceNorm.trim()) ||
             similarity(sentenceNorm, preguntaNorm) > 0.7) {
-          console.log(`[Middleware] Anti-repetición: eliminada pregunta sobre "${campo}"`)
+          debug(`[Middleware] Anti-repetición: eliminada pregunta sobre "${campo}"`)
           continue
         }
         filteredSentences.push(sentence)
@@ -546,7 +694,7 @@ export function detectarCorreccion(state: ConversationState, text: string): bool
 
   for (const pattern of correccionPatterns) {
     if (pattern.test(text)) {
-      console.log(`[Middleware] Corrección detectada en: "${text.slice(0, 60)}"`)
+      debug(`[Middleware] Corrección detectada en: "${text.slice(0, 60)}"`)
       return true
     }
   }

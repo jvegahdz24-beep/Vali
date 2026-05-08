@@ -8,6 +8,12 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: [],
+    env: {
+      NEXTAUTH_SECRET: 'test-secret-for-vitest',
+      NEXTAUTH_URL: 'http://localhost:3000',
+      DATABASE_URL: 'file:./db/test.db',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

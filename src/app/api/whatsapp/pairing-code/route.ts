@@ -4,9 +4,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
+    await requireAuth(req)
     const body = await req.json()
     const phoneNumber = body?.phone
 

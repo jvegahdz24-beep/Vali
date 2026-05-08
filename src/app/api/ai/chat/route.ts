@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit
     const ip = getClientIp(req)
-    const rl = rateLimit(`${ip}:ai:chat`, RATE_LIMITS.aiChat.limit, RATE_LIMITS.aiChat.windowMs)
+    const rl = await rateLimit(`${ip}:ai:chat`, RATE_LIMITS.aiChat.limit, RATE_LIMITS.aiChat.windowMs)
     if (!rl.success) {
       return Response.json({ error: 'Demasiados intentos.', code: 'RATE_LIMITED' }, { status: 429 })
     }

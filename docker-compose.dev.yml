@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════════════════
+# ValiAutoFlow CRM — Development Docker Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ═══════════════════════════════════════════════════════
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: valiflow
+      POSTGRES_PASSWORD: valiflow_dev_2026
+      POSTGRES_DB: valiautoflow_dev
+
+  redis:
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --appendonly no
+    ports:
+      - "6379:6379"
+
+  meilisearch:
+    environment:
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+
+  # App service override for development — NOT built from Dockerfile
+  # Instead, mounts local source for hot reload
+  app:
+    build:
+      target: deps
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://valiflow:valiflow_dev_2026@postgres:5432/valiautoflow_dev?connection_limit=5
+      - DIRECT_URL=postgresql://valiflow:valiflow_dev_2026@postgres:5432/valiautoflow_dev
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PREFIX=dev:
+      - NEXTAUTH_SECRET=dev-secret-do-not-use-in-prod-32chars!!
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - DEBUG=true
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=pretty
+      - PRISMA_LOG=true
+      - MEILI_SEARCH_URL=http://meilisearch:7700
+      - MEILI_MASTER_KEY=valiflow_search_2026_master_key
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"

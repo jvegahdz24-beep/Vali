@@ -7,14 +7,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const deal = await db.deal.findUnique({
@@ -34,6 +34,8 @@ export async function GET(
       return Response.json({ error: 'Deal no encontrado' }, { status: 404 })
     }
 
+    await requireWorkspace(deal.workspaceId, session.userId)
+
     return Response.json({ deal })
   } catch (error) {
     return errorResponse(error)
@@ -45,7 +47,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
     const body = await req.json()
 
@@ -53,6 +55,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Deal no encontrado' }, { status: 404 })
     }
+
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     const { stageId, title, value, currency, description, status, contactId, assignedTo, lostReason, expectedCloseDate, order } = body
 
@@ -103,7 +107,7 @@ export async function PUT(
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage.name,
+            stage: deal.stage?.name,
           }),
         },
       })
@@ -120,7 +124,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const { id } = await params
 
     const deal = await db.deal.findUnique({ where: { id } })
@@ -128,6 +132,8 @@ export async function DELETE(
     if (!deal) {
       return Response.json({ error: 'Deal no encontrado' }, { status: 404 })
     }
+
+    await requireWorkspace(deal.workspaceId, session.userId)
 
     await db.deal.delete({ where: { id } })
 

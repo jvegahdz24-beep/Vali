@@ -3,10 +3,12 @@
 // GET /api/whatsapp/logs — Returns recent connection logs
 // ═══════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireAuth(request)
     const { whatsAppManager } = await import('@/lib/whatsapp/connection')
     // Access logs/status through getStatus which is always available
     const status = whatsAppManager.getStatus()
@@ -24,12 +26,7 @@ export async function GET() {
       status,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: any) {
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-      logs: [],
-      timestamp: new Date().toISOString(),
-    }, { status: 500 })
+  } catch (error) {
+    return errorResponse(error, 'Error al obtener logs de WhatsApp')
   }
 }

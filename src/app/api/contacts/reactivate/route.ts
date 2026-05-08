@@ -8,11 +8,11 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { whatsAppManager } from '@/lib/whatsapp/connection'
 import { chatWithAI } from '@/lib/ai/providers'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
     const body = await req.json()
     const { contactId, conversationId, customMessage } = body
 
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     if (!contact || !contact.phone) {
       return Response.json({ error: 'Contact not found or no phone' }, { status: 404 })
     }
+
+    await requireWorkspace(contact.workspaceId, session.userId)
 
     const conversation = contact.conversations[0]
     const messageHistory = conversation?.messages || []
