@@ -85,6 +85,10 @@ La rama debe desplegarse primero como Preview. Después de validar login, aislam
 
 ## Estado de entrega
 
-El código queda listo para subir a GitHub y abrir un Pull Request de la rama `audit/functional-connectivity-fixes-2026-08-17` contra `audit/import-valiautoflow-2026-08-17`. El despliegue productivo queda condicionado a resolver la compatibilidad MySQL/PostgreSQL y a confirmar las variables de entorno del proyecto Vercel. La siguiente acción segura es crear el PR y solicitar un Preview Deployment, no promover directamente a producción.
+El código está subido a GitHub en la rama `audit/functional-connectivity-fixes-2026-08-17` y el Pull Request **#4** está abierto contra `audit/import-valiautoflow-2026-08-17`. El despliegue productivo queda condicionado a resolver la compatibilidad MySQL/PostgreSQL y a confirmar las variables de entorno del proyecto Vercel.
+
+Se intentó un Preview aislado. La carga directa fue rechazada por el límite de Vercel de 300 archivos; el repositorio contiene 909 archivos rastreados necesarios para el árbol completo. También se solicitó enlazar un proyecto Vercel separado al repositorio corregido, pero el proyecto devuelto no apareció posteriormente en el inventario del equipo y las consultas de lectura devolvieron 404/403. Por ello no se declara un Preview como exitoso y no se modificó el proyecto productivo existente, que está enlazado a otro repositorio.
+
+El siguiente paso seguro es corregir la visibilidad/permisos de la integración Vercel del equipo o enlazar manualmente el proyecto Preview al repositorio `jvegahdz24-beep/Vali`; después, un nuevo push de la rama debe generar el Preview. No se debe promover a producción hasta validar ese Preview y resolver la compatibilidad MySQL/PostgreSQL.
 
 **Autor:** Manus AI
