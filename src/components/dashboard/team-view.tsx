@@ -68,6 +68,9 @@ interface TeamMember {
   joinedAt: string
   lastActivity?: string | null
   messagesSent?: number
+  wonDeals?: number
+  wonValue?: number
+  commission?: number
   user: {
     id: string
     name: string | null
@@ -123,6 +126,9 @@ export function TeamView({ workspaceId }: TeamViewProps) {
   const [roleChangeMember, setRoleChangeMember] = useState<TeamMember | null>(null)
   const [newRole, setNewRole] = useState('member')
   const [changingRole, setChangingRole] = useState(false)
+  const [commissionRate, setCommissionRate] = useState(0)
+  const [rateInput, setRateInput] = useState('')
+  const [savingRate, setSavingRate] = useState(false)
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -131,6 +137,8 @@ export function TeamView({ workspaceId }: TeamViewProps) {
       const data = await res.json()
       if (data.success) {
         setMembers(data.members || [])
+        setCommissionRate(Number(data.commissionRate) || 0)
+        setRateInput(String(Number(data.commissionRate) || 0))
       }
     } catch {
       toast.error('Error al cargar miembros del equipo')
@@ -138,6 +146,25 @@ export function TeamView({ workspaceId }: TeamViewProps) {
       setLoading(false)
     }
   }, [workspaceId])
+
+  const saveCommissionRate = async () => {
+    const val = Math.max(0, Math.min(100, parseFloat(rateInput) || 0))
+    setSavingRate(true)
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commissionRate: val }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(`Comisión fijada en ${val}%`)
+      await fetchMembers()
+    } catch {
+      toast.error('No se pudo guardar la comisión')
+    } finally {
+      setSavingRate(false)
+    }
+  }
+  const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0)
 
   useEffect(() => {
     fetchMembers()
@@ -148,7 +175,11 @@ export function TeamView({ workspaceId }: TeamViewProps) {
 
     setInviting(true)
     try {
-      const res = await fetch('/api/teams', {
+      // Use the dedicated /api/teams/invite endpoint: it actually sends a
+      // real invitation email (via Resend) with a token-protected accept
+      // link. The /api/teams POST endpoint only adds an existing user
+      // directly without any email — not what we want for the invite UI.
+      const res = await fetch('/api/teams/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId, email: inviteEmail, role: inviteRole }),
@@ -158,7 +189,9 @@ export function TeamView({ workspaceId }: TeamViewProps) {
         toast.error(data.error || 'No se pudo enviar la invitación.')
         return
       }
-      toast.success('Invitación enviada', { description: `Se envió una invitación a ${inviteEmail} como ${roleConfig[inviteRole]?.label || inviteRole}.` })
+      toast.success('Invitación enviada', {
+        description: `Le enviamos un correo a ${inviteEmail} con el enlace para unirse como ${roleConfig[inviteRole]?.label || inviteRole}.`,
+      })
       setInviteEmail('')
       setInviteRole('member')
       setInviteOpen(false)
@@ -323,6 +356,35 @@ export function TeamView({ workspaceId }: TeamViewProps) {
         ))}
       </div>
 
+      {/* Comisiones de vendedores */}
+      <Card className="border-border/60 mb-6">
+        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold flex items-center gap-1.5">💰 Comisiones de vendedores</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Al ganar un trato, al asesor asignado se le acredita este % del valor. Comisión total pagada:{' '}
+              <span className="font-semibold text-emerald-500">{money(members.reduce((s, m) => s + (m.commission || 0), 0))}</span>
+              {' · '}{members.reduce((s, m) => s + (m.wonDeals || 0), 0)} venta(s) ganada(s).
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="text-xs text-muted-foreground">Comisión</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min={0} max={100} step={0.5}
+                value={rateInput}
+                onChange={(e) => setRateInput(e.target.value)}
+                className="h-9 w-20 rounded-lg border border-border bg-background px-2 text-sm text-right"
+              />
+              <span className="text-sm text-muted-foreground">%</span>
+            </div>
+            <Button size="sm" onClick={saveCommissionRate} disabled={savingRate || parseFloat(rateInput) === commissionRate} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {savingRate ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Empty State */}
       {members.length === 0 && (
         <Card className="border-dashed border-2 border-zinc-200 bg-zinc-50/50">
@@ -458,6 +520,14 @@ export function TeamView({ workspaceId }: TeamViewProps) {
                           <MessageSquare className="h-3 w-3" />
                           <span>{member.messagesSent || 0} mensajes enviados</span>
                         </div>
+                        {(member.wonDeals ?? 0) > 0 && (
+                          <>
+                            <span className="text-zinc-300">·</span>
+                            <div className="flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
+                              💰 <span>{member.wonDeals} venta{member.wonDeals === 1 ? '' : 's'} · comisión {money(member.commission || 0)}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 

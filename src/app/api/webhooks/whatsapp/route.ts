@@ -14,7 +14,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processMessageCore } from '@/lib/ai/message-processor'
 import { isDuplicateMessage } from '@/lib/whatsapp/shared-dedup'
-import { normalizePhone } from '@/lib/utils'
 
 // Evolution API message format
 interface EvolutionMessage {
@@ -38,8 +37,7 @@ interface EvolutionMessage {
 }
 
 function extractPhoneFromJid(jid: string): string {
-  const rawPhone = jid.split('@')[0]
-  return normalizePhone(rawPhone)
+  return jid.split('@')[0]
 }
 
 function extractMessageText(data: EvolutionMessage['data']): string | null {
@@ -51,10 +49,9 @@ function extractMessageText(data: EvolutionMessage['data']): string | null {
 }
 
 // ─── Webhook Secret Verification ─────────────────────────────
-// FIX L10: If no secret configured, REJECT all (not allow all)
 function verifyWebhookSecret(req: NextRequest): boolean {
   const configuredSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.WHATSAPP_WEBHOOK_SECRET
-  if (!configuredSecret) return false // FIX: deny by default when no secret set
+  if (!configuredSecret) return false // SEC-008: fail-closed when secret is not configured
   const incomingSecret = req.headers.get('x-webhook-secret')
   if (!incomingSecret) return false
   const a = Buffer.from(configuredSecret)
@@ -98,6 +95,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, skipped: 'no_text' })
     }
 
+    // ── Resolve workspace from Evolution API instance name ──
+    // The "instance" field MUST match a workspace slug or ID. We refuse
+    // to fall back to "latest WhatsAppAuth" because that's how a webhook
+    // from tenant A's number could be misrouted to tenant B's workspace.
+    let resolvedWorkspaceId: string | undefined
+    try {
+      const { db } = await import('@/lib/db')
+      const instanceName = body.instance
+      if (instanceName) {
+        const bySlug = await db.workspace.findFirst({
+          where: { slug: instanceName, isActive: true },
+          select: { id: true }
+        })
+        if (bySlug) {
+          resolvedWorkspaceId = bySlug.id
+        } else {
+          const byId = await db.workspace.findUnique({
+            where: { id: instanceName },
+            select: { id: true }
+          })
+          if (byId) resolvedWorkspaceId = byId.id
+        }
+      }
+    } catch (wsErr) {
+      console.warn('[Webhook] Workspace resolution failed:', wsErr)
+    }
+
+    if (!resolvedWorkspaceId) {
+      console.warn('[Webhook] Could not resolve workspace from instance — refusing to process to prevent cross-tenant mixing')
+      return NextResponse.json({ received: true, skipped: 'no_workspace_resolved' })
+    }
+
     // ── FORWARD to processMessageCore (single source of truth) ──
     const result = await processMessageCore({
       text: messageText,
@@ -106,20 +135,12 @@ export async function POST(req: NextRequest) {
       remoteJid: data.key.remoteJid,
       externalId: data.key.id,
       channel: 'whatsapp',
+      workspaceId: resolvedWorkspaceId,
     })
 
-    return NextResponse.json({
-      success: true,
-      message: 'Webhook processed',
-      conversationId: result.conversationId,
-      contactId: result.contactId,
-      aiResponse: result.aiReplyText,
-      analysis: {
-        action: result.engineResult.action,
-        strategy: result.engineResult.strategy,
-        agentRouting: result.engineResult.agentRouting,
-      },
-    })
+    // Webhook providers only need an acknowledgement. Never return AI text,
+    // contact IDs or internal routing metadata to an external caller.
+    return NextResponse.json({ received: true, processed: true })
   } catch (error) {
     console.error('[Webhook Error]', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
@@ -127,5 +148,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'active', service: 'ValiAutoFlow WhatsApp Webhook' })
+  return NextResponse.json({ error: 'Not found' }, { status: 404 })
 }

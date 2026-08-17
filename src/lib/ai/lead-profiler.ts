@@ -117,8 +117,14 @@ function detectDecisionMaker(text: string): string | null {
 
 // ─── Timeline Detection ────────────────────────────────────
 
+// ⚠️ 'now' exige CONTEXTO DE COMPRA, no palabras sueltas: "YA no contestan" o
+// "NECESITO vender más" disparaban "Intención: comprar ya / inmediato" en la
+// bitácora sin que el cliente jamás lo dijera (reclamo real de un prospecto,
+// 2026-07-11). Urgencia inmediata = verbo de compra CERCA de la palabra de
+// tiempo, o frase inequívoca ("lo quiero ya", "hoy mismo", "me urge").
+const NOW_RE = /(comprar|compro|llevar|llevo|llevarme|cerrar|firmar|apartar|contratar|contrato|empezar|arrancar|adquirir)[a-z\s,]{0,30}(ya|hoy|ahorita|de inmediato|inmediato|urgente|esta semana|cuanto antes|lo antes posible)|(ya|hoy|ahorita|urgente|de inmediato|esta semana|cuanto antes|lo antes posible)[a-z\s,]{0,30}(comprar|compro|llevar|llevo|llevarme|cerrar|firmar|apartar|contratar|contrato|empezar|arrancar|adquirir)|lo quiero ya|la quiero ya|los quiero ya|hoy mismo|me urge|es urgente|urge mucho/
+
 const TIMELINE_PATTERNS = [
-  { keywords: ['ya', 'ahora', 'hoy', 'inmediato', 'urgente', 'necesito', 'lo antes posible', 'cuanto antes', 'esta semana'], timeline: 'now' },
   { keywords: ['próximo', 'proximo', 'semana que entra', 'quincena', 'este mes', 'en un par de semanas', 'dentro de poco'], timeline: 'soon' },
   { keywords: ['mas tarde', 'mas adelante', 'futuro', 'cuando pueda', 'en unos meses', 'después', 'despues'], timeline: 'later' },
   { keywords: ['no se', 'no lo sé', 'no lo se', 'ni idea', 'no tengo prisa', 'sin prisa', 'cuando sea'], timeline: 'none' },
@@ -126,6 +132,7 @@ const TIMELINE_PATTERNS = [
 
 function detectTimeline(text: string): string | null {
   const normalized = normalize(text)
+  if (NOW_RE.test(normalized)) return 'now'
   for (const tp of TIMELINE_PATTERNS) {
     for (const kw of tp.keywords) {
       if (normalized.includes(normalize(kw))) {
@@ -244,7 +251,11 @@ function detectUrgencyLevel(text: string): string {
   const normalized = normalize(text)
   let score = 0
 
-  const highKeywords = ['ya', 'ahora', 'hoy', 'urgente', 'inmediato', 'necesito', 'lo antes posible', 'semana que entra', 'mañana']
+  // Igual que el timeline: "ya"/"necesito"/"hoy" sueltos NO son urgencia de
+  // compra ("ya no contestan", "necesito vender más"). Urgencia real = frase
+  // inequívoca o compra+tiempo juntos (NOW_RE).
+  if (NOW_RE.test(normalized)) score += 3
+  const highKeywords = ['urgente', 'me urge', 'lo antes posible', 'hoy mismo', 'cuanto antes']
   for (const kw of highKeywords) {
     if (normalized.includes(normalize(kw))) score++
   }

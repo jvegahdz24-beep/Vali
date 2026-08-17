@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, errorResponse, getPlanLimits, ApiError } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,6 +14,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
     await requireWorkspace(workspaceId!, session.userId)
+
+    // Enforce full analytics feature gate (Pro+)
+    const { limits, planName } = await getPlanLimits(workspaceId!)
+    if (!limits.fullAnalyticsEnabled) {
+      throw new ApiError(
+        403,
+        `Analytics completos están disponibles en el plan Pro o Enterprise. Tu plan actual es ${planName}.`,
+        'FEATURE_NOT_AVAILABLE'
+      )
+    }
 
     const now = new Date()
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)

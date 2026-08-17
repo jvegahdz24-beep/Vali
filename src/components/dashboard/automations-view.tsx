@@ -43,11 +43,26 @@ import {
   Cake,
   FileText,
   Send,
+  Search,
+  Filter,
+  Upload,
+  TrendingUp,
+  Sparkles,
+  Plug,
+  GitBranch,
+  ArrowDown,
+  PieChart as PieChartIcon,
+  Tag,
+  Users,
+  Calculator,
+  UserPlus,
+  Briefcase,
   type LucideIcon,
 } from 'lucide-react'
+import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { toast } from 'sonner'
 import { cn, timeAgo } from '@/lib/utils'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -232,6 +247,31 @@ function FlowPreview({ automation }: { automation: Automation }) {
   )
 }
 
+// ── Helpers ──
+function actionLabel(action: { type: string; description?: string }): string {
+  return action?.description || action?.type || 'Acción'
+}
+
+// Icono + color por tipo de acción (para la columna ACCIONES y el flujo)
+const actionMeta: Record<string, { icon: LucideIcon; cls: string }> = {
+  send_message: { icon: Send, cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400' },
+  send_campaign: { icon: Megaphone, cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400' },
+  ai_respond: { icon: Sparkles, cls: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400' },
+  ai_classify: { icon: Bot, cls: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400' },
+  tag_contact: { icon: Tag, cls: 'bg-violet-500/15 text-violet-600 dark:text-violet-400' },
+  update_lead_score: { icon: TrendingUp, cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+  calculate_score: { icon: Calculator, cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+  notify_team: { icon: Bell, cls: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' },
+  notify: { icon: Bell, cls: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' },
+  assign_agent: { icon: UserPlus, cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  detect_duplicate: { icon: Search, cls: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400' },
+  merge_contacts: { icon: Users, cls: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400' },
+  create_deal: { icon: Briefcase, cls: 'bg-green-500/15 text-green-600 dark:text-green-400' },
+}
+function actionIconFor(type: string): { icon: LucideIcon; cls: string } {
+  return actionMeta[type] || { icon: Zap, cls: 'bg-muted text-muted-foreground' }
+}
+
 // ── Main Component ──
 
 export function AutomationsView({ workspaceId }: AutomationsViewProps) {
@@ -263,6 +303,19 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   const [newTriggerType, setNewTriggerType] = useState('message_received')
   const [newTriggerCondition, setNewTriggerCondition] = useState('')
   const [creating, setCreating] = useState(false)
+
+  // ── Vista tipo mockup: KPIs, tabs, filtros, tabla + panel de flujo ──
+  interface AutoStats { total: number; active: number; paused: number; totalRuns: number; runsMonth: number; logged: number; successRate: number; byStatus: { success: number; failed: number; skipped: number; partial: number }; lastRunAt: string | null }
+  const [stats, setStats] = useState<AutoStats | null>(null)
+  const [activeTab, setActiveTab] = useState<'todas' | 'activas' | 'pausadas' | 'programadas' | 'borradores' | 'inactivas'>('todas')
+  const [search, setSearch] = useState('')
+  const [triggerFilter, setTriggerFilter] = useState('all')
+  const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!workspaceId) return
+    fetch(`/api/automations/stats?workspaceId=${workspaceId}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setStats(d) }).catch(() => {})
+  }, [workspaceId, automations])
 
   const fetchAutomations = useCallback(async () => {
     if (!workspaceId) return
@@ -569,14 +622,23 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h3 className="text-lg font-semibold">Automatizaciones</h3>
+          <h3 className="text-xl font-bold tracking-tight">Automatizaciones</h3>
           <p className="text-sm text-muted-foreground">
-            {activeCount} de {automations.length} activas
+            Orquesta flujos de trabajo con IA · {activeCount} de {automations.length} activas ejecutándose 24/7
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setShowTemplates(true)}
+          >
+            <Upload className="h-4 w-4" />
+            Importar automatización
+          </Button>
           <Dialog open={showNewAutomation} onOpenChange={setShowNewAutomation}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -628,81 +690,100 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
               </div>
             </DialogContent>
           </Dialog>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            <Activity className="h-4 w-4" />
-            Historial
-            {showHistory ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => setShowTemplates(!showTemplates)}
-          >
-            <LayoutTemplate className="h-4 w-4" />
-            Plantillas
-            {showTemplates ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </Button>
         </div>
       </div>
 
-      {/* Stats Header */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <Card className="border-border/40 bg-gradient-to-br from-emerald-50/50 to-transparent">
-          <CardContent className="p-3.5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-100">
-                <Zap className="h-4 w-4 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium">Activas</p>
-                <p className="text-lg font-bold text-emerald-700">{activeCount}</p>
-              </div>
+      {/* KPIs — 6 tarjetas icon-left con datos reales */}
+      {(() => {
+        const kpis = [
+          { label: 'Automatizaciones activas', value: String(stats?.active ?? activeCount), sub: `de ${stats?.total ?? automations.length} totales`, icon: Zap, from: 'from-emerald-500', to: 'to-emerald-700' },
+          { label: 'Ejecuciones totales', value: (stats?.totalRuns ?? totalExecutions).toLocaleString('es-MX'), sub: 'acumuladas históricas', icon: Play, from: 'from-blue-500', to: 'to-blue-700' },
+          { label: 'Ejecuciones este mes', value: (stats?.runsMonth ?? 0).toLocaleString('es-MX'), sub: 'registradas en logs', icon: Activity, from: 'from-violet-500', to: 'to-violet-700' },
+          { label: 'Tasa de éxito', value: `${stats?.successRate ?? 100}%`, sub: `${stats?.byStatus?.success ?? 0} de ${stats?.logged ?? 0} ok`, icon: TrendingUp, from: 'from-teal-500', to: 'to-teal-700' },
+          { label: 'Ejecuciones fallidas', value: String(stats?.byStatus?.failed ?? 0), sub: (stats?.byStatus?.failed ?? 0) === 0 ? 'sin errores' : 'requieren revisión', icon: AlertTriangle, from: 'from-rose-500', to: 'to-rose-700' },
+          { label: 'Última ejecución', value: stats?.lastRunAt ? timeAgo(new Date(stats.lastRunAt)) : (lastRunTime ? timeAgo(new Date(lastRunTime)) : 'Nunca'), sub: 'evento más reciente', icon: Timer, from: 'from-amber-500', to: 'to-amber-700' },
+        ]
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+            {kpis.map((k) => {
+              const Icon = k.icon
+              return (
+                <Card key={k.label} className="border-border/50 overflow-hidden">
+                  <CardContent className="p-3.5">
+                    <div className="flex items-start gap-3">
+                      <div className={cn('h-11 w-11 rounded-2xl bg-gradient-to-br shadow-lg flex items-center justify-center shrink-0', k.from, k.to)}>
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-muted-foreground font-medium leading-tight truncate">{k.label}</p>
+                        <p className="text-xl font-bold leading-tight mt-0.5 truncate">{k.value}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{k.sub}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      })()}
+
+      {/* Tabs + filtros */}
+      {(() => {
+        const tabs: { key: typeof activeTab; label: string; count: number }[] = [
+          { key: 'todas', label: 'Todas', count: automations.length },
+          { key: 'activas', label: 'Activas', count: automations.filter((a) => a.isActive).length },
+          { key: 'pausadas', label: 'Pausadas', count: automations.filter((a) => !a.isActive).length },
+          { key: 'programadas', label: 'Programadas', count: automations.filter((a) => a.triggerType === 'schedule').length },
+          { key: 'borradores', label: 'Sin ejecutar', count: automations.filter((a) => !(a.runCount && a.runCount > 0)).length },
+          { key: 'inactivas', label: 'Inactivas', count: automations.filter((a) => !a.isActive).length },
+        ]
+        return (
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center gap-1 overflow-x-auto custom-scroll pb-1">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors',
+                    activeTab === t.key ? 'bg-foreground text-background' : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {t.label}
+                  <span className={cn('text-[10px] rounded-full px-1.5 py-px', activeTab === t.key ? 'bg-background/20' : 'bg-background/60')}>{t.count}</span>
+                </button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40 bg-gradient-to-br from-blue-50/50 to-transparent">
-          <CardContent className="p-3.5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-100">
-                <Play className="h-4 w-4 text-blue-600" />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar automatización por nombre o descripción…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium">Total Ejecuciones</p>
-                <p className="text-lg font-bold text-blue-700">{totalExecutions}</p>
-              </div>
+              <Select value={triggerFilter} onValueChange={setTriggerFilter}>
+                <SelectTrigger className="h-9 w-full sm:w-52 gap-1.5">
+                  <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue placeholder="Disparador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los disparadores</SelectItem>
+                  <SelectItem value="message_received">Mensaje recibido</SelectItem>
+                  <SelectItem value="schedule">Programado</SelectItem>
+                  <SelectItem value="event">Evento</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                  <SelectItem value="deal_stage_change">Cambio de etapa</SelectItem>
+                  <SelectItem value="inactivity">Inactividad</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40 bg-gradient-to-br from-violet-50/50 to-transparent">
-          <CardContent className="p-3.5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-violet-100">
-                <Timer className="h-4 w-4 text-violet-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium">Última Ejecución</p>
-                <p className="text-sm font-bold text-violet-700 mt-0.5">
-                  {lastRunTime ? timeAgo(new Date(lastRunTime)) : 'Nunca'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        )
+      })()}
 
       {/* Execution History */}
       {showHistory && (
@@ -804,144 +885,295 @@ export function AutomationsView({ workspaceId }: AutomationsViewProps) {
         </div>
       )}
 
-      {/* Automations List */}
-      <div className="space-y-3">
-        {automations.length === 0 ? (
-          <Card className="border-border/60">
-            <CardContent className="p-8 text-center">
-              <Zap className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No hay automatizaciones</p>
-              <p className="text-xs text-muted-foreground mt-1">Crea una automatización para automatizar tus flujos de trabajo</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Select All */}
-            <div className="flex items-center gap-2 px-1">
-              <Checkbox
-                checked={selectedIds.size === automations.length && automations.length > 0}
-                onCheckedChange={selectAll}
-              />
-              <span className="text-[11px] text-muted-foreground">Seleccionar todas</span>
+      {/* Grid principal: tabla + panel lateral */}
+      {(() => {
+        const q = search.trim().toLowerCase()
+        const filtered = automations.filter((a) => {
+          if (activeTab === 'activas' && !a.isActive) return false
+          if ((activeTab === 'pausadas' || activeTab === 'inactivas') && a.isActive) return false
+          if (activeTab === 'programadas' && a.triggerType !== 'schedule') return false
+          if (activeTab === 'borradores' && a.runCount && a.runCount > 0) return false
+          if (triggerFilter !== 'all' && a.triggerType !== triggerFilter) return false
+          if (q && !(`${a.name} ${a.description || ''}`.toLowerCase().includes(q))) return false
+          return true
+        })
+        const selectedAuto = automations.find((a) => a.id === selectedAutoId) || filtered[0] || automations[0] || null
+        const donutData = stats ? [
+          { name: 'Exitosas', value: stats.byStatus.success, color: '#10b981' },
+          { name: 'Fallidas', value: stats.byStatus.failed, color: '#f43f5e' },
+          { name: 'Omitidas', value: stats.byStatus.skipped, color: '#a1a1aa' },
+          { name: 'Parciales', value: stats.byStatus.partial, color: '#f59e0b' },
+        ].filter((d) => d.value > 0) : []
+
+        return (
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
+            {/* ── Columna principal: tabla ── */}
+            <div className="xl:col-span-3 space-y-3">
+              {automations.length === 0 ? (
+                <Card className="border-border/60">
+                  <CardContent className="p-10 text-center">
+                    <Zap className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">No hay automatizaciones</p>
+                    <p className="text-xs text-muted-foreground mt-1">Crea una automatización para empezar a automatizar tus flujos</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="border-border/60 overflow-hidden">
+                  <div className="overflow-x-auto custom-scroll">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border/60 bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left font-medium px-3 py-2.5 w-8">
+                            <Checkbox
+                              checked={selectedIds.size === automations.length && automations.length > 0}
+                              onCheckedChange={selectAll}
+                            />
+                          </th>
+                          <th className="text-left font-medium px-2 py-2.5 min-w-[220px]">Nombre / Descripción</th>
+                          <th className="text-left font-medium px-2 py-2.5">Disparador</th>
+                          <th className="text-left font-medium px-2 py-2.5 min-w-[180px]">Acciones</th>
+                          <th className="text-right font-medium px-2 py-2.5">Ejecuciones</th>
+                          <th className="text-center font-medium px-2 py-2.5">Éxito</th>
+                          <th className="text-right font-medium px-3 py-2.5">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                              No hay automatizaciones que coincidan con el filtro
+                            </td>
+                          </tr>
+                        ) : filtered.map((automation) => {
+                          const TIcon = triggerIcons[automation.triggerType]
+                          const isSel = selectedAuto?.id === automation.id
+                          return (
+                            <tr
+                              key={automation.id}
+                              onClick={() => setSelectedAutoId(automation.id)}
+                              className={cn(
+                                'border-b border-border/40 last:border-0 cursor-pointer transition-colors hover:bg-muted/40',
+                                isSel && 'bg-emerald-500/5',
+                                selectedIds.has(automation.id) && 'bg-emerald-500/10'
+                              )}
+                            >
+                              <td className="px-3 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                                <Checkbox
+                                  checked={selectedIds.has(automation.id)}
+                                  onCheckedChange={() => toggleSelect(automation.id)}
+                                />
+                              </td>
+                              <td className="px-2 py-3 align-top">
+                                <div className="flex items-start gap-2.5">
+                                  <div className={cn('flex items-center justify-center w-9 h-9 rounded-xl shrink-0', triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500')}>
+                                    {TIcon || <Zap className="h-4 w-4" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-foreground truncate max-w-[220px]">{automation.name}</p>
+                                    <p className="text-xs text-muted-foreground line-clamp-1 max-w-[240px]">{automation.description || 'Sin descripción'}</p>
+                                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Creada {timeAgo(new Date(automation.createdAt))}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-2 py-3 align-top">
+                                <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md', triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500')}>
+                                  {triggerLabels[automation.triggerType] || automation.triggerType}
+                                </span>
+                              </td>
+                              <td className="px-2 py-3 align-top">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {(automation.actions || []).slice(0, 4).map((act, i) => {
+                                    const { icon: AIcon, cls } = actionIconFor(act.type)
+                                    return (
+                                      <div key={i} className="flex items-center gap-1">
+                                        {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
+                                        <span title={actionLabel(act)} className={cn('inline-flex items-center justify-center h-7 w-7 rounded-lg shrink-0', cls)}>
+                                          <AIcon className="h-3.5 w-3.5" />
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                  {(automation.actions?.length || 0) > 4 && (
+                                    <span className="text-[10px] text-muted-foreground ml-0.5">+{(automation.actions!.length - 4)}</span>
+                                  )}
+                                  {(automation.actions?.length || 0) === 0 && (
+                                    <span className="text-[10px] text-muted-foreground">Sin acciones</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-3 align-top text-right">
+                                <span className="font-semibold tabular-nums">{(automation.runCount || 0).toLocaleString('es-MX')}</span>
+                                {automation.lastRunAt && <p className="text-[10px] text-muted-foreground">{timeAgo(new Date(automation.lastRunAt))}</p>}
+                              </td>
+                              <td className="px-2 py-3 align-top text-center">
+                                {automation.runCount && automation.runCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> OK
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Switch
+                                    checked={automation.isActive}
+                                    onCheckedChange={() => toggleAutomation(automation.id, automation.isActive)}
+                                  />
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handleEditAutomation(automation)}>
+                                        <Pencil className="h-3 w-3 mr-1" /> Editar
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleRunNow(automation.id)} disabled={runningId === automation.id}>
+                                        {runningId === automation.id ? (<><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando...</>) : (<><Play className="h-3 w-3 mr-1" />Ejecutar ahora</>)}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteAutomation(automation.id)} disabled={deletingId === automation.id}>
+                                        {deletingId === automation.id ? (<><Loader2 className="h-3 w-3 mr-1 animate-spin" />Eliminando...</>) : (<><Trash2 className="h-3 w-3 mr-1" />Eliminar</>)}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/60 text-[11px] text-muted-foreground">
+                    <span>Mostrando {filtered.length} de {automations.length} automatizaciones</span>
+                    <span>{activeCount} activas · {stats?.totalRuns?.toLocaleString('es-MX') ?? totalExecutions} ejecuciones totales</span>
+                  </div>
+                </Card>
+              )}
             </div>
-            {automations.map((automation) => (
-              <Card key={automation.id} className={cn(
-                "border-border/60 hover:shadow-sm transition-shadow",
-                selectedIds.has(automation.id) && "border-emerald-300 bg-emerald-50/20"
-              )}>
+
+            {/* ── Panel lateral ── */}
+            <div className="xl:col-span-1 space-y-4">
+              {/* Flujo de automatización */}
+              <Card className="border-border/60">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <GitBranch className="h-4 w-4 text-emerald-500" /> Flujo de automatización
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  {selectedAuto ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-foreground truncate">{selectedAuto.name}</p>
+                      {/* Nodo disparador */}
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-2">
+                        <div className={cn('flex items-center justify-center w-7 h-7 rounded-lg shrink-0', triggerColors[selectedAuto.triggerType] || 'bg-zinc-100 text-zinc-500')}>
+                          {triggerIcons[selectedAuto.triggerType] || <Zap className="h-3.5 w-3.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Disparador</p>
+                          <p className="text-[11px] font-medium truncate">{triggerLabels[selectedAuto.triggerType] || selectedAuto.triggerType}</p>
+                        </div>
+                      </div>
+                      {(selectedAuto.actions || []).map((act, i) => (
+                        <div key={i}>
+                          <div className="flex justify-center py-0.5"><ArrowDown className="h-3.5 w-3.5 text-muted-foreground/50" /></div>
+                          <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2">
+                            {(() => { const { icon: AIcon, cls } = actionIconFor(act.type); return (
+                              <div className={cn('flex items-center justify-center w-7 h-7 rounded-lg shrink-0', cls)}><AIcon className="h-3.5 w-3.5" /></div>
+                            ) })()}
+                            <div className="min-w-0">
+                              <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Acción {i + 1}</p>
+                              <p className="text-[11px] font-medium truncate">{actionLabel(act)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {(selectedAuto.actions?.length || 0) === 0 && (
+                        <p className="text-[11px] text-muted-foreground text-center py-2">Esta automatización no tiene acciones configuradas.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Selecciona una automatización para ver su flujo.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Estadísticas de ejecuciones (donut) */}
+              <Card className="border-border/60">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <PieChartIcon className="h-4 w-4 text-violet-500" /> Estadísticas de ejecuciones
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  {donutData.length > 0 ? (
+                    <>
+                      <div className="relative h-40">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={68} paddingAngle={2} stroke="none">
+                              {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-2xl font-bold">{stats?.logged ?? 0}</span>
+                          <span className="text-[10px] text-muted-foreground">registradas</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {donutData.map((d) => (
+                          <div key={d.name} className="flex items-center justify-between text-[11px]">
+                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />{d.name}</span>
+                            <span className="font-semibold tabular-nums">{d.value}</span>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
+                          <span className="text-muted-foreground">Tasa de éxito</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{stats?.successRate ?? 100}%</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">Aún no hay ejecuciones registradas en los logs.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Acciones rápidas */}
+              <Card className="border-border/60">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-500" /> Acciones rápidas</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 h-8 text-xs" onClick={() => setShowNewAutomation(true)}><Plus className="h-3.5 w-3.5" />Crear</Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 h-8 text-xs" onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-3.5 w-3.5" />Plantillas</Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 h-8 text-xs" onClick={() => setShowHistory(true)}><Activity className="h-3.5 w-3.5" />Historial</Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 h-8 text-xs" disabled={!selectedAuto || runningId === selectedAuto?.id} onClick={() => selectedAuto && handleRunNow(selectedAuto.id)}>
+                    {selectedAuto && runningId === selectedAuto.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}Ejecutar
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Ayuda */}
+              <Card className="border-border/60 bg-gradient-to-br from-emerald-500/5 to-transparent">
                 <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    {/* Checkbox for batch */}
-                    <div className="pt-0.5">
-                      <Checkbox
-                        checked={selectedIds.has(automation.id)}
-                        onCheckedChange={() => toggleSelect(automation.id)}
-                      />
-                    </div>
-
-                    {/* Icon */}
-                    <div className={cn(
-                      'flex items-center justify-center w-10 h-10 rounded-xl shrink-0',
-                      triggerColors[automation.triggerType] || 'bg-zinc-100 text-zinc-500'
-                    )}>
-                      {triggerIcons[automation.triggerType] || <Zap className="h-4 w-4" />}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold text-foreground truncate">{automation.name}</h4>
-                            <span className={cn(
-                              'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
-                              automation.isActive
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-zinc-100 text-zinc-500'
-                            )}>
-                              <span className={cn(
-                                'w-1.5 h-1.5 rounded-full',
-                                automation.isActive ? 'bg-emerald-500' : 'bg-zinc-400'
-                              )} />
-                              {automation.isActive ? 'Activa' : 'Inactiva'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{automation.description || 'Sin descripción'}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Switch
-                            checked={automation.isActive}
-                            onCheckedChange={() => toggleAutomation(automation.id, automation.isActive)}
-                          />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditAutomation(automation)}>
-                                <Pencil className="h-3 w-3 mr-1" />
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleRunNow(automation.id)}
-                                disabled={runningId === automation.id}
-                              >
-                                {runningId === automation.id ? (
-                                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando...</>
-                                ) : (
-                                  <><Play className="h-3 w-3 mr-1" />Ejecutar ahora</>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-red-600"
-                                onClick={() => handleDeleteAutomation(automation.id)}
-                                disabled={deletingId === automation.id}
-                              >
-                                {deletingId === automation.id ? (
-                                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Eliminando...</>
-                                ) : (
-                                  <><Trash2 className="h-3 w-3 mr-1" />Eliminar</>
-                                )}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-
-                      {/* Stats Row */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Zap className="h-3 w-3" />
-                          {triggerLabels[automation.triggerType] || automation.triggerType}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <ArrowRight className="h-3 w-3" />
-                          {automation.actions?.length || 0} acciones
-                        </div>
-                        {automation.runCount !== undefined && automation.runCount > 0 && (
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Play className="h-3 w-3" />
-                            {automation.runCount} ejecuciones
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          Creada: {timeAgo(new Date(automation.createdAt))}
-                        </div>
-                      </div>
-
-                      {/* Visual Flow Preview */}
-                      <FlowPreview automation={automation} />
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0"><Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
+                    <div>
+                      <p className="text-xs font-semibold">¿Necesitas ayuda?</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Las automatizaciones corren en segundo plano 24/7. Usa las plantillas para empezar en segundos o consulta el manual.</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </>
-        )}
-      </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Template Gallery */}
       {showTemplates && (

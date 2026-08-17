@@ -34,11 +34,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://connect.facebook.net",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com",
+      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://cloudflare.com https://*.facebook.com https://*.fbcdn.net https://images.unsplash.com http2.mlstatic.com https://*.mlstatic.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://*.googleapis.com https://accounts.google.com ws: wss:",
+      "connect-src 'self' https://*.googleapis.com https://accounts.google.com https://cloudflareinsights.com https://graph.facebook.com https://*.facebook.com ws: wss:",
+      "frame-src 'self' https://*.facebook.com https://staticxx.facebook.com",
       "media-src 'self' blob:",
       "frame-ancestors 'self'",
       "base-uri 'self'",
@@ -48,26 +49,21 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
-  reactStrictMode: false,
+  reactStrictMode: true,
 
-  // Silence turbopack workspace root warning on Windows
-  turbopack: {
-    root: ".",
-  },
-
-  // Allow z.ai preview origin for dev assets
-  allowedDevOrigins: [
-    "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site",
-    "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.z.ai",
-    "https://preview-f64396be-49e5-41dd-b8e6-7d0cd5adbccf.space.chatglm.site",
-    "https://preview-0d1d9323-0de2-4440-8f24-557fe0206215.space.chatglm.site",
-  ],
+  // Allow z.ai preview origin for dev assets — only in development
+  ...(process.env.NODE_ENV === 'development' ? {
+    allowedDevOrigins: [
+      "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.chatglm.site",
+      "https://preview-chat-22c27b81-178e-4391-a6b6-9e7113a9f3c7.space.z.ai",
+    ],
+  } : {}),
 
   // Required for @whiskeysockets/baileys — jimp/sharp are optional deps
+  // @prisma/client must be external to avoid Turbopack bundling it with the wrong runtime
   serverExternalPackages: [
     "jimp",
     "@whiskeysockets/baileys",
@@ -76,7 +72,10 @@ const nextConfig: NextConfig = {
     "bcryptjs",
     "jose",
     "qrcode",
-    "ioredis",
+    "@prisma/client",
+    ".prisma/client",
+    "ffmpeg-static",
+    "fluent-ffmpeg",
   ],
 
   // Production security headers
@@ -86,24 +85,10 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
-      // Allow WhatsApp webhook endpoints to receive JSON from external sources
-      {
-        source: "/api/webhooks/:path*",
-        headers: [
-          {
-            key: "Access-Control-Allow-Origin",
-            value: "*",
-          },
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET, POST, OPTIONS",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value: "Content-Type, Authorization, X-Webhook-Signature",
-          },
-        ],
-      },
+      // SEC-012: Removed open CORS headers for webhook endpoints.
+      // Webhooks are server-to-server; CORS headers are not needed
+      // and allowing * exposes the endpoint unnecessarily.
+      // If a specific trusted origin is required, add it explicitly.
     ];
   },
 
@@ -116,6 +101,16 @@ const nextConfig: NextConfig = {
         destination: "/",
         permanent: true,
       },
+    ];
+  },
+
+  // Rewrites: las fotos subidas en runtime a /public/uploads NO las sirve el
+  // handler estático de Next (solo conoce lo que existía al build) → daban 404
+  // y las fotos del inventario no aparecían (reporte de Jhon 2026-07-24). Se
+  // sirven por una ruta dinámica que lee del disco. Cubre fotos nuevas Y viejas.
+  async rewrites() {
+    return [
+      { source: "/uploads/:file*", destination: "/api/uploads/media/:file*" },
     ];
   },
 

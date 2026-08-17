@@ -257,7 +257,7 @@ export function ChatDemo({ workspaceId }: ChatDemoProps) {
         {/* Chat Panel */}
         <Card className="lg:col-span-2 flex flex-col overflow-hidden border-border/60">
           {/* Chat Messages */}
-          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          <ScrollArea className="flex-1 min-h-0 p-4" ref={scrollRef}>
             <div className="max-w-2xl mx-auto space-y-4">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -397,7 +397,7 @@ export function ChatDemo({ workspaceId }: ChatDemoProps) {
               Análisis del Revenue Engine
             </CardTitle>
           </CardHeader>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <CardContent className="space-y-3">
               {lastAnalysis ? (
                 <>

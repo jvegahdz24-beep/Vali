@@ -25,6 +25,8 @@ import {
   MessageSquare,
   Bot,
   ShoppingCart,
+  Activity,
+  RefreshCw,
 } from 'lucide-react'
 import { ScoreRing } from '@/components/ui/score-ring'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -212,6 +214,8 @@ export function AdminView({ workspaceId }: AdminViewProps) {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
+      {/* ═══ TORRE DE CONTROL: salud de TODOS los tenants (2026-07-20) ═══ */}
+      <HealthTower />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -414,5 +418,108 @@ export function AdminView({ workspaceId }: AdminViewProps) {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ─── TORRE DE CONTROL: salud de todos los tenants de un vistazo ───
+// (solo superadmin — la API rechaza a cualquier otro rol)
+interface TenantHealth {
+  id: string; name: string; plan: string
+  status: 'ok' | 'warn' | 'down' | 'setup'
+  waConnected: boolean; connectedPhone: string | null
+  iaPaused: boolean; inbound24: number; outbound24: number
+  lastInboundAt: string | null; lastOutboundAt: string | null
+  followupsRezagados: number; botStuck: boolean; billing: string | null
+}
+function HealthTower() {
+  const [rows, setRows] = useState<TenantHealth[] | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const r = await fetch('/api/admin/health')
+      if (!r.ok) { setRows([]); return }
+      const j = await r.json()
+      setRows(j.tenants || [])
+      setUpdatedAt(new Date().toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }))
+    } catch { setRows([]) } finally { if (!silent) setLoading(false) }
+  }, [])
+  useEffect(() => { load(); const iv = setInterval(() => load(true), 60000); return () => clearInterval(iv) }, [load])
+
+  if (rows === null) return null
+  const down = rows.filter(r => r.status === 'down').length
+  const dot = (s: TenantHealth['status']) =>
+    s === 'down' ? 'bg-red-500' : s === 'warn' ? 'bg-amber-500' : s === 'ok' ? 'bg-emerald-500' : 'bg-zinc-400'
+  const ago = (iso: string | null) => {
+    if (!iso) return '—'
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+    return m < 60 ? `hace ${m}m` : m < 1440 ? `hace ${Math.floor(m / 60)}h` : `hace ${Math.floor(m / 1440)}d`
+  }
+  return (
+    <Card className={cn('border-border/60', down > 0 && 'border-red-500/50')}>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Activity className={cn('h-4 w-4', down > 0 ? 'text-red-500' : 'text-emerald-500')} />
+          Torre de control — salud de los clientes
+          {down > 0 && <Badge className="bg-red-500/15 text-red-500 border-0">{down} caído(s)</Badge>}
+        </CardTitle>
+        <button onClick={() => load()} disabled={loading} className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+          <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} /> {updatedAt && `act. ${updatedAt}`}
+        </button>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/60">
+                <TableHead className="text-xs">Cliente</TableHead>
+                <TableHead className="text-xs">WhatsApp</TableHead>
+                <TableHead className="text-xs text-center">Msjs 24h (in/out)</TableHead>
+                <TableHead className="text-xs">Último cliente</TableHead>
+                <TableHead className="text-xs">Última respuesta</TableHead>
+                <TableHead className="text-xs">Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((t) => (
+                <TableRow key={t.id} className={cn('border-border/40', t.status === 'down' && 'bg-red-500/5')}>
+                  <TableCell className="py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', dot(t.status))} />
+                      <div>
+                        <p className="text-xs font-semibold leading-tight">{t.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{t.plan}{t.billing ? ` · pago: ${t.billing}` : ''}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2 text-xs">
+                    {t.connectedPhone
+                      ? <span className={t.waConnected ? 'text-emerald-500' : 'text-red-500 font-semibold'}>{t.waConnected ? '🟢 conectado' : '🔴 CAÍDO'} <span className="text-muted-foreground">· {t.connectedPhone}</span></span>
+                      : <span className="text-muted-foreground">sin vincular</span>}
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-center font-mono">{t.inbound24} / {t.outbound24}</TableCell>
+                  <TableCell className="py-2 text-[11px] text-muted-foreground">{ago(t.lastInboundAt)}</TableCell>
+                  <TableCell className="py-2 text-[11px] text-muted-foreground">{ago(t.lastOutboundAt)}</TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {t.botStuck && <Badge className="bg-red-500/15 text-red-500 border-0 text-[10px]">bot sin responder</Badge>}
+                      {t.iaPaused && <Badge className="bg-amber-500/15 text-amber-600 border-0 text-[10px]">IA pausada</Badge>}
+                      {t.followupsRezagados > 0 && <Badge className="bg-amber-500/15 text-amber-600 border-0 text-[10px]">{t.followupsRezagados} rezagados</Badge>}
+                      {t.status === 'ok' && <Badge className="bg-emerald-500/15 text-emerald-600 border-0 text-[10px]">al día</Badge>}
+                      {t.status === 'setup' && <Badge className="bg-zinc-500/15 text-zinc-500 border-0 text-[10px]">en setup</Badge>}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {rows.length === 0 && (
+                <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-6">Sin datos (¿tienes rol superadmin?)</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <p className="mt-2 text-[10px] text-muted-foreground">🔴 caído = WhatsApp vinculado pero desconectado, o bot &gt;2h sin responder al último mensaje. Si algo cae, también llega alerta a Telegram (revisión cada 10 min).</p>
+      </CardContent>
+    </Card>
   )
 }

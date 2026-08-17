@@ -12,6 +12,9 @@ import { db } from '@/lib/db'
 import { chatWithAI } from './providers'
 import { buildDynamicContext } from './context-builder'
 import { logInfo, logOk, logWarn, logError } from '@/lib/logger'
+import { PLANS } from '@/lib/constants'
+import { markDisinterested } from './follow-up-guard'
+import { nextAllowedSend } from './quiet-hours'
 
 // ─── CustomFields Helper ────────────────────────────────────
 // Follow-up engine stores its state in contact.customFields (JSON)
@@ -68,33 +71,78 @@ export type FollowUpTipo =
   | 'nueva_oferta'
   | 'reactivacion_emocional'
   | 'reactivacion_final'
+  // ── Gatillos psicológicos del Motor Inteligente (visión de Jhon 2026-07-15):
+  // cada contacto de la escalera tiene un OBJETIVO psicológico distinto para
+  // que jamás parezca automatización.
+  | 'reactivacion_fria'
+  | 'reciprocidad'
+  | 'curiosidad'
+  | 'autoridad'
+  | 'dolor'
+  | 'fomo'
+  | 'micro_compromiso'
+  | 'empatia'
+  | 'costo_oportunidad'
+  // ── Postventa (2026-07-20): el ciclo continúa DESPUÉS de la venta.
+  // Estas tareas llevan ruleId 'post-sale' y están exentas del freno anti-spam
+  // y del paro "ya es cliente" — su público ES el cliente.
+  | 'postventa_checkin'
+  | 'postventa_referidos'
+  | 'postventa_servicio'
+  | 'postventa_aniversario'
 
 export interface FollowUpStepConfig {
   step: number
   delayMinutes: number
   tipo: FollowUpTipo
   label: string
+  /** Cola larga (política de Jhon 2026-07-15): un solo contacto MENSUAL hasta
+   *  completar el año. Estos pasos están EXENTOS del freno de "máx N sin
+   *  respuesta" — solo los detienen las condiciones duras (hardStopFollowUps). */
+  longTail?: boolean
 }
 
-// ─── TIMELINE (12 pasos, obligatorio) ─────────────────────────
+// ─── TIMELINE — ESCALERA PSICOLÓGICA DEL MOTOR INTELIGENTE ─────
+// (Visión de Jhon 2026-07-15: "cada mensaje con un objetivo psicológico
+// diferente, nunca repetir, nunca sonar desesperado, conversación viva".)
+// Los delays son el GAP respecto al envío anterior; los labels indican el
+// día ABSOLUTO aproximado desde el último mensaje del lead.
+//
+// ⚠️ CÓMO CONVIVE CON EL FRENO (política de Jhon 2026-07-15):
+// - RÁFAGA (pasos 0-7): el freno "máx N sin respuesta" (default 2,
+//   settings.maxUnansweredFollowUps) manda. Al toparse, el worker marca
+//   'desinteresado' EN SILENCIO y hace la TRANSICIÓN a la cola larga.
+// - COLA LARGA (pasos 8+, longTail): un solo contacto MENSUAL hasta el año.
+//   EXENTA del freno; solo la detienen condiciones duras (hardStopFollowUps:
+//   IA apagada para el contacto, pausa por edge-case, cliente ganado, spam).
+// - Cada respuesta del lead REINICIA todo a 0 (resetFollowUpTimeline).
+// - Cada paso se agenda al ENVIAR el anterior (worker → scheduleNextFollowUp).
+
+const H = 60, D = 24 * 60
 
 export const FOLLOW_UP_TIMELINE: FollowUpStepConfig[] = [
-  // Zona caliente: 30min – 24h (recordatorio suave)
-  { step: 0,  delayMinutes: 30,            tipo: 'recordatorio_suave',      label: '+30 minutos' },
-  { step: 1,  delayMinutes: 24 * 60,       tipo: 'recordatorio_suave',      label: '+24 horas' },
-  // Zona tibia: 72h – 7d (valor + prueba social)
-  { step: 2,  delayMinutes: 72 * 60,       tipo: 'valor',                  label: '+72 horas' },
-  { step: 3,  delayMinutes: 7 * 24 * 60,   tipo: 'prueba_social',          label: '+7 días' },
-  // Zona fría: 15d – 45d (urgencia + necesidad + nueva oferta)
-  { step: 4,  delayMinutes: 15 * 24 * 60,  tipo: 'urgencia_suave',         label: '+15 días' },
-  { step: 5,  delayMinutes: 30 * 24 * 60,  tipo: 'recordatorio_necesidad', label: '+30 días' },
-  { step: 6,  delayMinutes: 45 * 24 * 60,  tipo: 'nueva_oferta',           label: '+45 días' },
-  // Zona reactivación: 60d – 180d (emocional → final)
-  { step: 7,  delayMinutes: 60 * 24 * 60,  tipo: 'reactivacion_emocional', label: '+60 días' },
-  { step: 8,  delayMinutes: 75 * 24 * 60,  tipo: 'reactivacion_emocional', label: '+75 días' },
-  { step: 9,  delayMinutes: 90 * 24 * 60,  tipo: 'reactivacion_final',     label: '+90 días' },
-  { step: 10, delayMinutes: 120 * 24 * 60, tipo: 'reactivacion_final',     label: '+120 días' },
-  { step: 11, delayMinutes: 180 * 24 * 60, tipo: 'reactivacion_final',     label: '+180 días' },
+  // ── Ráfaga inicial (sujeta al freno anti-spam) ──
+  { step: 0,  delayMinutes: 24 * H, tipo: 'reciprocidad',      label: '24h — gracias por tu tiempo + oportunidad detectada' },
+  { step: 1,  delayMinutes: 24 * H, tipo: 'curiosidad',        label: '48h — encontré algo interesante para tu caso' },
+  { step: 2,  delayMinutes: 24 * H, tipo: 'autoridad',         label: '72h — el patrón que vemos antes de implementar' },
+  { step: 3,  delayMinutes: 2 * D,  tipo: 'dolor',             label: 'día 5 — ¿cuántos te compraron a otro por velocidad?' },
+  { step: 4,  delayMinutes: 2 * D,  tipo: 'prueba_social',     label: 'día 7 — un negocio como el tuyo lo logró' },
+  { step: 5,  delayMinutes: 3 * D,  tipo: 'fomo',              label: 'día 10 — tu competencia también da seguimiento' },
+  { step: 6,  delayMinutes: 5 * D,  tipo: 'micro_compromiso',  label: 'día 15 — ¿sí o no? 😊' },
+  { step: 7,  delayMinutes: 6 * D,  tipo: 'empatia',           label: 'día 21 — sé que el día a día consume' },
+  // ── COLA LARGA: 1 contacto al mes hasta completar el año, gatillo rotativo ──
+  { step: 8,  delayMinutes: 9 * D,  tipo: 'costo_oportunidad',      label: 'día 30 — ¿cómo te fue este mes?',              longTail: true },
+  { step: 9,  delayMinutes: 30 * D, tipo: 'nueva_oferta',           label: 'día 60 — algo nuevo que no habías visto',      longTail: true },
+  { step: 10, delayMinutes: 30 * D, tipo: 'curiosidad',             label: 'día 90 — dato del mercado',                    longTail: true },
+  { step: 11, delayMinutes: 30 * D, tipo: 'prueba_social',          label: 'día 120 — otro caso como el tuyo',             longTail: true },
+  { step: 12, delayMinutes: 30 * D, tipo: 'reactivacion_emocional', label: 'día 150 — mensaje inesperado',                 longTail: true },
+  { step: 13, delayMinutes: 30 * D, tipo: 'valor',                  label: 'día 180 — tip útil sin venta',                 longTail: true },
+  { step: 14, delayMinutes: 30 * D, tipo: 'dolor',                  label: 'día 210 — la fuga silenciosa sigue',           longTail: true },
+  { step: 15, delayMinutes: 30 * D, tipo: 'autoridad',              label: 'día 240 — lo que vimos este trimestre',        longTail: true },
+  { step: 16, delayMinutes: 30 * D, tipo: 'fomo',                   label: 'día 270 — el mercado no espera',               longTail: true },
+  { step: 17, delayMinutes: 30 * D, tipo: 'costo_oportunidad',      label: 'día 300 — casi un año: ¿qué cambió?',          longTail: true },
+  { step: 18, delayMinutes: 30 * D, tipo: 'micro_compromiso',       label: 'día 330 — ¿retomamos? sí o no 😊',             longTail: true },
+  { step: 19, delayMinutes: 30 * D, tipo: 'empatia',                label: 'día 360 — la puerta sigue abierta',            longTail: true },
 ]
 
 // ─── Edge Case Detectors ──────────────────────────────────────
@@ -107,10 +155,13 @@ const EDGE_CASES = [
   { pattern: /\bestoy viendo otras opciones\b/i,        action: 'pause_30d' as const,   reason: 'Lead está comparando' },
   { pattern: /\bmejor lo pienso\b/i,                    action: 'pause_30d' as const,   reason: 'Lead quiere pensarlo' },
   // ── Close won (ya compró) ──
-  { pattern: /\bye(s)? compr(e|é|ó)\b/i,              action: 'close_won' as const,   reason: 'Lead ya compró' },
+  // ⚠️ En JS, \b NO funciona después de vocal ACENTUADA (é/ó no son \w) — con
+  // \b al final, "ya lo compré" jamás matcheaba (bug real encontrado en QA
+  // 2026-07-15). Se usa (?!\w) como cierre seguro con acentos.
+  { pattern: /\bya compr(e|é|ó)(?!\w)/i,                action: 'close_won' as const,   reason: 'Lead ya compró' },
   { pattern: /\balready (bought|purchased|have)\b/i,    action: 'close_won' as const,   reason: 'Lead already bought (en)' },
-  { pattern: /\bya me (saqu[eé]|adelant[eé]|compr[eé])\b/i, action: 'close_won' as const, reason: 'Lead ya sacó/adelantó su producto' },
-  { pattern: /\bya (lo|la) (compr[eé]|saqu[eé])\b/i,   action: 'close_won' as const,   reason: 'Lead ya compró el producto' },
+  { pattern: /\bya me (saqu[eé]|adelant[eé]|compr[eé])(?!\w)/i, action: 'close_won' as const, reason: 'Lead ya sacó/adelantó su producto' },
+  { pattern: /\bya (lo|la) (compr[eé]|saqu[eé])(?!\w)/i, action: 'close_won' as const,  reason: 'Lead ya compró el producto' },
   // ── Continue (postergación) ──
   { pattern: /\bluego\b/i,                              action: 'continue' as const,    reason: 'Lead dijo luego — seguir timeline' },
   { pattern: /\bdespu(e|é)s\b/i,                        action: 'continue' as const,    reason: 'Lead dijo después — seguir timeline' },
@@ -131,7 +182,9 @@ function buildFollowUpPrompt(
   contactName: string,
   conversationHistory: string,
   contextSummary: string,
-  minutesSinceLastMessage: number
+  minutesSinceLastMessage: number,
+  leadFicha = '',
+  previousFollowUps = ''
 ): string {
   const daysSince = Math.floor(minutesSinceLastMessage / (24 * 60))
 
@@ -335,6 +388,77 @@ Reglas:
 - MÁXIMO 3 líneas
 
 PROHIBIDO: No digas "último mensaje". No muestres frustración. No uses "te extrañamos". No preguntas cerradas.`,
+
+    // ═══ GATILLOS PSICOLÓGICOS DEL MOTOR INTELIGENTE (Jhon 2026-07-15) ═══
+    // Los ejemplos son SEMILLA del ángulo — jamás copiarlos literal: se
+    // reconstruyen con los datos REALES de la ficha del lead.
+
+    reactivacion_fria: `GATILLO: RESCATE DE LEAD FRÍO (primer seguimiento a quien escribió y desapareció)
+Estrategia: el lead escribió poco y no volvió. Retoma SU último tema/pregunta exacta (está en la ficha), aporta una respuesta o dato útil sobre eso mismo, y cierra con UNA pregunta facilísima de contestar.
+Tono: ligero, servicial, cero presión — como quien retoma una plática pendiente, no como quien cobra una respuesta.
+PROHIBIDO: "¿sigues interesado?", "te escribo para dar seguimiento", reproches, o presentar todo el pitch de nuevo.`,
+
+    reciprocidad: `GATILLO: RECIPROCIDAD (agradece + regala una observación útil)
+Estrategia: agradece genuinamente el tiempo que te dio y devuélvele valor: una observación específica sobre SU problema/situación (de la ficha) y una oportunidad concreta de mejorarlo sin más carga de trabajo.
+Semilla del ángulo (adaptar con SUS datos, jamás copiar): "Gracias nuevamente por el tiempo que me regalaste. Me quedé pensando en lo que me comentaste sobre [su problema] y creo que hay varias oportunidades para mejorar ese proceso sin aumentar tu carga de trabajo. Cuando tengas unos minutos me gustaría mostrártelo."
+PROHIBIDO: pedir algo a cambio en el mismo mensaje; sonar a plantilla de cortesía.`,
+
+    curiosidad: `GATILLO: CURIOSIDAD (deja una idea abierta — efecto Zeigarnik)
+Estrategia: insinúa un hallazgo relevante para SU caso sin revelarlo completo; rompe una creencia común de su giro.
+Semilla del ángulo: "Revisando casos muy parecidos al tuyo encontré algo interesante… Muchos creen que el problema es generar más prospectos. En realidad el problema suele ser todo lo que ocurre después del primer mensaje. Creo que vale la pena que lo veas."
+PROHIBIDO: resolver la curiosidad en el mismo mensaje; clickbait vacío sin sustancia detrás.`,
+
+    autoridad: `GATILLO: AUTORIDAD (diagnóstico de experto, sin vender)
+Estrategia: habla como el especialista que ya analizó su caso: nombra el patrón que ves (con SUS números si los dio) y por qué lo reconoces.
+Semilla del ángulo: "Estuve analizando de nuevo tu caso. Honestamente creo que hay ventas que hoy se pierden solo por tiempos de respuesta y seguimiento. No te lo digo para venderte — es exactamente el patrón que vemos antes de implementar el sistema."
+PROHIBIDO: presumir; tecnicismos; sonar regañón.`,
+
+    dolor: `GATILLO: DOLOR (pregunta incómoda pero honesta)
+Estrategia: UNA pregunta que lo haga dimensionar la fuga que no está viendo, formulada con respeto y usando SU contexto (volumen, cierres, tiempo de respuesta si los dio).
+Semilla del ángulo: "Te hago una pregunta… ¿cuántos clientes crees que han dejado de comprarte simplemente porque alguien respondió más rápido? Es incómoda, pero normalmente ahí está la fuga más grande."
+PROHIBIDO: culpar; exagerar; hacer más de UNA pregunta.`,
+
+    fomo: `GATILLO: FOMO (lo que pasa mientras no decide)
+Estrategia: señala con elegancia que el mercado se mueve: sus prospectos también hablan con la competencia, y la diferencia la hace quien da seguimiento primero.
+Semilla del ángulo: "Mientras hablamos… probablemente algunos de tus prospectos también están hablando con tu competencia. La diferencia normalmente no la hace el precio — la hace quien da seguimiento primero."
+PROHIBIDO: amenazar; falsa escasez; presionar con fechas inventadas.`,
+
+    micro_compromiso: `GATILLO: MICRO-COMPROMISO (respuesta de un toque)
+Estrategia: mensaje ultracorto que pide UNA respuesta binaria — bajar la fricción a cero.
+Semilla del ángulo: "Solo necesito una respuesta: ¿sigues buscando mejorar tu proceso comercial? Sí o No 😊"
+PROHIBIDO: agregar contexto largo; hacer segunda pregunta; sonar a ultimátum.`,
+
+    empatia: `GATILLO: EMPATÍA (validar su realidad, cero presión)
+Estrategia: reconoce que su día a día consume, quita la culpa y deja una puerta fácil de abrir.
+Semilla del ángulo: "Sé que el trabajo diario consume muchísimo. No quiero llenarte de mensajes — solo saber si todavía tiene sentido que retomemos la conversación."
+PROHIBIDO: reprochar el silencio; victimizarte; despedirte definitivamente.`,
+
+    costo_oportunidad: `GATILLO: COSTO DE OPORTUNIDAD (el tiempo que ya pasó)
+Estrategia: usa el tiempo transcurrido desde la última plática como espejo: ¿qué cambió?, ¿el reto sigue ahí? Pregunta con interés genuino, no con reproche.
+Semilla del ángulo: "Hace [tiempo] platicamos. Me dio curiosidad… ¿cómo te fue este mes? ¿Sentiste que el seguimiento mejoró o sigue siendo uno de los retos?"
+PROHIBIDO: "te lo dije"; recontar la propuesta completa; presión.`,
+
+    // ── POSTVENTA (2026-07-20): el destinatario YA COMPRÓ. Cero venta,
+    // puro cuidado de la relación (que a la larga genera referidos).
+    postventa_checkin: `POSTVENTA: CHECK-IN DE ENTREGA (+7 días de la compra)
+Estrategia: mensaje genuino de servicio — ¿cómo le ha ido con su auto?, ¿todo en orden con papeles/entrega?, ofrécete para cualquier duda.
+Semilla del ángulo: "¡[Nombre]! ¿Cómo te ha tratado tu [auto]? Quería asegurarme de que todo esté perfecto con la entrega y los papeles."
+PROHIBIDO: vender otro auto; pedir referidos todavía; sonar a encuesta corporativa.`,
+
+    postventa_referidos: `POSTVENTA: REFERIDOS + RESEÑA (+30 días de la compra)
+Estrategia: el cliente ya vivió la experiencia — es el momento de oro. Pregunta cómo va, y con naturalidad pide: (1) si conoce a alguien buscando auto, que te lo presente (lo cuidas igual), y (2) si le fue bien, una reseña en Google ayuda muchísimo.
+Semilla del ángulo: "Me da gusto saber que ya llevas un mes con tu [auto]. Oye, si algún amigo o familiar anda buscando auto, preséntamelo con confianza — lo atiendo igual que a ti. Y si te fue bien conmigo, una reseña en Google me ayudaría un montón 🙏"
+PROHIBIDO: condicionar nada a cambio de la reseña; presionar; pedir más de una vez en el mismo mensaje.`,
+
+    postventa_servicio: `POSTVENTA: RECORDATORIO DE SERVICIO (+6 meses de la compra)
+Estrategia: cuidado preventivo — a los ~6 meses toca revisar servicio/mantenimiento. Recuérdalo con tono de asesor que cuida su inversión, y ofrece ayudar a agendarlo si la agencia da servicio.
+Semilla del ángulo: "[Nombre], ya van ~6 meses con tu [auto] 🚗 Es buena fecha para su servicio de mantenimiento — cuida tu garantía y el valor de reventa. ¿Ya lo tienes agendado?"
+PROHIBIDO: alarmar con fallas; vender otro auto; inventar políticas de garantía.`,
+
+    postventa_aniversario: `POSTVENTA: ANIVERSARIO DE COMPRA (+1 año)
+Estrategia: felicítalo por su primer año con el auto, pregunta cómo le ha ido, y deja UNA puerta abierta suave: si algún día piensa en cambiarlo o alguien cercano busca auto, aquí estás.
+Semilla del ángulo: "¡[Nombre], ya un año con tu [auto]! 🎉 ¿Cómo te ha tratado? Si algún día piensas en renovarlo o alguien cercano anda buscando, ya sabes dónde encontrarme."
+PROHIBIDO: presionar a cambiar de auto; cotizar sin que pregunte; sonar a campaña masiva.`,
   }
 
   return `${businessContext}
@@ -343,14 +467,19 @@ ESTADO DEL LEAD:
 - Nombre: ${contactName}
 - Sin responder hace: ${daysSince} día(s)
 - Resumen del contexto: ${contextSummary || 'Primera interacción'}
-
+${leadFicha}
 HISTORIAL DE CONVERSACION (ultimos mensajes):
 ${conversationHistory || 'Sin historial previo'}
+${previousFollowUps ? `
+SEGUIMIENTOS AUTOMÁTICOS YA ENVIADOS ANTES (⛔ PROHIBIDO repetir sus ideas, ángulos o frases — este mensaje debe sentirse COMPLETAMENTE distinto):
+${previousFollowUps}
+` : ''}
 
 ═══ INSTRUCCIONES DE MENSAJE ═══
 ${tipoInstructions[tipo]}
 
 ═══ REGLAS DE ORO ═══
+- 🎯 RETOMA EL CONTEXTO PRIMERO: arranca el mensaje conectando con la conversación real — su nombre (si lo sabes) + UN dato específico que ÉL dio (ej. "los 70 prospectos que reciben al mes", el modelo que le interesó, su presupuesto). Un seguimiento sin contexto se siente masivo y no se contesta. Si el historial no tiene ningún dato del lead, entonces sé breve y genuino, sin fingir contexto.
 - Corto, natural, conversacional. Como WhatsApp real.
 - Tono: amigable, cercano, mexicano. Habla como asesor comercial.
 - UNA sola idea. UNA sola acción.
@@ -362,6 +491,8 @@ ${tipoInstructions[tipo]}
 - Maximo 4 lineas + maximo 1 emoji.
 - Termina con pregunta clara que invite respuesta (excepto reactivacion_final).
 - Personaliza con datos reales del lead (producto actual, lo que busca, presupuesto).
+- ⛔ PROHIBIDO COPIAR LOS EJEMPLOS: las frases de ejemplo de arriba (como "Te voy a ser honesto, sin compromiso...") son SOLO inspiración del ángulo. JAMÁS las escribas palabra por palabra. Redacta el mensaje DESDE CERO, con TUS propias palabras y las del cliente.
+- 🔑 ÚNICO POR LEAD: dos clientes distintos JAMÁS deben recibir el mismo texto. Varía el inicio, las palabras y el ejemplo según ESTE lead. Si no puedes personalizarlo, hazlo más corto y genuino, pero nunca genérico ni idéntico a otro.
 
 FORMATO: Responde SOLO con el mensaje a enviar. Sin explicaciones, sin etiquetas, sin formato, sin comillas.`
   }
@@ -379,13 +510,31 @@ export async function scheduleNextFollowUp(
   step: number
 ): Promise<{ success: boolean; nextAt?: Date; step?: number } | null> {
   if (step >= FOLLOW_UP_TIMELINE.length) {
-    // Timeline complete — lead is "perdido"
+    // Timeline complete — lead is "perdido". Se DETIENE EN SILENCIO (sin
+    // mensaje de despedida) y se marca desinteresado.
     await setContactFUState(contactId, { leadState: 'perdido' })
-    logWarn('FOLLOWUP', 'timeline_complete', { contactId, reason: 'All 12 steps exhausted' })
+    await markDisinterested(contactId, workspaceId).catch(() => {})
+    logWarn('FOLLOWUP', 'timeline_complete', { contactId, reason: 'Los 2 follow-ups (7/14d) se agotaron → Perdido (sin despedida)' })
     return null
   }
 
+  // Enforce plan follow-up days limit
+  const workspace = await db.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } })
+  const planDef = PLANS[workspace?.plan ?? 'free'] ?? PLANS['free']
   const config = FOLLOW_UP_TIMELINE[step]
+  const stepDelayDays = config.delayMinutes / (60 * 24)
+  if (stepDelayDays > planDef.limits.maxFollowUpDays) {
+    logWarn('FOLLOWUP', 'plan_limit_reached', {
+      contactId,
+      step,
+      stepDelayDays,
+      maxFollowUpDays: planDef.limits.maxFollowUpDays,
+      plan: workspace?.plan,
+    })
+    await setContactFUState(contactId, { leadState: 'perdido' })
+    return null
+  }
+
   const nextAt = new Date(Date.now() + config.delayMinutes * 60 * 1000)
 
   // Find or create a FollowUpRule for tracking
@@ -415,6 +564,7 @@ export async function scheduleNextFollowUp(
       conversationId,
       status: 'pending',
       scheduledAt: nextAt,
+      metadata: JSON.stringify({ tipo: config.tipo, step: config.step, label: config.label, ...(config.longTail ? { longTail: true } : {}) }),
     },
   })
 
@@ -447,10 +597,13 @@ export async function resetFollowUpTimeline(
   // FIX RACE CONDITION: Also cancel 'processing' tasks that a concurrent
   // worker run might have already reserved. This prevents the worker from
   // sending a follow-up after the lead already responded.
+  // EXENTAS: las de postventa (ruleId 'post-sale') — que el cliente responda
+  // NO debe borrar su check-in/referidos/servicio/aniversario programados.
   const result = await db.followUpTask.updateMany({
     where: {
       contactId,
       status: { in: ['pending', 'processing'] },
+      ruleId: { not: 'post-sale' },
     },
     data: { status: 'cancelled' },
   })
@@ -546,7 +699,7 @@ export async function handleEdgeCase(
       })
       // Cancel pending
       await db.followUpTask.updateMany({
-        where: { contactId, status: 'pending' },
+        where: { contactId, status: 'pending', ruleId: { not: 'post-sale' } },
         data: { status: 'cancelled' },
       })
       logInfo('FOLLOWUP', 'paused_30d', { contactId, reason })
@@ -559,7 +712,7 @@ export async function handleEdgeCase(
         followUpPauseUntil: pauseUntil.toISOString(),
       })
       await db.followUpTask.updateMany({
-        where: { contactId, status: 'pending' },
+        where: { contactId, status: 'pending', ruleId: { not: 'post-sale' } },
         data: { status: 'cancelled' },
       })
       logInfo('FOLLOWUP', 'paused_60d', { contactId, reason })
@@ -571,7 +724,7 @@ export async function handleEdgeCase(
         followUpPaused: true,
       })
       await db.followUpTask.updateMany({
-        where: { contactId, status: 'pending' },
+        where: { contactId, status: 'pending', ruleId: { not: 'post-sale' } },
         data: { status: 'cancelled' },
       })
       logOk('FOLLOWUP', 'closed_won', { contactId, reason })
@@ -580,7 +733,7 @@ export async function handleEdgeCase(
     case 'close_lost': {
       await setContactFUState(contactId, { leadState: 'perdido', followUpPaused: true })
       await db.followUpTask.updateMany({
-        where: { contactId, status: 'pending' },
+        where: { contactId, status: 'pending', ruleId: { not: 'post-sale' } },
         data: { status: 'cancelled' },
       })
       logInfo('FOLLOWUP', 'closed_lost', { contactId, reason })
@@ -645,6 +798,53 @@ FORMATO: Solo el resumen, sin etiquetas, sin viñetas, sin formato. Texto contin
 }
 
 /**
+ * Extract the final WhatsApp-ready message from a possibly verbose AI response.
+ * Some reasoning models return chain-of-thought before the actual message.
+ * Strategies (in priority order):
+ *   1. Short clean response → return as-is
+ *   2. "Option 1:" pattern → extract first option text
+ *   3. Last quoted string in the response
+ *   4. Last Spanish-language paragraph
+ *   5. Last non-empty line
+ */
+function extractFollowUpMessage(raw: string): string {
+  const text = raw.trim()
+
+  // Short and clean — no reasoning markers → return as-is
+  if (
+    text.length <= 280 &&
+    !/^(We are|Let'?s|The context|Given that|I need to|Based on|To generate|Since the|Important:|However)/i.test(text)
+  ) {
+    return text
+  }
+
+  // Pattern: "Option 1:" → extract the text of the first option (strip surrounding quotes)
+  const opt1 = text.match(/Option\s*1[^:\n]*:\s*[«"\u201c\u201d]?([^\n«"\u201c\u201d]{10,280})[«»"\u201c\u201d]?/i)
+  if (opt1) return opt1[1].trim().replace(/^["«»\u201c\u201d']+|["«»\u201c\u201d']+$/g, '')
+
+  // Pattern: last quoted string in curly or straight quotes
+  const quotedAll = [...text.matchAll(/["«\u201c\u201d]([^"«\u201c\u201d\n]{15,280})["»\u201c\u201d]/g)]
+  if (quotedAll.length > 0) return quotedAll[quotedAll.length - 1][1].trim()
+
+  // Pattern: last Spanish-language short paragraph
+  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+  for (let i = paragraphs.length - 1; i >= 0; i--) {
+    const p = paragraphs[i]
+    if (
+      p.length >= 10 && p.length <= 320 &&
+      /[¿¡áéíóúüñÁÉÍÓÚÜÑ]/i.test(p) &&
+      !/^(Option|We are|Let|Given|The context|Based on|Important)/i.test(p)
+    ) {
+      return p
+    }
+  }
+
+  // Last non-empty line fallback
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5)
+  return (lines[lines.length - 1] || text).replace(/^["«»\u201c\u201d']+|["«»\u201c\u201d']+$/g, '')
+}
+
+/**
  * Generate a dynamic follow-up message using AI.
  * NEVER uses templates — always contextual.
  */
@@ -682,6 +882,55 @@ export async function generateFollowUpMessage(
 
   const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Cliente'
 
+  // ── FICHA DEL LEAD (Motor Inteligente): todo lo que el sistema SABE de él
+  // para que el mensaje se construya con SUS variables reales — nombre, giro,
+  // interés, presupuesto, objeción, score, campaña de origen, días sin responder.
+  let leadFicha = ''
+  try {
+    const [profile, lastInbound] = await Promise.all([
+      db.leadProfile.findFirst({ where: { contactId } }),
+      db.message.findFirst({
+        where: { conversationId, direction: 'inbound' },
+        orderBy: { createdAt: 'desc' }, select: { content: true, createdAt: true },
+      }),
+    ])
+    const cf = (() => { try { return JSON.parse(contact.customFields || '{}') } catch { return {} } })() as Record<string, unknown>
+    const tags = (() => { try { return JSON.parse(contact.tags || '[]') } catch { return [] } })() as string[]
+    const diasSinRespuesta = lastInbound ? Math.floor((Date.now() - lastInbound.createdAt.getTime()) / 86400000) : null
+    const lines = [
+      profile?.archetype && profile.archetype !== 'desconocido' ? `- Arquetipo del cliente: ${profile.archetype}` : '',
+      profile?.preferredProduct ? `- Producto/vehículo de interés: ${profile.preferredProduct}` : '',
+      profile?.budget ? `- Presupuesto detectado: ${profile.budget}` : '',
+      profile?.mainObjection ? `- Objeción principal: ${profile.mainObjection}` : '',
+      profile ? `- Lead score: ${profile.score ?? contact.leadScore} · Temperatura: ${profile.temperature || contact.temperature}` : `- Lead score: ${contact.leadScore} · Temperatura: ${contact.temperature}`,
+      cf.adSource ? `- Llegó desde el anuncio/campaña: "${String(cf.adSource).slice(0, 120)}"` : '',
+      contact.source ? `- Canal de origen: ${contact.source}` : '',
+      tags.length ? `- Etiquetas: ${tags.slice(0, 6).join(', ')}` : '',
+      diasSinRespuesta !== null ? `- Días sin responder: ${diasSinRespuesta}` : '',
+      lastInbound?.content ? `- ÚLTIMO mensaje que ÉL escribió (su tema/pregunta pendiente): "${lastInbound.content.slice(0, 160)}"` : '',
+    ].filter(Boolean)
+    if (lines.length) leadFicha = `\nFICHA DEL LEAD (datos REALES — úsalos para personalizar; JAMÁS inventes los que falten):\n${lines.join('\n')}\n`
+  } catch { /* la ficha nunca bloquea la generación */ }
+
+  // ── Anti-repetición de IDEAS: los últimos seguimientos automáticos que ya
+  // recibió — el nuevo mensaje debe cambiar de ángulo por completo.
+  let previousFollowUps = ''
+  try {
+    const prevAuto = await db.message.findMany({
+      where: {
+        conversationId, direction: 'outbound',
+        OR: [
+          { metadata: { contains: 'followup-worker' } },
+          { metadata: { contains: 'cron_follow_up' } },
+          { metadata: { contains: 'dib-reactivation' } },
+          { metadata: { contains: '"automated":true' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' }, take: 3, select: { content: true },
+    })
+    previousFollowUps = prevAuto.map((m, i) => `${i + 1}. "${m.content.slice(0, 180)}"`).join('\n')
+  } catch { /* opcional */ }
+
   // Build prompt
   const fuState = await getContactFUState(contactId)
   const prompt = buildFollowUpPrompt(
@@ -690,19 +939,25 @@ export async function generateFollowUpMessage(
     contactName,
     history,
     fuState.contextSummary || '',
-    minutesSince
+    minutesSince,
+    leadFicha,
+    previousFollowUps
   )
 
-  // Generate message
+  // Generate message — use glm-4-flash (non-reasoning model) to avoid leaking
+  // chain-of-thought into the WhatsApp message. Add explicit user turn so the
+  // model knows when to produce its response (system-only calls cause reasoning leak).
   const result = await chatWithAI(
-    [{ role: 'system', content: prompt }],
+    [
+      { role: 'system', content: prompt },
+      { role: 'user', content: 'Genera el mensaje ahora.' },
+    ],
     'glm',
-    undefined,
-    { temperature: 0.7, maxTokens: 300 }
+    'glm-4-flash',
+    { temperature: 0.9, maxTokens: 300 }
   )
 
-  const cleanMessage = result.content
-    .trim()
+  const cleanMessage = extractFollowUpMessage(result.content)
     .replace(/^["']+|["']+$/g, '')
     .replace(/\*\*/g, '')
 
@@ -713,6 +968,166 @@ export async function generateFollowUpMessage(
   })
 
   return cleanMessage
+}
+
+/**
+ * CONDICIONES DURAS DE PARO (política de Jhon 2026-07-15): lo único que
+ * detiene la COLA LARGA mensual. El tag 'desinteresado' NO cuenta aquí —
+ * es precisamente a quien la cola larga mantiene "presente sin invadir".
+ *
+ * opts.postSale (2026-07-20): las tareas de POSTVENTA (ruleId 'post-sale')
+ * van dirigidas a quien YA COMPRÓ, así que "ya es cliente" / "lead cerrado"
+ * NO las detienen — solo IA apagada, pausa y noqualify.
+ */
+export async function hardStopFollowUps(contactId: string, opts?: { postSale?: boolean }): Promise<{ stop: boolean; reason?: string }> {
+  const contact = await db.contact.findUnique({
+    where: { id: contactId },
+    select: { customFields: true, tags: true, status: true },
+  })
+  if (!contact) return { stop: true, reason: 'contacto no existe' }
+  let cf: Record<string, unknown> = {}
+  try { cf = JSON.parse(contact.customFields || '{}') } catch { /* */ }
+  const fu = (cf.followUp || {}) as FollowUpContactState
+  let tags: string[] = []
+  try { tags = JSON.parse(contact.tags || '[]') } catch { /* */ }
+  if (cf.aiDisabled) return { stop: true, reason: 'IA apagada para el contacto' }
+  if (fu.followUpPaused) {
+    const until = fu.followUpPauseUntil ? new Date(fu.followUpPauseUntil) : null
+    if (!until || until > new Date()) return { stop: true, reason: 'pausado por edge-case (no molestar / lo pensará)' }
+  }
+  if (!opts?.postSale) {
+    if (fu.leadState === 'cerrado') return { stop: true, reason: 'lead cerrado (ya compró)' }
+    if (tags.includes('cliente')) return { stop: true, reason: 'ya es cliente' }
+    // FUENTE DE VERDAD: si el contacto tiene un TRATO GANADO (status='won' O en
+    // una etapa marcada isWon), NO se le manda seguimiento de ventas — aunque la
+    // etiqueta 'cliente' o el leadState no se hayan sincronizado (bug real
+    // 2026-07-21: Eduardo, ganado en el tablero pero status='active', recibió
+    // seguimiento). El trato ganado es la señal definitiva de "ya compró".
+    try {
+      const wonDeal = await db.deal.findFirst({
+        where: { contactId, OR: [{ status: 'won' }, { stage: { isWon: true } }] },
+        select: { id: true },
+      })
+      if (wonDeal) return { stop: true, reason: 'tiene un trato ganado (ya compró)' }
+    } catch { /* si falla la consulta, no bloquea el resto de guards */ }
+    // CITA AGENDADA (pedido de Jhon 2026-07-22): si el prospecto YA tiene una cita
+    // próxima pendiente/confirmada, NO se le manda seguimiento de rescate — ya está
+    // enganchado y una demo está en el calendario. Al pasar/cancelarse la cita, el
+    // freno deja de aplicar y el seguimiento puede retomarse.
+    try {
+      const appt = await db.appointment.findFirst({
+        where: { contactId, status: { in: ['pending', 'confirmed'] }, date: { gte: new Date() } },
+        select: { id: true },
+      })
+      if (appt) return { stop: true, reason: 'tiene una cita agendada' }
+    } catch { /* no bloquea el resto */ }
+  }
+  if (tags.some(t => t.startsWith('noqualify'))) return { stop: true, reason: 'descartado (spam/no califica)' }
+  return { stop: false }
+}
+
+/**
+ * REACTIVACIÓN DE CARTERA (disparada por el gerente vía Copiloto: "reactiva
+ * mi cartera"). En vez de mandar unos pocos mensajes síncronos y ahogarse en
+ * el timeout del request, INSCRIBE a los contactos elegibles en la escalera
+ * autónoma: crea el paso 0 (un re-opener personalizado por IA) escalonado en
+ * el tiempo y respetando el horario nocturno; el worker envía y avanza la
+ * escalera solo por días. Devuelve SOLO conteos (nunca la lista de nombres,
+ * para no inundar el contexto del Copiloto).
+ *
+ * - Filtra con hardStopFollowUps (omite ya-clientes/ganados/con cita/IA
+ *   apagada/opt-out): exactamente el "a quién NO escribir" que se pide.
+ * - Omite a quien YA tiene un seguimiento activo (no lo duplica).
+ * - El opener lleva `reactivation:true` para saltarse el freno de "N sin
+ *   respuesta" SOLO en el primer mensaje (decisión deliberada del gerente);
+ *   del paso 1 en adelante el freno vuelve a aplicar.
+ */
+export async function enrollPortfolioReactivation(
+  workspaceId: string,
+  opts: { contactIds?: string[]; limit?: number; spacingSeconds?: number } = {},
+): Promise<{ total: number; enrolled: number; skipped: number; reasons: Record<string, number>; firstAt: Date | null; lastAt: Date | null }> {
+  const spacingMs = Math.max(30, opts.spacingSeconds ?? 120) * 1000
+
+  const ws = await db.workspace.findUnique({ where: { id: workspaceId }, select: { settings: true } })
+  let wsSettings: Record<string, unknown> = {}
+  try { wsSettings = JSON.parse(ws?.settings || '{}') } catch { /* */ }
+
+  const where: Record<string, unknown> = { workspaceId, status: 'active', phone: { not: null } }
+  if (opts.contactIds?.length) where.id = { in: opts.contactIds }
+  const candidates = await db.contact.findMany({
+    where,
+    select: { id: true, phone: true },
+    orderBy: { lastMessageAt: 'asc' }, // los más callados primero
+    ...(opts.limit ? { take: Math.max(1, opts.limit) } : {}),
+  })
+
+  const reasons: Record<string, number> = {}
+  const bump = (r: string) => { reasons[r] = (reasons[r] || 0) + 1 }
+
+  let rule = await db.followUpRule.findFirst({ where: { workspaceId, isActive: true }, select: { id: true } })
+  if (!rule) {
+    rule = await db.followUpRule.create({
+      data: { workspaceId, name: 'Auto Follow-Up Engine', description: 'Reactivación de cartera', triggerType: 'inactivity', isActive: true, messageTemplate: '' },
+    })
+  }
+
+  const firstAllowed = nextAllowedSend(new Date(), wsSettings)
+  let enrolled = 0
+  let lastAt: Date | null = null
+
+  for (const c of candidates) {
+    if (!c.phone) { bump('sin teléfono'); continue }
+    const hard = await hardStopFollowUps(c.id)
+    if (hard.stop) { bump(hard.reason || 'no elegible'); continue }
+    const active = await db.followUpTask.count({ where: { contactId: c.id, status: { in: ['pending', 'processing', 'awaiting_approval'] } } })
+    if (active > 0) { bump('ya en seguimiento'); continue }
+    const convo = await db.conversation.findFirst({ where: { workspaceId, contactId: c.id }, orderBy: { lastMessageAt: 'desc' }, select: { id: true } })
+    if (!convo) { bump('sin conversación'); continue }
+
+    const scheduledAt = new Date(firstAllowed.getTime() + enrolled * spacingMs)
+    await db.followUpTask.create({
+      data: {
+        workspaceId,
+        ruleId: rule.id,
+        contactId: c.id,
+        conversationId: convo.id,
+        status: 'pending',
+        scheduledAt,
+        metadata: JSON.stringify({ tipo: 'reactivacion_emocional', step: 0, label: 'Reactivación de cartera', reactivation: true }),
+      },
+    })
+    await setContactFUState(c.id, { nextFollowUpAt: scheduledAt.toISOString(), followUpStep: 0 })
+    enrolled++
+    lastAt = scheduledAt
+  }
+
+  logOk('FOLLOWUP', 'portfolio_reactivation_enrolled', { workspaceId, total: candidates.length, enrolled, skipped: candidates.length - enrolled })
+  return { total: candidates.length, enrolled, skipped: candidates.length - enrolled, reasons, firstAt: enrolled ? firstAllowed : null, lastAt }
+}
+
+/**
+ * TRANSICIÓN A COLA LARGA: cuando la ráfaga inicial se topa con el freno
+ * (N sin respuesta), en vez de morir el seguimiento pasa a modo mensual.
+ * Agenda el primer paso longTail posterior a `fromStep`.
+ */
+export async function scheduleLongTailEntry(
+  contactId: string,
+  workspaceId: string,
+  conversationId: string,
+  fromStep = -1
+): Promise<{ success: boolean; step?: number } | null> {
+  const hard = await hardStopFollowUps(contactId)
+  if (hard.stop) {
+    logInfo('FOLLOWUP', 'longtail_skipped_hardstop', { contactId, reason: hard.reason })
+    return null
+  }
+  const entry = FOLLOW_UP_TIMELINE.find(s => s.longTail && s.step > fromStep)
+  if (!entry) return null
+  const existing = await db.followUpTask.count({ where: { contactId, status: 'pending' } })
+  if (existing > 0) return null
+  const r = await scheduleNextFollowUp(contactId, workspaceId, conversationId, entry.step)
+  if (r?.success) logOk('FOLLOWUP', 'longtail_entered', { contactId, step: entry.step, label: entry.label })
+  return r
 }
 
 /**

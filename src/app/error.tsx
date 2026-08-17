@@ -14,6 +14,10 @@ export default function ErrorPage({
 }) {
   useEffect(() => {
     console.error('[ValiAutoFlow Error]', error)
+    // ChunkLoadError after a deploy → stale cache → force reload
+    if (error.name === 'ChunkLoadError' || error.message?.includes('Failed to load chunk')) {
+      window.location.reload()
+    }
   }, [error])
 
   return (

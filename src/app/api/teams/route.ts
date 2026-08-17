@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -65,6 +65,29 @@ export async function GET(request: NextRequest) {
       },
     })) as any
 
+    // ── Comisiones por vendedor ──
+    // Al cerrarse un trato GANADO, al asesor asignado se le acredita un % del
+    // valor (configurable en settings.commissionRate). Aquí sumamos, por
+    // usuario, el valor de sus tratos ganados y calculamos su comisión.
+    let commissionRate = 0
+    try { commissionRate = Number(JSON.parse(workspace?.settings || '{}').commissionRate) || 0 } catch { /* */ }
+    const wonDeals = await db.deal.findMany({
+      where: { workspaceId: workspaceId!, OR: [{ status: 'won' }, { stage: { isWon: true } }] },
+      select: { assignedTo: true, value: true },
+    }).catch(() => [] as { assignedTo: string | null; value: number }[])
+    const wonByUser: Record<string, { count: number; total: number }> = {}
+    for (const d of wonDeals) {
+      const uid = d.assignedTo || '__unassigned__'
+      if (!wonByUser[uid]) wonByUser[uid] = { count: 0, total: 0 }
+      wonByUser[uid].count += 1
+      wonByUser[uid].total += d.value || 0
+    }
+    const commissionFor = (userId: string) => {
+      const w = wonByUser[userId]
+      if (!w) return { wonDeals: 0, wonValue: 0, commission: 0 }
+      return { wonDeals: w.count, wonValue: w.total, commission: Math.round(w.total * commissionRate) / 100 }
+    }
+
     // Build response with owner + members
     const response: Array<{
       id: string
@@ -74,6 +97,9 @@ export async function GET(request: NextRequest) {
       joinedAt: string
       lastActivity?: string | null
       messagesSent?: number
+      wonDeals?: number
+      wonValue?: number
+      commission?: number
       user: { id: string; name: string | null; email: string; image?: string | null }
     }> = []
 
@@ -88,6 +114,7 @@ export async function GET(request: NextRequest) {
         joinedAt: workspace.createdAt.toISOString(),
         lastActivity: workspace.owner.updatedAt?.toISOString() || null,
         messagesSent: messageCounts[workspace.ownerId!] || 0,
+        ...commissionFor(workspace.ownerId!),
         user: workspace.owner,
       })
 
@@ -107,11 +134,12 @@ export async function GET(request: NextRequest) {
         joinedAt: member.joinedAt.toISOString(),
         lastActivity: member.user.updatedAt?.toISOString() || null,
         messagesSent: messageCounts[member.userId] || 0,
+        ...commissionFor(member.userId),
         user: member.user,
       })
     }
 
-    return Response.json({ success: true, members: response })
+    return Response.json({ success: true, members: response, commissionRate })
   } catch (error) {
     return errorResponse(error)
   }
@@ -123,7 +151,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { workspaceId, email, role } = body
 
-    await requireWorkspace(workspaceId, session.userId)
+    const caller = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(caller.role, 'team.manage')
 
     if (!email) {
       return Response.json({ success: false, error: 'email requerido' }, { status: 400 })
@@ -178,7 +207,8 @@ export async function DELETE(request: NextRequest) {
       return Response.json({ success: false, error: 'memberId y workspaceId requeridos' }, { status: 400 })
     }
 
-    await requireWorkspace(workspaceId, session.userId)
+    const caller = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(caller.role, 'team.manage')
 
     await db.workspaceMember.delete({
       where: { id: memberId },
@@ -200,7 +230,8 @@ export async function PUT(request: NextRequest) {
       return Response.json({ success: false, error: 'memberId, role y workspaceId requeridos' }, { status: 400 })
     }
 
-    await requireWorkspace(workspaceId, session.userId)
+    const caller = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(caller.role, 'team.manage')
 
     const validRoles = ['owner', 'admin', 'member', 'viewer']
     if (!validRoles.includes(role)) {

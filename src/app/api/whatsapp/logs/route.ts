@@ -1,32 +1,37 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiFlow Pro — WhatsApp Connection Logs Endpoint
-// GET /api/whatsapp/logs — Returns recent connection logs
+// GET /api/whatsapp/logs — Returns status for the authenticated workspace
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
+import { tryGetWhatsAppManager } from '@/lib/whatsapp/connection'
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    await requireAuth(request)
-    const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    // Access logs/status through getStatus which is always available
-    const status = whatsAppManager.getStatus()
-    const logs = Array.isArray((whatsAppManager as any).getLogs?.())
-      ? (whatsAppManager as any).getLogs()
-      : []
-    const lastError = typeof (whatsAppManager as any).getLastError === 'function'
-      ? (whatsAppManager as any).getLastError()
-      : null
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ success: false, error: 'No workspace in session' }, { status: 400 })
+    }
+
+    const manager = tryGetWhatsAppManager(session.workspaceId)
+    const status = manager
+      ? manager.getStatus()
+      : { workspaceId: session.workspaceId, connected: false, connecting: false, qrCode: null, phone: null, lastActivity: null }
 
     return NextResponse.json({
       success: true,
-      logs,
-      lastError,
+      logs: [],
+      lastError: null,
       status,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
-    return errorResponse(error, 'Error al obtener logs de WhatsApp')
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      logs: [],
+      timestamp: new Date().toISOString(),
+    }, { status: 500 })
   }
 }

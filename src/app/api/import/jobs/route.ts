@@ -8,38 +8,35 @@ import { db } from '@/lib/db'
  */
 export async function GET(request: NextRequest) {
   try {
-    // Auth: use custom JWT (not next-auth)
     const session = await requireAuth(request)
-
     const workspaceId = request.nextUrl.searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
 
-    // importJob model may not exist — return empty array as fallback
-    let jobs: any[] = []
-    try {
-      jobs = await db.importJob.findMany({
-        where: { workspaceId: workspaceId! },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: {
-          id: true,
-          fileName: true,
-          fileSize: true,
-          fileType: true,
-          status: true,
-          rowsTotal: true,
-          rowsProcessed: true,
-          rowsCreated: true,
-          rowsUpdated: true,
-          rowsSkipped: true,
-          errors: true,
-          completedAt: true,
-          createdAt: true,
-        },
-      })
-    } catch {
-      // Table doesn't exist yet — return empty
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId es obligatorio' }, { status: 400 })
     }
+    await requireWorkspace(workspaceId, session.userId)
+
+    const jobs = await db.importJob.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        fileName: true,
+        fileSize: true,
+        fileType: true,
+        status: true,
+        rowsTotal: true,
+        rowsProcessed: true,
+        rowsCreated: true,
+        rowsUpdated: true,
+        rowsSkipped: true,
+        errors: true,
+        completedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
 
     return NextResponse.json({ success: true, jobs })
   } catch (error) {

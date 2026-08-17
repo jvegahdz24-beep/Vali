@@ -1,90 +1,50 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow CRM — Logout API Endpoint
-// POST /api/auth/logout — Clear session cookies, revoke tokens
+// ValiAutoFlow — Logout API Endpoint
+// POST /api/auth/logout — Limpia la cookie de sesión, responde JSON (lo usa el
+//   panel principal vía fetch en use-auth.tsx).
+// GET  /api/auth/logout — Igual, pero REDIRIGE a /login (para enlaces directos,
+//   como el botón "Cerrar sesión" del panel admin y accept-invite). Antes daba
+//   HTTP 405 porque solo existía POST (reporte de Jhon 2026-07-22).
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { logInfo, logOk, logError } from '@/lib/logger'
-import {
-  verifyAccessToken,
-  revokeSession,
-  SESSION_COOKIE_NAME,
-  REFRESH_COOKIE_NAME,
-} from '@/lib/auth'
+import { SESSION_COOKIE_NAME } from '@/lib/auth'
+import { verifySessionToken } from '@/lib/auth-edge'
+import { revokeUserSessions } from '@/lib/access-session'
 
-export const dynamic = 'force-dynamic'
+async function clearSession(req: NextRequest, response: NextResponse): Promise<NextResponse> {
+  // ValiGuard: revocar las sesiones activas del usuario que cierra sesión
+  try {
+    const token = req.cookies.get(SESSION_COOKIE_NAME)?.value
+    if (token) {
+      const payload = await verifySessionToken(token)
+      if (payload?.userId) await revokeUserSessions(payload.userId, payload.workspaceId)
+    }
+  } catch { /* no bloquear el logout */ }
 
-// ─── Cookie Helpers ───────────────────────────────────────────
+  // Clear the session cookie
+  response.cookies.set(SESSION_COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // SEC-003
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  })
 
-const clearCookie = (name: string) => ({
-  name,
-  value: '',
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-  maxAge: 0,
-})
-
-// ─── Route Handler ────────────────────────────────────────────
+  return response
+}
 
 export async function POST(req: NextRequest) {
-  logInfo('AUTH', 'logout_start', {})
+  return clearSession(req, NextResponse.json({ success: true }))
+}
 
-  try {
-    // Best-effort: try to extract tokens and revoke in Redis
-    // Even if this fails, we still clear cookies on the response
-    const accessToken = req.cookies.get(SESSION_COOKIE_NAME)?.value
-
-    if (accessToken) {
-      try {
-        const payload = await verifyAccessToken(accessToken)
-        if (payload) {
-          await revokeSession(accessToken, payload.userId)
-          logInfo('AUTH', 'logout_revoked_session', { userId: payload.userId })
-        }
-      } catch {
-        // Token might be malformed or already expired — that's fine
-        logError('AUTH', 'logout_revoke_failed', null)
-      }
-    }
-
-    // ─── Build response with cleared cookies ────────────────
-    const response = NextResponse.json({ success: true })
-
-    // Clear access token cookie
-    response.cookies.set(
-      clearCookie(SESSION_COOKIE_NAME).name,
-      clearCookie(SESSION_COOKIE_NAME).value,
-      clearCookie(SESSION_COOKIE_NAME),
-    )
-
-    // Clear refresh token cookie
-    response.cookies.set(
-      clearCookie(REFRESH_COOKIE_NAME).name,
-      clearCookie(REFRESH_COOKIE_NAME).value,
-      clearCookie(REFRESH_COOKIE_NAME),
-    )
-
-    logOk('AUTH', 'logout_success', {})
-
-    return response
-  } catch (err) {
-    logError('AUTH', 'logout_unexpected_error', err)
-
-    // Even on error, always clear cookies
-    const response = NextResponse.json({ success: true })
-    response.cookies.set(
-      clearCookie(SESSION_COOKIE_NAME).name,
-      clearCookie(SESSION_COOKIE_NAME).value,
-      clearCookie(SESSION_COOKIE_NAME),
-    )
-    response.cookies.set(
-      clearCookie(REFRESH_COOKIE_NAME).name,
-      clearCookie(REFRESH_COOKIE_NAME).value,
-      clearCookie(REFRESH_COOKIE_NAME),
-    )
-
-    return response
-  }
+export async function GET(req: NextRequest) {
+  // Navegación directa (link): limpia la sesión y manda al login.
+  // OJO: usar Location RELATIVA ('/login'), NO new URL('/login', req.url):
+  // detrás del proxy (Cloudflare→localhost:3105) req.url es el host INTERNO,
+  // y el redirect terminaba en http://localhost:3105/login → ERR_CONNECTION_REFUSED
+  // en el navegador del usuario (reporte de Jhon 2026-07-30). Una Location
+  // relativa la resuelve el navegador sobre el dominio real (valiautoflow.com).
+  const res = new NextResponse(null, { status: 302, headers: { Location: '/login' } })
+  return clearSession(req, res)
 }

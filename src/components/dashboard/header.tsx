@@ -20,6 +20,7 @@ import {
   Command,
   Sun,
   Moon,
+  HelpCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -41,18 +42,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { useTheme } from 'next-themes'
 import { getInitials } from '@/lib/utils'
 import type { ViewType } from './dashboard-layout'
+import { ProfileModal } from './profile-modal'
 
 const viewTitles: Record<ViewType, string> = {
   dashboard: 'Dashboard',
   'chat-demo': 'Chat IA en Vivo',
   inbox: 'Bandeja de Entrada',
   pipeline: 'Pipeline de Ventas',
+  inventory: 'Inventario de Autos',
   contacts: 'Contactos',
   agents: 'Agentes IA',
+  'agent-factory': 'Agentes IA', // mismo módulo: "Agentes IA" abre el Agent Factory
   analytics: 'Analíticas',
   automations: 'Automatizaciones',
   team: 'Equipo',
@@ -60,9 +65,15 @@ const viewTitles: Record<ViewType, string> = {
   valiguard: 'ValiGuard',
   admin: 'Admin',
   settings: 'Configuración',
+  'settings:whatsapp': 'Configuración',
   playground: 'Playground IA',
   reports: 'Reportes',
   calendar: 'Calendario',
+  marketing: 'Marketing IA',
+  meli: 'Mercado Libre',
+  copilot: 'Copiloto IA',
+  gbrain: 'gBrain',
+  manual: 'Manual de Usuario',
 }
 
 interface Notification {
@@ -72,6 +83,8 @@ interface Notification {
   description: string
   timestamp: string
   read: boolean
+  contactId?: string
+  view?: string
 }
 
 interface HeaderProps {
@@ -79,6 +92,8 @@ interface HeaderProps {
   onMenuToggle: () => void
   onViewChange: (view: ViewType) => void
   workspaceId: string
+  /** Abre la conversación de un contacto en la bandeja (deep-link de notificaciones). */
+  onOpenContact?: (contactId: string) => void
 }
 
 function getNotificationIcon(type: Notification['type']) {
@@ -104,14 +119,16 @@ function timeAgo(dateStr: string): string {
   return `Hace ${Math.floor(diff / 86400000)}d`
 }
 
-export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: HeaderProps) {
+export function Header({ activeView, onMenuToggle, onViewChange, workspaceId, onOpenContact }: HeaderProps) {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [isMac, setIsMac] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchFeedback, setSearchFeedback] = useState('')
+  const [profileOpen, setProfileOpen] = useState(false)
   const [whatsappConnected, setWhatsappConnected] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -119,6 +136,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
 
   useEffect(() => {
     setMounted(true)
+    setIsMac(typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   }, [])
 
   // Fetch WhatsApp status on mount
@@ -130,7 +148,10 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
         const data = await res.json()
         setWhatsappConnected(data.connected)
       } catch {
-        toast.error('Error de conexión con WhatsApp')
+        // Poll de fondo: un fallo transitorio NO debe disparar toasts que
+        // asustan al usuario ("Error de conexión con WhatsApp" cada 15s
+        // durante una reconexión). El estado se refleja en el ícono.
+        console.warn('[Header] WhatsApp status poll falló (transitorio)')
       }
     }
     fetchStatus()
@@ -153,7 +174,8 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
           setUnreadCount(data.unreadCount || 0)
         }
       } catch {
-        toast.error('Error al cargar notificaciones')
+        // Poll de fondo — silencioso ante fallos transitorios (sin toast).
+        console.warn('[Header] notifications poll falló (transitorio)')
       } finally {
         setNotifLoading(false)
       }
@@ -183,9 +205,22 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
     logout()
   }, [logout])
 
+  const [showAllNotifs, setShowAllNotifs] = useState(false)
+
+  // Navega a donde corresponde según el tipo de notificación:
+  // mensaje/IA → ESA conversación en la bandeja; trato → pipeline; contacto → contactos.
+  const openNotification = useCallback((notif: Notification) => {
+    if ((notif.type === 'message' || notif.type === 'ai_response') && notif.contactId && onOpenContact) {
+      onOpenContact(notif.contactId)
+      return
+    }
+    const target = (notif.view || (notif.type === 'deal_won' || notif.type === 'deal_lost' ? 'pipeline' : notif.type === 'new_contact' ? 'contacts' : 'inbox')) as ViewType
+    onViewChange(target)
+  }, [onOpenContact, onViewChange])
+
   const handleViewNotifications = useCallback(() => {
-    onViewChange('inbox')
-  }, [onViewChange])
+    setShowAllNotifs(true)
+  }, [])
 
   const handleMarkAllRead = useCallback(async () => {
     try {
@@ -201,33 +236,53 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
   const userEmail = user?.email || ''
   const userInitials = getInitials(userName)
   const userImage = user?.image
+  const roleLabel = ({ owner: 'Propietario', admin: 'Administrador', member: 'Vendedor', viewer: 'Lector' } as Record<string, string>)[user?.workspaceRole || 'owner'] || 'Miembro'
+  // Saludo del Tablero (según la hora) — se muestra en el header en la vista dashboard.
+  const _h = new Date().getHours()
+  const greetingText = `¡Buen${_h >= 6 && _h < 12 ? 'os días' : _h >= 12 && _h < 19 ? 'as tardes' : 'as noches'}, ${userName.split(' ')[0]}!`
 
   return (
     <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden h-9 w-9"
+          className="lg:hidden h-9 w-9 shrink-0"
           onClick={onMenuToggle}
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div>
-          <div>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <span>Dashboard</span>
-              <ChevronRight className="h-3 w-3" />
-              <span className="font-semibold text-foreground">{viewTitles[activeView]}</span>
+        {activeView === 'dashboard' ? (
+          // En el Tablero: saludo del Copiloto (misma fila que búsqueda y perfil) — como el mockup
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shrink-0 shadow-lg shadow-violet-600/30">
+              <Bot className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0 hidden sm:block leading-tight">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[15px] font-bold text-foreground truncate">{greetingText} 👋</h2>
+                <Badge className="h-4 text-[8px] px-1.5 bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 gap-1 shrink-0">
+                  <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>
+                  IA Activa
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate">Tu Copiloto de IA está activo y optimizando tus ventas.</p>
             </div>
           </div>
-        </div>
+        ) : (
+          // Breadcrumb "Dashboard › Vista": oculto en móvil (ocupa espacio y es redundante).
+          <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span>Dashboard</span>
+            <ChevronRight className="h-3 w-3" />
+            <span className="font-semibold text-foreground">{viewTitles[activeView]}</span>
+          </div>
+        )}
       </div>
 
       {/* Center - Search */}
       <div className="hidden md:flex flex-1 max-w-md mx-4">
-        <div className="relative w-full">
+        <div className="relative w-full" data-tour="header-search">
           <Search className={cn(
             'absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-150',
             searchFocused ? 'text-emerald-500' : 'text-muted-foreground'
@@ -242,8 +297,11 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
             onKeyDown={handleSearch}
           />
           <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden lg:inline-flex h-5 items-center gap-1 rounded-md border border-border/60 bg-muted/80 px-1.5 text-[10px] font-medium text-muted-foreground pointer-events-none">
-            <Command className="h-2.5 w-2.5" />
-            <span>⌘K</span>
+            {isMac ? (
+              <><Command className="h-2.5 w-2.5" /><span>K</span></>
+            ) : (
+              <span>Ctrl K</span>
+            )}
           </kbd>
           {searchFeedback && (
             <span className="absolute top-full left-0 mt-1 text-xs text-muted-foreground whitespace-nowrap">{searchFeedback}</span>
@@ -251,59 +309,15 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
         </div>
       </div>
 
-      {/* Right side */}
-      <div className="flex items-center gap-2">
-        {/* Channel Status Indicators */}
-        <div className="hidden sm:flex items-center gap-1.5 mr-2">
-          <TooltipProvider delayDuration={300}>
-            {channelStatuses.map((ch) => (
-              <Tooltip key={ch.name}>
-                <TooltipTrigger asChild>
-                  <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-smooth', ch.connected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700')}>
-                    <div className={cn('w-1.5 h-1.5 rounded-full', ch.connected ? 'bg-emerald-500 animate-pulse-dot' : 'bg-zinc-400')} />
-                    <span>{ch.name}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>{ch.name} {ch.connected ? 'conectado' : 'desconectado'}</p>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </TooltipProvider>
-        </div>
-
-        {/* Theme Toggle */}
-        {mounted && (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                >
-                  {theme === 'dark' ? (
-                    <Sun className="h-4 w-4 text-amber-400" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
+      {/* Right side — orden del mockup: notificaciones · WhatsApp · ayuda · perfil */}
+      <div className="flex items-center gap-1">
         {/* Notifications */}
         <DropdownMenu>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className={cn(
+                  <Button variant="ghost" size="icon" data-tour="header-bell" className={cn(
                 'relative h-9 w-9',
                 unreadCount > 0 && 'text-emerald-500'
               )}>
@@ -345,8 +359,8 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
             {!notifLoading && notifications.length === 0 && (
               <div className="flex flex-col items-center py-8 gap-2">
                 <Bell className="h-8 w-8 text-zinc-300 dark:text-zinc-600" />
-                <p className="text-sm text-zinc-500">Sin notificaciones</p>
-                <p className="text-xs text-zinc-400">Las notificaciones aparecerán aquí</p>
+                <p className="text-sm text-zinc-500">Sin notificaciones recientes</p>
+                <button onClick={handleViewNotifications} className="text-xs text-emerald-600 font-medium hover:underline">Ver historial (48 h)</button>
               </div>
             )}
 
@@ -354,7 +368,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
               <>
                 <div className="max-h-64 overflow-y-auto">
                   {notifications.slice(0, 5).map((notif) => (
-                    <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1.5 py-3 px-3 cursor-pointer">
+                    <DropdownMenuItem key={notif.id} onClick={() => openNotification(notif)} title="Abrir" className="flex flex-col items-start gap-1.5 py-3 px-3 cursor-pointer">
                       <div className="flex items-center gap-2 w-full">
                         {!notif.read && <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />}
                         {getNotificationIcon(notif.type)}
@@ -388,18 +402,46 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User Avatar */}
+        {/* WhatsApp (icono verde, estado real) */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onViewChange('settings:whatsapp')}>
+                <MessageCircle className={cn('h-4 w-4', whatsappConnected ? 'text-emerald-500' : 'text-zinc-400')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom"><p>WhatsApp {whatsappConnected ? 'conectado' : 'desconectado'}</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Ayuda */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onViewChange('manual')}>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom"><p>Ayuda / Manual</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* User Avatar + nombre + rol (como el mockup) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-9 gap-2 px-2">
-              <div className="relative">
-                <Avatar className="h-7 w-7">
+            <Button variant="ghost" className="h-11 gap-2 px-2">
+              <div className="relative shrink-0">
+                <Avatar className="h-8 w-8">
                   {userImage && <AvatarImage src={userImage} alt={userName} />}
                   <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-xs font-semibold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-background" />
+              </div>
+              <div className="hidden md:flex flex-col items-start leading-tight min-w-0">
+                <span className="text-xs font-semibold text-foreground truncate max-w-[130px]">{userName}</span>
+                <span className="text-[10px] text-muted-foreground">{roleLabel} · Pro</span>
               </div>
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground hidden sm:block" />
             </Button>
@@ -412,7 +454,7 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer" onClick={() => onViewChange('settings')}>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setProfileOpen(true)}>
               <User className="h-4 w-4 mr-2" />
               Mi Perfil
             </DropdownMenuItem>
@@ -421,6 +463,13 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
               Configuración
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            {mounted && (
+              <DropdownMenuItem className="cursor-pointer" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? <Sun className="h-4 w-4 mr-2 text-amber-400" /> : <Moon className="h-4 w-4 mr-2" />}
+                {theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               Cerrar Sesión
@@ -428,6 +477,63 @@ export function Header({ activeView, onMenuToggle, onViewChange, workspaceId }: 
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} />
+      <AllNotifsModal open={showAllNotifs} onOpenChange={setShowAllNotifs} workspaceId={workspaceId} onOpen={(n) => { setShowAllNotifs(false); openNotification(n) }} />
     </header>
+  )
+}
+
+// ═══ Todas las notificaciones (48 h) — lista completa y clicable ═══
+function AllNotifsModal({ open, onOpenChange, workspaceId, onOpen }: { open: boolean; onOpenChange: (o: boolean) => void; workspaceId: string; onOpen: (n: Notification) => void }) {
+  const [items, setItems] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !workspaceId) return
+    setLoading(true)
+    fetch(`/api/notifications?workspaceId=${workspaceId}&full=1`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.success) setItems(d.notifications || []) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [open, workspaceId])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(96vw,760px)] sm:max-w-[760px] max-h-[85vh] overflow-y-auto overflow-x-hidden custom-scroll">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-emerald-500" /> Todas las notificaciones
+            <span className="text-xs font-normal text-muted-foreground">· últimas 48 horas</span>
+          </DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">Cargando notificaciones…</div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center py-10 gap-2">
+            <Bell className="h-8 w-8 text-zinc-300 dark:text-zinc-600" />
+            <p className="text-sm text-muted-foreground">Sin actividad en las últimas 48 horas</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {items.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => onOpen(n)}
+                title="Abrir donde corresponde"
+                className="w-full text-left rounded-lg border border-border/50 px-3 py-2.5 hover:bg-muted/60 hover:border-emerald-500/30 transition-colors"
+              >
+                <div className="flex items-center gap-2 w-full">
+                  {getNotificationIcon(n.type)}
+                  <span className="text-sm font-medium flex-1 min-w-0 truncate">{n.title}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(n.timestamp)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6 mt-0.5 break-words">{n.description}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

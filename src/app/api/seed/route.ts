@@ -1,20 +1,15 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — Seed Demo Data
 // POST /api/seed — Seeds realistic business automation services data
-// Unified under jvegahdz24@gmail.com workspace
+// Uses an explicitly configured seed user from environment variables
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
-import crypto from 'crypto'
 import { randomPick, randomInt, randomDaysBack } from '@/lib/seeded-random'
-
-// SHA-256 password hashing (bcrypt OOM-kills in low-memory environments)
-function hashPassword(plain: string): string {
-  return crypto.createHash('sha256').update(plain).digest('hex')
-}
+import { hashPassword } from '@/lib/auth/auth'
 
 // ─── Demo Data Constants ─────────────────────────────────────
 
@@ -73,7 +68,7 @@ const MEXICAN_CITIES = [
   'Cancún', 'Querétaro', 'Mérida', 'León', 'Aguascalientes',
 ]
 
-const SOURCES = ['whatsapp', 'facebook', 'instagram', 'google', 'webform', 'referral', 'telegram']
+const SOURCES = ['whatsapp', 'facebook', 'instagram', 'google', 'webform', 'referral']
 const PHONES_MOCK = [
   '5512345678', '5523456789', '5534567890', '5545678901', '5556789012',
   '5567890123', '5578901234', '5589012345', '5590123456', '5501234567',
@@ -109,17 +104,17 @@ const AI_RESPONSES = [
   '¡Hola! Bienvenido a ValiAutoFlow. Me gustaría conocer un poco más sobre tu negocio. ¿Qué tipo de automatización necesitas?',
   '¡Excelente! El desarrollo web es una de nuestras especialidades. ¿Tienes un proyecto en mente o necesitas algo desde cero?',
   'La consultoría de IA puede transformar tu operación. ¿Cuántos procesos manejas actualmente de forma manual?',
-  'Un CRM personalizado empieza desde $15,000 MXN dependiendo de la complejidad. ¿Qué procesos necesitas gestionar?',
+  'El precio depende del alcance, usuarios e integraciones. En una demo podemos revisar tu operación y darte una propuesta adecuada. ¿Qué procesos necesitas gestionar?',
   '¡Gracias por contactarnos! Me encantaría ayudarte a encontrar la solución ideal para tu negocio. ¿Ya tienes algún sistema en mente?',
   'El marketing digital es clave para crecer. ¿Ya tienes presencia en redes o comenzamos desde cero?',
   '¡Por supuesto! Agendar una llamada es sin compromiso. ¿Qué día te queda mejor?',
   '¡Excelente idea! Una llamada es el mejor paso. ¿Te gustaría esta semana por la mañana o por la tarde?',
-  'La automatización con WhatsApp es nuestro servicio más popular. Reduce respuestas manuales hasta 80%. ¿Te gustaría saber más?',
-  'Ofrecemos planes flexibles de pago. ¿Prefieres pagar en una sola exhibición o a meses con descuento?',
+  'La automatización con WhatsApp puede reducir trabajo manual y ordenar el seguimiento. ¿Te gustaría conocer cómo funcionaría en tu negocio?',
+  'Las opciones de pago dependen de la propuesta aprobada. En la demo podemos revisar el alcance y las condiciones disponibles.',
   'Tenemos experiencia en más de 15 sectores: retail, servicios, salud, educación y más. ¿En qué sector estás?',
   'Las mensualidades dependen del servicio. ¿Buscas algo desde $5,000 MXN al mes?',
   'Entiendo, comparar es inteligente. ¿Pudiste verificar que incluyen soporte, capacitación y actualizaciones?',
-  '¡Sí! Este mes tenemos 20% de descuento en nuevos proyectos. ¿Te gustaría agendar una llamada?',
+  'Puedo revisar si existe una promoción autorizada para tu caso. ¿Te gustaría agendar una demo?',
   'Es buena idea comparar. Nuestro paquete es integral con soporte dedicado. ¿Qué incluye la otra opción?',
   'Perfecto, es importante que tu socio también esté convencido. ¿Qué te parece si agendamos una llamada para ambos?',
   'La consultoría incluye diagnóstico, implementación, capacitación y 30 días de soporte. ¿Te gustaría una demo?',
@@ -160,62 +155,41 @@ function randomEmail(name: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── Production guard: ALWAYS disabled in production ────
-    // Demo seed is permanently disabled. Real leads come from WhatsApp only.
-    if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json(
-        { error: 'Seed endpoint is permanently disabled in production. Real contacts are created via WhatsApp.', code: 'SEED_DISABLED' },
-        { status: 404 }
-      )
+    // El seed nunca debe quedar disponible por accidente en una instancia
+    // pública, aunque NODE_ENV esté mal configurado.
+    if (process.env.SEED_ENABLED !== 'true') {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    // ─── PIN Protection only for destructive reset operations ──
-    const { searchParams } = new URL(req.url)
-    const isReset = searchParams.get('reset') === 'true'
-
-    if (isReset) {
-      const providedPin = searchParams.get('pin')
-      const expectedPin = process.env.SEED_PIN
-      if (!expectedPin) {
-        return NextResponse.json(
-          { error: 'SEED_PIN no configurado. No se permite reset sin PIN.', code: 'FORBIDDEN' },
-          { status: 403 }
-        )
-      }
-      if (providedPin !== expectedPin) {
-        return NextResponse.json(
-          { error: 'PIN de seguridad requerido para reset. Contacta al administrador.', code: 'FORBIDDEN' },
-          { status: 403 }
-        )
-      }
+    const expectedPin = process.env.SEED_PIN
+    const providedPin = req.headers.get('x-seed-pin')
+    if (!expectedPin || !providedPin || providedPin.length !== expectedPin.length ||
+        !timingSafeEqual(Buffer.from(providedPin), Buffer.from(expectedPin))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // ─── 1. Find or Create JV User ──────────────────────────
+    // ─── 1. Find or Create Seed User ──────────────────────────
     console.log('[Seed] Starting demo data creation for ValiAutoFlow...')
 
-    const hashedPassword = hashPassword('valiflow2026')
+    const seedEmail = process.env.SEED_USER_EMAIL
+    const seedPassword = process.env.SEED_USER_PASSWORD
+    if (!seedEmail || !seedPassword || seedPassword.length < 12) {
+      return NextResponse.json({ error: 'Seed user credentials are not configured' }, { status: 503 })
+    }
+    const hashedPassword = hashPassword(seedPassword)
 
     let user = await db.user.findUnique({
-      where: { email: 'jvegahdz24@gmail.com' },
+      where: { email: seedEmail.toLowerCase().trim() },
     })
-
-    // Migrate legacy bcrypt hash → SHA-256 if needed
-    if (user && user.password && (user.password.startsWith('$2b$') || user.password.startsWith('$2a$'))) {
-      await db.user.update({
-        where: { id: user.id },
-        data: { password: hashedPassword },
-      })
-      console.log('[Seed] Migrated password from bcrypt → SHA-256')
-    }
 
     if (!user) {
       user = await db.user.create({
         data: {
-          name: 'JVega',
-          email: 'jvegahdz24@gmail.com',
+          name: process.env.SEED_USER_NAME || 'Demo User',
+          email: seedEmail.toLowerCase().trim(),
           password: hashedPassword,
           role: 'owner',
-          phone: '5512340000',
+          phone: null,
           timezone: 'America/Mexico_City',
           locale: 'es-MX',
         },
@@ -227,7 +201,7 @@ export async function POST(req: NextRequest) {
 
     // ─── 2. Find or Create ValiAutoFlow Workspace ───────────
     let workspace = await db.workspace.findFirst({
-      where: { slug: 'valiflow-jvega' },
+      where: { slug: process.env.SEED_WORKSPACE_SLUG || 'valiautoflow-demo' },
     })
 
     if (!workspace) {
@@ -235,9 +209,9 @@ export async function POST(req: NextRequest) {
       workspace = await db.workspace.create({
         data: {
           name: 'ValiAutoFlow',
-          slug: 'valiflow-jvega',
+          slug: process.env.SEED_WORKSPACE_SLUG || 'valiautoflow-demo',
           ownerId: user.id,
-          industry: 'services',
+          industry: 'automotive',
           logo: null,
           plan: 'pro',
           maxContacts: defaultPlan.limits.maxContacts,
@@ -473,7 +447,7 @@ export async function POST(req: NextRequest) {
         data: {
           workspaceId: workspace.id,
           contactId: contact.id,
-          channel: randomPick(['whatsapp', 'whatsapp', 'whatsapp', 'telegram', 'webchat']),
+          channel: randomPick(['whatsapp', 'whatsapp', 'whatsapp', 'webchat']),
           status: contact.leadScore > 60 ? 'active' : randomPick(['active', 'active', 'closed', 'pending']),
           assignedAgentId: contact.leadScore > 70 ? 'sales' : 'qualifier',
           unreadCount: randomBetween(0, 3),
@@ -661,21 +635,15 @@ export async function POST(req: NextRequest) {
     console.log(`[Seed] Agent memories created`)
 
     // ─── 11. Create Webhook Configs ─────────────────────────
+    const seedWebhookSecret = process.env.SEED_WEBHOOK_SECRET || randomBytes(32).toString('hex')
     await db.webhookConfig.createMany({
       data: [
         {
           workspaceId: workspace.id,
           channel: 'whatsapp',
           webhookUrl: '/api/webhooks/whatsapp',
-          secret: 'valiflow-whatsapp-secret-2026',
+          secret: seedWebhookSecret,
           isActive: true,
-        },
-        {
-          workspaceId: workspace.id,
-          channel: 'telegram',
-          webhookUrl: '/api/webhooks/telegram',
-          secret: 'valiflow-telegram-secret-2026',
-          isActive: false,
         },
       ],
     })
@@ -735,31 +703,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET endpoint to check seed status
-export async function GET(req: NextRequest) {
-  try {
-    await requireAuth(req)
-
-    const workspaceCount = await db.workspace.count()
-    const contactCount = await db.contact.count()
-    const conversationCount = await db.conversation.count()
-    const dealCount = await db.deal.count()
-    const agentCount = await db.agent.count()
-
-    const isSeeded = workspaceCount > 0
-
-    return NextResponse.json({
-      seeded: isSeeded,
-      stats: {
-        workspaces: workspaceCount,
-        contacts: contactCount,
-        conversations: conversationCount,
-        deals: dealCount,
-        agents: agentCount,
-      },
-    })
-  } catch (error) {
-    console.error('[Seed Status Error]', error)
-    return errorResponse(error, 'Internal server error')
-  }
+// Seed status is intentionally not public. Use an authenticated health check
+// for operational readiness instead of exposing tenant-wide counts.
+export async function GET(_req: NextRequest) {
+  return NextResponse.json({ error: 'Not found' }, { status: 404 })
 }

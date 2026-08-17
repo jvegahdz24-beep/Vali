@@ -1,57 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — AI Response Humanizer
 // Transforms AI responses into natural, human-like WhatsApp messages
-// FIX P0.2: Added enforceIdentity() for post-generation identity correction
 // ═══════════════════════════════════════════════════════════════
-
-// ─── Identity enforcement patterns (FIX P0.2) ───────────────
-// Replaces any wrong self-identification after LLM generation
-
-const IDENTITY_REPLACEMENTS: [RegExp, string][] = [
-  // Wrong name → Jhon
-  [/Me llamo Carlos\b/gi, 'Me llamo Jhon'],
-  [/Soy Carlos\b/gi, 'Soy Jhon'],
-  [/Mi nombre es Carlos\b/gi, 'Mi nombre es Jhon'],
-  [/Me llamo Vali\b/gi, 'Me llamo Jhon'],
-  [/Soy Vali\b/gi, 'Soy Jhon'],
-  [/Mi nombre es Vali\b/gi, 'Mi nombre es Jhon'],
-  [/Me llamo ValiAutoFlow\b/gi, 'Me llamo Jhon'],
-  [/Soy ValiAutoFlow\b/gi, 'Soy Jhon'],
-  [/Mi nombre es ValiAutoFlow\b/gi, 'Mi nombre es Jhon'],
-  // AI self-references → remove or replace
-  [/como asistente virtual/gi, ''],
-  [/como IA\b/gi, ''],
-  [/como inteligencia artificial/gi, ''],
-  [/como un bot\b/gi, ''],
-  [/como bot\b/gi, ''],
-  [/soy un asistente/gi, ''],
-  [/soy una IA/gi, ''],
-  [/soy un bot\b/gi, ''],
-  // Platform name in self-reference → personal
-  [/de ValiAutoFlow, soy/gi, 'soy Jhon del equipo de'],
-  [/ValiAutoFlow aquí/gi, 'Jhon aquí'],
-  [/ValiAutoFlow al habla/gi, 'Jhon al habla'],
-]
-
-/**
- * FIX P0.2: Post-generation identity enforcement.
- * Catches and replaces any identity violations that the LLM might produce
- * despite the IDENTIDAD FIJA prompt block.
- * This is a safety net — the primary enforcement is in the system prompt.
- */
-export function enforceIdentity(text: string): string {
-  if (!text || typeof text !== 'string') return text
-
-  let result = text
-  for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
-    result = result.replace(pattern, replacement)
-  }
-
-  // Clean up double spaces created by empty replacements
-  result = result.replace(/\s{2,}/g, ' ').trim()
-
-  return result
-}
 
 // ─── Robotic openers to strip ─────────────────────────────────
 
@@ -145,12 +95,11 @@ export function humanizeResponse(text: string): string {
   // 5. Fix common AI artifacts
   result = fixAIArtifacts(result)
 
-  // 6. FIX P0.2: Enforce Jhon identity (post-generation safety net)
+  // 6. Remove identity and AI-disclaimer leaks.
   result = enforceIdentity(result)
+  result = removeAIReferences(result)
 
-  // 7. Add occasional emoji (10% chance)
-  result = maybeAddEmoji(result)
-
+  // Emojis are opt-in; the sales prompt must not add them silently.
   return result.trim()
 }
 
@@ -306,6 +255,28 @@ export function maybeAddEmoji(text: string): string {
   const emoji = CASUAL_EMOJIS[Math.floor(Math.random() * CASUAL_EMOJIS.length)]
 
   return `${text.trim()} ${emoji}`
+}
+
+/**
+ * Keep the assistant identity consistent in customer-facing replies.
+ * This is intentionally narrow: it rewrites self-introductions only,
+ * not legitimate mentions of the product name in a business context.
+ */
+export function enforceIdentity(text: string): string {
+  if (text == null || typeof text !== 'string') return text as any
+  return text
+    .replace(/\bMe llamo\s+(?:Carlos|Vali|Valentina)\b/gi, 'Me llamo Jhon')
+    .replace(/\bSoy\s+(?:Carlos|Vali|Valentina)\b/gi, 'Soy Jhon')
+    .replace(/\bde\s+ValiAutoFlow,\s+soy\b/gi, 'soy Jhon del equipo de')
+    .replace(/\b(?:Soy|Aquí está)\s+ValiAutoFlow\b/gi, 'Soy Jhon del equipo')
+    .replace(/\bValiAutoFlow\s+aquí/gi, 'Jhon del equipo aquí')
+}
+
+function removeAIReferences(text: string): string {
+  return text
+    .replace(/\bComo\s+asistente\s+virtual\b[,:]?\s*/gi, '')
+    .replace(/\bSoy\s+una\s+IA\b(?:\s+que)?[^.!?]*(?:[.!?]|$)/gi, '')
+    .replace(/\b(?:asistente virtual|modelo de IA|inteligencia artificial)\b[,:]?/gi, '')
 }
 
 // ═══════════════════════════════════════════════════════════════

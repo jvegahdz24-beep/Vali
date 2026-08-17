@@ -6,20 +6,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    if (!workspaceId) {
-      return Response.json({ error: 'workspaceId is required' }, { status: 400 })
-    }
-
-    // RBAC: Any workspace member can list automations
-    await rbac.canRead(session, workspaceId)
+    await requireWorkspace(workspaceId!, session.userId)
 
     const triggerType = searchParams.get('triggerType') || undefined
     const includeInactive = searchParams.get('includeInactive') === 'true'
@@ -53,8 +47,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { workspaceId, name, description, triggerType, triggerConfig, actions, isActive = true } = body
 
-    // RBAC: Create automation requires owner or admin
-    await rbac.ownerOrAdmin(session, workspaceId)
+    const member = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(member.role, 'automations.manage')
 
     if (!name || !triggerType) {
       return Response.json(

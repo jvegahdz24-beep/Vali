@@ -1,125 +1,159 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Telegram Bot Setup Endpoint
-// POST /api/telegram/setup — Register a Telegram bot for a workspace
-// GET /api/telegram/setup — Get current bot status
-// DELETE /api/telegram/setup — Disconnect the bot
+// ValiAutoFlow — Telegram Webhook Setup
+// Route: POST /api/telegram/setup
 //
-// Requires authentication via session cookie.
+// Registers (or removes) the Telegram Bot webhook with Telegram's
+// servers. The webhook is used only for account pairing via /start;
+// Telegram is an internal notification channel, not a customer chat.
+//
+// Usage:
+//   POST /api/telegram/setup
+//   Body: { workspaceId: string, action?: "set" | "delete" }
+//
+// The bot token must be configured in workspace settings:
+//   wsSettings.telegramBotToken  — workspace-specific bot token
+// Or in env: TELEGRAM_BOT_TOKEN (fallback)
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
-import { setupTelegramBot, disconnectTelegramBot, getTelegramBotStatus } from '@/lib/telegram-control'
+import { requireAuth, requireWorkspace, ApiError } from '@/lib/api-auth'
+import { db } from '@/lib/db'
 
-/**
- * POST /api/telegram/setup
- *
- * Register a Telegram bot for the workspace.
- * Body: { workspaceId, botToken }
- */
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth(req)
-    const body = await req.json()
-    const { workspaceId, botToken } = body
 
-    if (!workspaceId || !botToken) {
+    const body = await req.json()
+    const { workspaceId, action = 'set' } = body as {
+      workspaceId?: string
+      action?: 'set' | 'delete'
+    }
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
+    }
+
+    // ── Verify caller is owner/admin of the workspace ──
+    const member = await requireWorkspace(workspaceId, session.userId)
+    if (!['owner', 'admin'].includes(member.role)) {
+      return NextResponse.json({ error: 'Forbidden — owner or admin required' }, { status: 403 })
+    }
+
+    // ── Load workspace settings ──
+    const workspace = await db.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { settings: true },
+    })
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
+    }
+
+    let wsSettings: Record<string, unknown> = {}
+    try {
+      wsSettings = JSON.parse(workspace.settings || '{}')
+    } catch { /* ignore */ }
+
+    const botToken = (wsSettings.telegramBotToken as string | undefined)
+      || process.env.TELEGRAM_BOT_TOKEN
+
+    if (!botToken) {
       return NextResponse.json(
-        { error: 'workspaceId and botToken are required' },
-        { status: 400 }
+        { error: 'telegramBotToken not configured. Add it to workspace settings or TELEGRAM_BOT_TOKEN env var.' },
+        { status: 422 }
       )
     }
 
-    await requireWorkspace(workspaceId, session.userId)
+    if (action === 'delete') {
+      // ── Remove webhook ──
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      return NextResponse.json({ ok: true, action: 'deleted', telegram: data })
+    }
 
-    // Build webhook URL from the request
-    const protocol = req.headers.get('x-forwarded-proto') || 'https'
-    const host = req.headers.get('host') || 'localhost:3000'
-    const webhookUrl = `${protocol}://${host}/api/telegram/webhook?bot_token=${encodeURIComponent(botToken)}`
-
-    const result = await setupTelegramBot(workspaceId, botToken, webhookUrl)
-
-    if (!result.success) {
+    // ── Set webhook ──
+    const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL
+    if (!baseUrl) {
       return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
+        { error: 'NEXTAUTH_URL or NEXT_PUBLIC_APP_URL env var is required to build the webhook URL.' },
+        { status: 422 }
+      )
+    }
+
+    const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/telegram/webhook/${workspaceId}`
+
+    const webhookSecret = (wsSettings.telegramWebhookSecret as string | undefined)
+      || process.env.TELEGRAM_WEBHOOK_SECRET
+
+    const payload: Record<string, unknown> = { url: webhookUrl }
+    if (webhookSecret) payload.secret_token = webhookSecret
+
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+
+    if (!data.ok) {
+      return NextResponse.json(
+        { error: 'Telegram API error', details: data },
+        { status: 502 }
       )
     }
 
     return NextResponse.json({
-      success: true,
-      message: 'Telegram bot registered successfully',
-      bot: result.botInfo,
+      ok: true,
       webhookUrl,
+      telegram: data,
     })
   } catch (error) {
-    return errorResponse(error, 'Failed to setup Telegram bot')
+    console.error('[Telegram setup]', error)
+    if (error instanceof ApiError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
-
-/**
- * GET /api/telegram/setup?workspaceId=xxx
- *
- * Get the current Telegram bot status for a workspace.
- */
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
-    const workspaceId = req.nextUrl.searchParams.get('workspaceId')
 
+    const workspaceId = req.nextUrl.searchParams.get('workspaceId')
     if (!workspaceId) {
-      return NextResponse.json(
-        { error: 'workspaceId query param is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'workspaceId query param required' }, { status: 400 })
     }
 
     await requireWorkspace(workspaceId, session.userId)
 
-    const status = await getTelegramBotStatus(workspaceId)
-
-    return NextResponse.json({
-      success: true,
-      ...status,
+    const workspace = await db.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { settings: true },
     })
-  } catch (error) {
-    return errorResponse(error, 'Failed to get Telegram bot status')
-  }
-}
-
-/**
- * DELETE /api/telegram/setup?workspaceId=xxx
- *
- * Disconnect/remove the Telegram bot for a workspace.
- */
-export async function DELETE(req: NextRequest) {
-  try {
-    const session = await requireAuth(req)
-    const workspaceId = req.nextUrl.searchParams.get('workspaceId')
-
-    if (!workspaceId) {
-      return NextResponse.json(
-        { error: 'workspaceId query param is required' },
-        { status: 400 }
-      )
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
     }
 
-    await requireWorkspace(workspaceId, session.userId)
+    let wsSettings: Record<string, unknown> = {}
+    try { wsSettings = JSON.parse(workspace.settings || '{}') } catch { /* ignore */ }
 
-    const result = await disconnectTelegramBot(workspaceId)
+    const botToken = (wsSettings.telegramBotToken as string | undefined)
+      || process.env.TELEGRAM_BOT_TOKEN
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
-      )
+    if (!botToken) {
+      return NextResponse.json({ configured: false, message: 'No bot token configured' })
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Telegram bot disconnected',
-    })
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`)
+    const data = await res.json()
+
+    return NextResponse.json({ configured: true, webhook: data.result })
   } catch (error) {
-    return errorResponse(error, 'Failed to disconnect Telegram bot')
+    console.error('[Telegram setup GET]', error)
+    if (error instanceof ApiError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

@@ -6,20 +6,14 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, errorResponse, getPlanLimits, ApiError } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    if (!workspaceId) {
-      return Response.json({ error: 'workspaceId is required' }, { status: 400 })
-    }
-
-    // RBAC: Any workspace member can list agents
-    await rbac.canRead(session, workspaceId)
+    await requireWorkspace(workspaceId!, session.userId)
 
     const type = searchParams.get('type') || undefined
     const includeInactive = searchParams.get('includeInactive') === 'true'
@@ -70,8 +64,20 @@ export async function POST(req: NextRequest) {
       webhookUrl,
     } = body
 
-    // RBAC: Create agent requires owner or admin
-    await rbac.ownerOrAdmin(session, workspaceId)
+    await requireWorkspace(workspaceId, session.userId)
+
+    // Enforce plan agent limit
+    const { limits, planName } = await getPlanLimits(workspaceId)
+    if (limits.maxAgents !== -1) {
+      const count = await db.agent.count({ where: { workspaceId, isActive: true } })
+      if (count >= limits.maxAgents) {
+        throw new ApiError(
+          403,
+          `Has alcanzado el límite de ${limits.maxAgents} agentes de tu plan ${planName}. Actualiza tu plan para crear más agentes.`,
+          'AGENT_LIMIT_REACHED'
+        )
+      }
+    }
 
     if (!name) {
       return Response.json(

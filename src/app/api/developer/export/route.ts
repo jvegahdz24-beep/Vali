@@ -16,20 +16,14 @@ const TABLE_FIELDS: Record<AllowedTable, string[]> = {
 
 export async function GET(request: NextRequest) {
   try {
-    const payload = await requireAuth(request)
-    const workspaceId = payload.workspaceId
-    if (!workspaceId) {
-      return NextResponse.json(
-        { success: false, error: 'No workspace asociado al usuario' },
-        { status: 400 }
-      )
-    }
-    await requireWorkspace(workspaceId, payload.userId)
-
+    const session = await requireAuth(request)
     const { searchParams } = new URL(request.url)
+    const workspaceId = searchParams.get('workspaceId') ?? ''
     const table = searchParams.get('table') as AllowedTable | null
     const format = searchParams.get('format') || 'json'
     const limit = parseInt(searchParams.get('limit') || '10')
+
+    await requireWorkspace(workspaceId, session.userId)
 
     if (!table || !ALLOWED_TABLES.includes(table as AllowedTable)) {
       return NextResponse.json(
@@ -49,10 +43,7 @@ export async function GET(request: NextRequest) {
       records = await db.conversation.findMany({ where: { workspaceId }, take: limit, orderBy: { createdAt: 'desc' } })
       total = await db.conversation.count({ where: { workspaceId } })
     } else if (table === 'messages') {
-      records = await db.message.findMany({
-        where: { conversation: { workspaceId } },
-        take: limit, orderBy: { createdAt: 'desc' },
-      })
+      records = await db.message.findMany({ where: { conversation: { workspaceId } }, take: limit, orderBy: { createdAt: 'desc' } })
       total = await db.message.count({ where: { conversation: { workspaceId } } })
     } else if (table === 'deals') {
       records = await db.deal.findMany({ where: { workspaceId }, take: limit, orderBy: { createdAt: 'desc' } })

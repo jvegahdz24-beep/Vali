@@ -15,6 +15,8 @@ import {
   AlertCircle,
   ChevronLeft,
   Download,
+  Upload,
+  FileSpreadsheet,
   Archive,
   Tag,
   Trash2,
@@ -23,6 +25,11 @@ import {
   X,
   SlidersHorizontal,
   ChevronDown,
+  Users,
+  UserPlus,
+  CheckCircle2,
+  Flame,
+  BellOff,
 } from 'lucide-react'
 import { cn, formatPhoneNumber, timeAgo, getInitials, getStageColor } from '@/lib/utils'
 import { CHANNELS } from '@/lib/constants'
@@ -30,8 +37,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
+import { ScoreRing } from '@/components/ui/score-ring'
+import { ExpedientePanel } from '@/components/dashboard/expediente-panel'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -83,8 +92,10 @@ interface Contact {
   leadScore: number
   source: string
   tags: string[]
+  customFields?: Record<string, unknown>
   status: string
   createdAt: string
+  avatar?: string | null
   lastMessageAt?: string
   _count?: {
     conversations: number
@@ -93,6 +104,7 @@ interface Contact {
 }
 
 interface ContactsViewProps {
+  onOpenContact?: (contactId: string) => void
   workspaceId: string
   onViewChange?: (view: string) => void
 }
@@ -104,11 +116,122 @@ function getScoreBadge(score: number) {
   return <Badge className="h-5 text-[10px] px-1.5 bg-red-100 text-red-700 border-0 font-semibold dark:bg-red-500/20 dark:text-red-400">{score}</Badge>
 }
 
+const HIDDEN_SYSTEM_TAGS = new Set([
+  'whatsapp_incoming',
+  'conversacion_activa',
+  'alto_engagement',
+  'interesa_modelo',
+  'nuevo',
+])
+
+const FRIENDLY_TAG_LABELS = new Map([
+  ['appointment-request', 'Solicitud de cita'],
+  ['agendado', 'Agendado'],
+  ['agendado-confirmado', 'Cita confirmada'],
+  ['proceso-pago', 'Proceso de pago'],
+  ['tiene_objeciones', 'Tiene objeciones'],
+  ['comparando_precios', 'Comparando precios'],
+  ['tiene_interes_financiero', 'Interés financiero'],
+  ['no-califica', 'No califica'],
+  ['referencia', 'Referencia'],
+])
+
+function parseContactTags(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).map((tag) => tag.trim()).filter(Boolean)
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.map(String).map((tag) => tag.trim()).filter(Boolean)
+    } catch {
+      return raw.split(',').map((tag) => tag.trim()).filter(Boolean)
+    }
+  }
+  return []
+}
+
+function isSystemTag(tag: string): boolean {
+  const normalized = tag.trim().toLowerCase()
+  return !normalized ||
+    HIDDEN_SYSTEM_TAGS.has(normalized) ||
+    normalized.startsWith('intent-') ||
+    normalized.startsWith('route-') ||
+    normalized.startsWith('sentiment-') ||
+    normalized.startsWith('source-') ||
+    normalized.startsWith('crm_') ||
+    normalized.startsWith('whatsapp_')
+}
+
+function formatTagLabel(tag: string): string {
+  const clean = tag.trim()
+  const normalized = clean.toLowerCase()
+  const directLabel = FRIENDLY_TAG_LABELS.get(normalized)
+  if (directLabel) return directLabel
+
+  const productMatch = clean.match(/^(?:producto|product|servicio|service|interes|interés):\s*(.+)$/i)
+  const interestMatch = clean.match(/^(?:interesado|interesa)[-_\s]+(.+)$/i)
+  const label = productMatch?.[1]?.trim() || interestMatch?.[1]?.trim() || clean
+
+  return label
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\p{L}/gu, (char) => char.toLocaleUpperCase('es-MX'))
+}
+
+function getVisibleTagLabels(tags: string[]): string[] {
+  const labels = new Map<string, string>()
+  tags.forEach((tag) => {
+    if (isSystemTag(tag)) return
+    const label = formatTagLabel(tag)
+    const key = label.toLocaleLowerCase('es-MX')
+    if (label && !labels.has(key)) labels.set(key, label)
+  })
+  return Array.from(labels.values())
+}
+
+const CONTACT_INFO_LABELS: Record<string, string> = {
+  nombre_detectado: 'Nombre',
+  correo_detectado: 'Correo',
+  empresa_detectada: 'Empresa',
+  rfc_detectado: 'RFC',
+  ubicacion_detectada: 'Ubicación',
+  presupuesto_detectado: 'Presupuesto',
+  interes_detectado: 'Interés',
+}
+
+function parseContactCustomFields(raw: unknown): Record<string, unknown> {
+  if (!raw) return {}
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+function getContactInfoEntries(customFields?: Record<string, unknown>): Array<{ label: string; value: string }> {
+  if (!customFields) return []
+  return Object.entries(CONTACT_INFO_LABELS)
+    .map(([key, label]) => {
+      const rawValue = customFields[key]
+      const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+      return value ? { label, value } : null
+    })
+    .filter((entry): entry is { label: string; value: string } => Boolean(entry))
+}
+
 // ── Contacts View ──
 
-export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
+export function ContactsView({ workspaceId, onViewChange, onOpenContact }: ContactsViewProps) {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [total, setTotal] = useState(0)
+  const [cStats, setCStats] = useState<{ total: number; newThisMonth: number; newThisMonthDelta: number; clientes: number; hotLeads: number; noContact30d: number; tabs: { todos: number; leads: number; clientes: number; prospectos: number; inactivos: number }; bySource?: { source: string; total: number; hot: number }[] } | null>(null)
+  const [activeTab, setActiveTab] = useState<'todos' | 'leads' | 'clientes' | 'prospectos' | 'inactivos'>('todos')
+  const [detailContactId, setDetailContactId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize] = useState(50)
   const [searchQuery, setSearchQuery] = useState('')
@@ -143,6 +266,13 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
   const [newTags, setNewTags] = useState('')
   const [creatingContact, setCreatingContact] = useState(false)
 
+  // Import state
+  const [showImport, setShowImport] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; total: number; errors: number; errorDetails?: Array<{ row: number; message: string }> } | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fetch all available tags
@@ -154,19 +284,15 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
       const data = await res.json()
       const tagSet = new Set<string>()
       ;(data.items || []).forEach((c: Record<string, unknown>) => {
-        const raw = c.tags
-        if (Array.isArray(raw)) raw.forEach((t: string) => tagSet.add(t))
-        else if (typeof raw === 'string') {
-          try { JSON.parse(raw).forEach((t: string) => tagSet.add(t)) } catch {
-            raw.split(',').map((t: string) => t.trim()).filter(Boolean).forEach(t => tagSet.add(t))
-          }
-        }
+        parseContactTags(c.tags).forEach((tag) => {
+          if (!isSystemTag(tag)) tagSet.add(tag)
+        })
       })
       setAllTags(Array.from(tagSet).sort())
     } catch { /* ignore */ }
   }, [workspaceId])
 
-  const fetchContacts = useCallback(async (p = 1, search = '', status = 'all', source = 'all', scoreMin = 0, scoreMax = 100, tags = '', sort = 'lastMessageAt', order = 'desc') => {
+  const fetchContacts = useCallback(async (p = 1, search = '', status = 'all', source = 'all', scoreMin = 0, scoreMax = 100, tags = '', sort = 'lastMessageAt', order = 'desc', segment = 'todos') => {
     if (!workspaceId) return
     try {
       setLoading(true)
@@ -185,27 +311,17 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
       if (scoreMin > 0) params.set('leadScoreMin', scoreMin.toString())
       if (scoreMax < 100) params.set('leadScoreMax', scoreMax.toString())
       if (tags) params.set('tags', tags)
+      // Pestaña activa (Leads/Clientes/Prospectos/Inactivos) — filtro REAL del servidor
+      if (segment && segment !== 'todos') params.set('segment', segment)
 
       const res = await fetch(`/api/contacts?${params}`)
       if (!res.ok) throw new Error('Error al cargar contactos')
       const data = await res.json()
 
-      // Parse tags from JSON string (safe parsing)
-      const safeParseTags = (raw: unknown): string[] => {
-        if (Array.isArray(raw)) return raw
-        if (typeof raw === 'string') {
-          try {
-            const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed)) return parsed
-          } catch {
-            return raw.split(',').map((t: string) => t.trim()).filter(Boolean)
-          }
-        }
-        return []
-      }
       const parsed = (data.items || []).map((c: Record<string, unknown>) => ({
         ...c,
-        tags: safeParseTags(c.tags),
+        tags: parseContactTags(c.tags),
+        customFields: parseContactCustomFields(c.customFields),
         _count: c._count || { conversations: 0, deals: 0 },
       }))
       setContacts(parsed)
@@ -226,14 +342,14 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
 
   // Debounced search with all filters
   const applyFilters = useCallback((p = 1) => {
-    fetchContacts(p, searchQuery, statusFilter, sourceFilter, scoreRange[0], scoreRange[1], tagFilter.join(','), sortBy, sortOrder)
-  }, [fetchContacts, searchQuery, statusFilter, sourceFilter, scoreRange, tagFilter, sortBy, sortOrder])
+    fetchContacts(p, searchQuery, statusFilter, sourceFilter, scoreRange[0], scoreRange[1], tagFilter.join(','), sortBy, sortOrder, activeTab)
+  }, [fetchContacts, searchQuery, statusFilter, sourceFilter, scoreRange, tagFilter, sortBy, sortOrder, activeTab])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(() => {
-      fetchContacts(1, value, statusFilter, sourceFilter, scoreRange[0], scoreRange[1], tagFilter.join(','), sortBy, sortOrder)
+      fetchContacts(1, value, statusFilter, sourceFilter, scoreRange[0], scoreRange[1], tagFilter.join(','), sortBy, sortOrder, activeTab)
     }, 400)
   }
 
@@ -245,12 +361,20 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
     setSourceFilter(value)
   }
 
+  // KPIs reales de contactos
+  useEffect(() => {
+    if (!workspaceId) return
+    let stop = false
+    fetch(`/api/contacts/stats?workspaceId=${workspaceId}`).then(r => r.ok ? r.json() : null).then(d => { if (!stop && d) setCStats(d) }).catch(() => {})
+    return () => { stop = true }
+  }, [workspaceId])
+
   // Apply filters when they change (non-search)
   useEffect(() => {
     if (loading) return
     applyFilters(1)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, sourceFilter, scoreRange, tagFilter, sortBy, sortOrder])
+  }, [statusFilter, sourceFilter, scoreRange, tagFilter, sortBy, sortOrder, activeTab])
 
   const handlePageChange = (newPage: number) => {
     applyFilters(newPage)
@@ -332,7 +456,7 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
       const lines: string[] = []
       lines.push('Nombre,Teléfono,Email,Lead Score,Fuente,Estado,Etiquetas')
       contacts.forEach(c => {
-        lines.push(`"${c.firstName} ${c.lastName || ''}",${c.phone || ''},${c.email || ''},${c.leadScore},${c.source},${c.status},"${c.tags.join('; ')}"`)
+        lines.push(`"${c.firstName} ${c.lastName || ''}",${c.phone || ''},${c.email || ''},${c.leadScore},${c.source},${c.status},"${getVisibleTagLabels(c.tags).join('; ')}"`)
       })
       const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
@@ -347,16 +471,59 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
     }
   }, [contacts])
 
+  const downloadTemplate = useCallback(() => {
+    const csv = [
+      'Nombre,Apellido,Telefono,Correo,Fuente,Etiquetas,Estado',
+      'Juan,Pérez,5219621234567,juan@ejemplo.com,facebook,prospecto;interesado,active',
+      'María,López,5219629876543,,referencia,vip,active',
+    ].join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'plantilla-contactos-valiautoflow.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const handleImport = useCallback(async () => {
+    if (!importFile) { toast.error('Selecciona un archivo primero'); return }
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', importFile)
+      fd.append('type', 'contacts')
+      fd.append('workspaceId', workspaceId)
+      const res = await fetch('/api/import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'No se pudo importar el archivo')
+      setImportResult({ imported: data.imported, total: data.total, errors: data.errors, errorDetails: data.errorDetails })
+      if (data.imported > 0) {
+        toast.success(`${data.imported} contacto(s) importado(s)`)
+        applyFilters(1)
+        fetchTags()
+      } else {
+        toast.warning('No se importó ningún contacto. Revisa el archivo.')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al importar')
+    } finally {
+      setImporting(false)
+    }
+  }, [importFile, workspaceId, applyFilters, fetchTags])
+
   const handleBulkAction = async (action: string) => {
     if (selectedIds.size === 0) return
     setBulkLoading(true)
     try {
       const ids = Array.from(selectedIds)
       if (action === 'archive') {
-        for (const id of ids) {
-          await fetch(`/api/contacts/${id}`, { method: 'DELETE' })
-        }
-        toast.success(`${ids.length} contacto(s) archivado(s)`)
+        const results = await Promise.all(ids.map(id => fetch(`/api/contacts/${id}`, { method: 'DELETE' }).then(r => r.ok).catch(() => false)))
+        const ok = results.filter(Boolean).length
+        if (ok === 0) throw new Error()
+        if (ok < ids.length) toast.warning(`${ok} de ${ids.length} contacto(s) archivado(s)`)
+        else toast.success(`${ok} contacto(s) archivado(s)`)
       } else if (action === 'delete') {
         const res = await fetch('/api/contacts/bulk', {
           method: 'POST',
@@ -365,8 +532,17 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
         })
         if (!res.ok) throw new Error()
         toast.success(`${ids.length} contacto(s) eliminado(s)`)
-      } else if (action === 'tag' && tagInput) {
-        toast.success(`Etiqueta "${tagInput}" asignada a ${ids.length} contacto(s)`)
+      } else if (action === 'tag' && tagInput.trim()) {
+        const tag = tagInput.trim()
+        const results = await Promise.all(ids.map(id => fetch(`/api/contacts/${id}/tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag }),
+        }).then(r => r.ok).catch(() => false)))
+        const ok = results.filter(Boolean).length
+        if (ok === 0) throw new Error()
+        if (ok < ids.length) toast.warning(`Etiqueta "${tag}" asignada a ${ok} de ${ids.length}`)
+        else toast.success(`Etiqueta "${tag}" asignada a ${ok} contacto(s)`)
       }
       setSelectedIds(new Set())
       setBulkAction(null)
@@ -449,14 +625,21 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
   }
 
   return (
-    <div className="p-4 lg:p-6">
+    <div className="p-4 lg:p-6 relative">
+      {/* Panel de detalle del contacto (reutiliza el Expediente del lead) */}
+      {detailContactId && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px]" onClick={() => setDetailContactId(null)} />
+          <div className="fixed right-0 top-0 bottom-0 z-40 w-[360px] max-w-[92vw] shadow-2xl animate-in slide-in-from-right-4">
+            <ExpedientePanel workspaceId={workspaceId} contactId={detailContactId} onClose={() => setDetailContactId(null)} embedded />
+          </div>
+        </>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h3 className="text-lg font-semibold">Contactos</h3>
-          <p className="text-sm text-muted-foreground">
-            {contacts.length} de {total} contactos
-          </p>
+          <p className="text-sm text-muted-foreground">Gestiona y segmenta todos tus contactos en un solo lugar.</p>
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={showNewContact} onOpenChange={setShowNewContact}>
@@ -515,11 +698,146 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
               </div>
             </DialogContent>
           </Dialog>
+          <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) { setImportFile(null); setImportResult(null) } }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Upload className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Importar</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><Upload className="h-4 w-4 text-emerald-600" /> Importar contactos</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <p className="text-sm text-muted-foreground">
+                  Sube tu lista de prospectos en <b>CSV o Excel</b> (.csv, .xlsx, .xls). La primera fila deben ser los encabezados.
+                  Se omiten los teléfonos duplicados automáticamente.
+                </p>
+                <div className="rounded-lg bg-muted/40 border border-border/50 p-3 text-xs">
+                  <p className="font-semibold mb-1">Columnas reconocidas:</p>
+                  <p className="text-muted-foreground"><b>Nombre</b> (requerido), Apellido, Teléfono, Correo, Fuente, Etiquetas, Estado.</p>
+                  <button onClick={downloadTemplate} className="mt-2 inline-flex items-center gap-1 text-emerald-600 hover:underline font-medium">
+                    <Download className="h-3 w-3" /> Descargar plantilla de ejemplo
+                  </button>
+                </div>
+
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  className="hidden"
+                  onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportResult(null) }}
+                />
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  className="w-full rounded-xl border-2 border-dashed border-border/70 hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 transition-colors p-6 flex flex-col items-center gap-2 text-center"
+                >
+                  <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
+                  {importFile ? (
+                    <span className="text-sm font-medium text-foreground">{importFile.name}</span>
+                  ) : (
+                    <><span className="text-sm font-medium">Haz clic para seleccionar tu archivo</span>
+                    <span className="text-xs text-muted-foreground">CSV o Excel · hasta 10 MB</span></>
+                  )}
+                </button>
+
+                {importResult && (
+                  <div className="rounded-lg border border-border/60 p-3 text-sm space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-600 font-medium"><CheckCircle2 className="h-4 w-4" /> {importResult.imported} de {importResult.total} contactos importados</div>
+                    {importResult.errors > 0 && (
+                      <div className="text-xs text-amber-600">{importResult.errors} fila(s) omitida(s) (duplicados o sin nombre)</div>
+                    )}
+                    {importResult.errorDetails && importResult.errorDetails.length > 0 && (
+                      <ul className="text-[11px] text-muted-foreground max-h-24 overflow-y-auto custom-scroll list-disc pl-4">
+                        {importResult.errorDetails.slice(0, 8).map((er, i) => <li key={i}>Fila {er.row}: {er.message}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowImport(false)}>Cerrar</Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleImport} disabled={importing || !importFile}>
+                    {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Importar contactos
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={exportCSV}>
             <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Exportar CSV</span>
           </Button>
         </div>
+      </div>
+
+      {/* 5 KPIs reales (estilo del mockup) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        {[
+          { icon: <Users className="h-5 w-5" />, label: 'Contactos totales', value: (cStats?.total ?? total), sub: 'en el CRM', subC: 'text-muted-foreground', bg: 'from-violet-500 to-violet-700 shadow-violet-500/30' },
+          { icon: <UserPlus className="h-5 w-5" />, label: 'Nuevos este mes', value: (cStats?.newThisMonth ?? 0), sub: cStats ? `${cStats.newThisMonthDelta >= 0 ? '+' : ''}${cStats.newThisMonthDelta}% vs mes anterior` : '', subC: (cStats?.newThisMonthDelta ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500', bg: 'from-blue-500 to-blue-700 shadow-blue-500/30' },
+          { icon: <CheckCircle2 className="h-5 w-5" />, label: 'Clientes', value: (cStats?.clientes ?? 0), sub: 'con trato ganado', subC: 'text-emerald-500', bg: 'from-emerald-500 to-emerald-700 shadow-emerald-500/30' },
+          { icon: <Flame className="h-5 w-5" />, label: 'Leads calientes', value: (cStats?.hotLeads ?? 0), sub: 'score ≥ 70', subC: 'text-orange-500', bg: 'from-orange-500 to-amber-600 shadow-orange-500/30' },
+          { icon: <BellOff className="h-5 w-5" />, label: 'Sin contacto (30 días)', value: (cStats?.noContact30d ?? 0), sub: 'requieren seguimiento', subC: 'text-red-500', bg: 'from-red-500 to-rose-700 shadow-red-500/30' },
+        ].map((k) => (
+          <Card key={k.label} className="border-border/60 bg-card dark:bg-zinc-900/60">
+            <CardContent className="p-4 flex items-start gap-3">
+              <div className={cn('h-11 w-11 rounded-2xl flex items-center justify-center text-white shrink-0 bg-gradient-to-br shadow-lg', k.bg)}>{k.icon}</div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground leading-tight">{k.label}</p>
+                <p className="text-2xl font-bold tracking-tight leading-tight">{Number(k.value).toLocaleString('es-MX')}</p>
+                {k.sub && <p className={cn('text-[10px] mt-0.5 font-medium', k.subC)}>{k.sub}</p>}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Origen por canal: qué canal trae los leads (y cuáles vienen CALIENTES).
+          Insumo directo para decidir dónde invertir el marketing. */}
+      {cStats?.bySource && cStats.bySource.length > 0 && (
+        <Card className="border-border/60 bg-card dark:bg-zinc-900/60 mb-4">
+          <CardContent className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Origen de tus leads</span>
+            {cStats.bySource.map((s) => {
+              const hotPct = s.total > 0 ? Math.round((s.hot / s.total) * 100) : 0
+              return (
+                <span key={s.source} className="inline-flex items-center gap-1.5 text-xs">
+                  <span className="font-semibold capitalize">{s.source}</span>
+                  <span className="text-muted-foreground">{s.total.toLocaleString('es-MX')}</span>
+                  {s.hot > 0 && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 text-orange-500 px-1.5 py-0.5 text-[10px] font-semibold">
+                      <Flame className="h-2.5 w-2.5" /> {s.hot} ({hotPct}%)
+                    </span>
+                  )}
+                </span>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pestañas de segmento (como el mockup) */}
+      <div className="flex items-center gap-4 border-b border-border mb-4 overflow-x-auto custom-scroll">
+        {([
+          { key: 'todos', label: 'Todos', count: cStats?.tabs.todos ?? total, score: null as [number, number] | null },
+          { key: 'leads', label: 'Leads', count: cStats?.tabs.leads ?? 0, score: [0, 39] as [number, number] },
+          { key: 'clientes', label: 'Clientes', count: cStats?.tabs.clientes ?? 0, score: null },
+          { key: 'prospectos', label: 'Prospectos', count: cStats?.tabs.prospectos ?? 0, score: [40, 69] as [number, number] },
+          { key: 'inactivos', label: 'Inactivos', count: cStats?.tabs.inactivos ?? 0, score: null },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={cn('flex items-center gap-1.5 pb-2 -mb-px border-b-2 text-sm font-medium transition-colors whitespace-nowrap',
+              activeTab === t.key ? 'border-violet-500 text-violet-600 dark:text-violet-400' : 'border-transparent text-muted-foreground hover:text-foreground')}
+          >
+            {t.label}
+            <span className={cn('h-5 min-w-5 px-1 rounded-full text-[10px] font-bold flex items-center justify-center', activeTab === t.key ? 'bg-violet-500 text-white' : 'bg-muted text-muted-foreground')}>{Number(t.count).toLocaleString('es-MX')}</span>
+          </button>
+        ))}
       </div>
 
       {/* Filters */}
@@ -621,7 +939,7 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                           )
                         }}
                       >
-                        {tag}
+                        {formatTagLabel(tag)}
                       </button>
                     )) : (
                       <span className="text-[10px] text-muted-foreground">Sin etiquetas disponibles</span>
@@ -739,12 +1057,12 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                     )}
                   </button>
                 </TableHead>
-                <TableHead className="text-xs font-semibold">Nombre</TableHead>
-                <TableHead className="text-xs font-semibold hidden md:table-cell">Teléfono</TableHead>
-                <TableHead className="text-xs font-semibold hidden lg:table-cell">Email</TableHead>
-                <TableHead className="text-xs font-semibold">Score</TableHead>
-                <TableHead className="text-xs font-semibold hidden sm:table-cell">Fuente</TableHead>
+                <TableHead className="text-xs font-semibold">Contacto</TableHead>
                 <TableHead className="text-xs font-semibold hidden xl:table-cell">Etiquetas</TableHead>
+                <TableHead className="text-xs font-semibold hidden lg:table-cell">Última interacción</TableHead>
+                <TableHead className="text-xs font-semibold">Puntaje</TableHead>
+                <TableHead className="text-xs font-semibold hidden sm:table-cell">Fuente</TableHead>
+                <TableHead className="text-xs font-semibold hidden md:table-cell">Estado</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -756,14 +1074,17 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                contacts.map((contact) => (
+                contacts.map((contact) => {
+                  const visibleTags = getVisibleTagLabels(contact.tags)
+
+                  return (
                   <TableRow
                     key={contact.id}
                     className={cn(
                       'border-border/40 cursor-pointer hover:bg-muted/30',
                       selectedIds.has(contact.id) && 'bg-emerald-50/50 dark:bg-emerald-500/5'
                     )}
-                    onClick={() => setSelectedContact(contact)}
+                    onClick={() => setDetailContactId(contact.id)}
                   >
                     <TableCell>
                       <button onClick={(e) => { e.stopPropagation(); toggleSelect(contact.id) }}>
@@ -777,6 +1098,7 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
+                          {contact.avatar ? <AvatarImage src={contact.avatar} alt={contact.firstName} /> : null}
                           <AvatarFallback className="bg-zinc-100 text-zinc-600 text-xs font-semibold dark:bg-zinc-800 dark:text-zinc-300">
                             {getInitials(`${contact.firstName} ${contact.lastName || ''}`)}
                           </AvatarFallback>
@@ -785,31 +1107,43 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                           <p className="text-sm font-medium text-foreground">
                             {contact.firstName} {contact.lastName || ''}
                           </p>
-                          <p className="text-[10px] text-muted-foreground md:hidden">
-                            {formatPhoneNumber(contact.phone)}
+                          <p className="text-[10px] text-muted-foreground">
+                            {formatPhoneNumber(contact.phone) || '—'}
                           </p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <span className="text-sm text-muted-foreground">{formatPhoneNumber(contact.phone)}</span>
+                    <TableCell className="hidden xl:table-cell">
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {visibleTags.length === 0 && (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                        {visibleTags.slice(0, 2).map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-[10px] bg-muted border-0">{tag}</Badge>
+                        ))}
+                        {visibleTags.length > 2 && (
+                          <span className="text-[10px] text-muted-foreground">+{visibleTags.length - 2}</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <span className="text-sm text-muted-foreground">{contact.email || '—'}</span>
+                      {contact.lastMessageAt ? (
+                        <div>
+                          <p className="text-xs text-foreground">{timeAgo(new Date(contact.lastMessageAt))}</p>
+                          <p className="text-[10px] text-muted-foreground">{contact.source || 'whatsapp'}</p>
+                        </div>
+                      ) : <span className="text-[10px] text-muted-foreground">Sin interacción</span>}
                     </TableCell>
-                    <TableCell>{getScoreBadge(contact.leadScore)}</TableCell>
+                    <TableCell><ScoreRing score={contact.leadScore} size={34} strokeWidth={3} /></TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <Badge variant="secondary" className="text-[10px] bg-muted border-0">{contact.source || '—'}</Badge>
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {contact.tags.slice(0, 2).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-[10px] bg-muted border-0">{tag}</Badge>
-                        ))}
-                        {contact.tags.length > 2 && (
-                          <span className="text-[10px] text-muted-foreground">+{contact.tags.length - 2}</span>
-                        )}
-                      </div>
+                    <TableCell className="hidden md:table-cell">
+                      {(() => {
+                        const sc = contact.leadScore || 0
+                        const est = sc >= 70 ? { l: 'Caliente', c: 'bg-red-500/15 text-red-600 dark:text-red-400' } : sc >= 40 ? { l: 'Prospecto', c: 'bg-blue-500/15 text-blue-600 dark:text-blue-400' } : { l: 'Lead', c: 'bg-zinc-500/15 text-zinc-500' }
+                        return <Badge className={cn('text-[10px] border-0 gap-1', est.c)}><span className="h-1.5 w-1.5 rounded-full bg-current" />{est.l}</Badge>
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -819,7 +1153,7 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedContact(contact) }}>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDetailContactId(contact.id) }}>
                             Ver detalle
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewChange?.('inbox') }}>
@@ -837,7 +1171,8 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -893,7 +1228,7 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
 
               <Separator />
 
-              <ScrollArea className="flex-1 px-6 py-4">
+              <ScrollArea className="flex-1 min-h-0 px-6 py-4">
                 <div className="space-y-5">
                   <div className="space-y-3">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Información</h4>
@@ -926,11 +1261,25 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
                     </div>
                   </div>
 
-                  {selectedContact.tags.length > 0 && (
+                  {getContactInfoEntries(selectedContact.customFields).length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Datos detectados</h4>
+                      <div className="rounded-lg border border-border/60 divide-y divide-border/50">
+                        {getContactInfoEntries(selectedContact.customFields).map((item) => (
+                          <div key={item.label} className="flex items-start justify-between gap-3 px-3 py-2">
+                            <span className="text-xs text-muted-foreground">{item.label}</span>
+                            <span className="text-xs font-medium text-right break-all">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {getVisibleTagLabels(selectedContact.tags).length > 0 && (
                     <div className="space-y-2">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Etiquetas</h4>
                       <div className="flex flex-wrap gap-1.5">
-                        {selectedContact.tags.map((tag) => (
+                        {getVisibleTagLabels(selectedContact.tags).map((tag) => (
                           <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                         ))}
                       </div>
@@ -954,12 +1303,22 @@ export function ContactsView({ workspaceId, onViewChange }: ContactsViewProps) {
 
               <div className="p-4 border-t border-border">
                 <div className="flex gap-2">
-                  <Button className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedContact(null); onViewChange?.('inbox') }}>
+                  <Button
+                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      setSelectedContact(null)
+                      if (onOpenContact) {
+                        onOpenContact(selectedContact.id)
+                      } else {
+                        onViewChange?.('inbox')
+                      }
+                    }}
+                  >
                     <MessageCircle className="h-4 w-4" />
                     Enviar Mensaje
                   </Button>
                   {selectedContact.phone && (
-                    <a href={`tel:${selectedContact.phone}`}>
+                    <a href={`tel:+${selectedContact.phone.replace(/\D/g, '')}`}>
                       <Button variant="outline" className="gap-2"><Phone className="h-4 w-4" />Llamar</Button>
                     </a>
                   )}

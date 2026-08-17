@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
 
+    // Nunca confíes solo en el conversationId: el recurso debe pertenecer
+    // al workspace del usuario autenticado.
     await requireWorkspace(conversation.workspaceId, session.userId)
 
     const [messages, total] = await Promise.all([

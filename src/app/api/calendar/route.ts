@@ -9,6 +9,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { tzFromSettings, getWorkspaceTimezone } from '@/lib/timezone'
+import { gcalPushAppointment, gcalDeleteEvent } from '@/lib/gcal'
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,6 +18,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
     await requireWorkspace(workspaceId!, session.userId)
+
+    const wsForTz = await db.workspace.findUnique({ where: { id: workspaceId! }, select: { settings: true } })
+    const timezone = tzFromSettings(wsForTz?.settings)
 
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
@@ -107,6 +112,7 @@ export async function GET(req: NextRequest) {
         cancelledThisMonth,
       },
       upcoming,
+      timezone,
     })
   } catch (error) {
     return errorResponse(error)
@@ -128,6 +134,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Anti-duplicado: si ya hay una cita pendiente para el mismo contacto en
+    // la misma fecha/hora, no crear otra (evita dobles por doble clic o por el
+    // mismo lead). Citas en horarios distintos sí se permiten.
+    if (contactId) {
+      const dupe = await db.appointment.findFirst({
+        where: { workspaceId, contactId, status: 'pending', date: new Date(date) },
+        select: { id: true },
+      })
+      if (dupe) {
+        return Response.json(
+          { error: 'Ya existe una cita pendiente para este contacto en ese horario.', code: 'DUPLICATE_APPOINTMENT', appointmentId: dupe.id },
+          { status: 409 }
+        )
+      }
+    }
+
     const appointment = await db.appointment.create({
       data: {
         workspaceId,
@@ -145,6 +167,9 @@ export async function POST(req: NextRequest) {
         },
       },
     })
+
+    // Push a Google Calendar (no-op si el workspace no lo tiene conectado)
+    gcalPushAppointment(workspaceId, appointment, await getWorkspaceTimezone(workspaceId)).catch(() => {})
 
     return Response.json({ success: true, appointment }, { status: 201 })
   } catch (error) {
@@ -188,6 +213,10 @@ export async function PUT(req: NextRequest) {
       },
     })
 
+    // Sincroniza con Google Calendar (cancelada → borra el evento; si no → upsert)
+    if (appointment.status === 'cancelled') gcalDeleteEvent(existing.workspaceId, appointment.googleEventId).catch(() => {})
+    else gcalPushAppointment(existing.workspaceId, appointment, await getWorkspaceTimezone(existing.workspaceId)).catch(() => {})
+
     return Response.json({ success: true, appointment })
   } catch (error) {
     return errorResponse(error)
@@ -212,6 +241,7 @@ export async function DELETE(req: NextRequest) {
     await requireWorkspace(existing.workspaceId, session.userId)
 
     await db.appointment.delete({ where: { id } })
+    gcalDeleteEvent(existing.workspaceId, existing.googleEventId).catch(() => {})
 
     return Response.json({ success: true })
   } catch (error) {

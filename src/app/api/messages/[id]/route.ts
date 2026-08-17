@@ -24,7 +24,6 @@ export async function PUT(
     if (!message) {
       return Response.json({ error: 'Mensaje no encontrado' }, { status: 404 })
     }
-
     await requireWorkspace(message.conversation.workspaceId, session.userId)
 
     // Merge existing metadata with updates

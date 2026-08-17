@@ -3,7 +3,6 @@
 // Extracts structured data from uploaded files
 // ═══════════════════════════════════════════════════════════════
 
-// @ts-expect-error — xlsx types not installed
 import * as XLSX from 'xlsx'
 
 export interface ParsedRow {
@@ -84,7 +83,6 @@ export function parseExcelOrCSV(buffer: ArrayBuffer, fileName: string): ParseRes
 export async function parsePDF(buffer: ArrayBuffer, fileName: string): Promise<ParseResult> {
   // Dynamic import to avoid issues in client-side
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // @ts-expect-error — pdf-parse types not installed
   const pdfParse = (await import('pdf-parse') as any).default || (await import('pdf-parse') as any)
 
   const uint8Array = new Uint8Array(buffer)

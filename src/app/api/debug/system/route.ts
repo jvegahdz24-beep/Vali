@@ -1,28 +1,15 @@
 // ═══════════════════════════════════════════════════════════════
 // ValiAutoFlow — System Diagnostic Endpoint
 // GET /api/debug/system — Full system health check in 1 request
+// Requires superadmin authentication
 // ═══════════════════════════════════════════════════════════════
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { cookies } from 'next/headers'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
-
-// WhatsApp connection state (in-memory singleton)
-let whatsappState: { status: string; qrCode: string | null; phone: string | null; lastActivity: string | null } = {
-  status: 'unknown',
-  qrCode: null,
-  phone: null,
-  lastActivity: null,
-}
-
-// Expose for whatsapp module to update
-export function setWhatsappDebugState(state: typeof whatsappState) {
-  whatsappState = state
-}
 
 async function checkComponent(name: string, fn: () => Promise<{ ok: boolean; detail: string; latencyMs?: number }>) {
   const start = Date.now()
@@ -35,17 +22,17 @@ async function checkComponent(name: string, fn: () => Promise<{ ok: boolean; det
   }
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = await requireAuth(request)
-
-    // Restrict debug endpoint to owner/admin roles only
-    if (session.role !== 'owner' && session.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Acceso denegado. Solo roles owner/admin pueden acceder al diagnóstico del sistema.' },
-        { status: 403 }
-      )
-    }
+export async function GET() {
+  // ─── AUTH GUARD — superadmin only ────────────────────────
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const sessionPayload = await verifySessionToken(sessionToken)
+  if (!sessionPayload || sessionPayload.role !== 'superadmin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const startTime = Date.now()
   const results: Record<string, unknown> = {}
@@ -61,17 +48,18 @@ export async function GET(request: NextRequest) {
   }
 
   // ─── 2. ENVIRONMENT ──────────────────────────────────────
-  // FIX C6: Only report set/not-set, NEVER expose partial values
-  const requiredEnvs = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL']
+  const requiredEnvs = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'ZAI_API_KEY']
   const envStatus = requiredEnvs.map(key => ({
     key,
     set: !!process.env[key],
+    value: process.env[key] ? `${process.env[key]!.substring(0, 8)}...` : 'MISSING',
   }))
   const missingEnvs = envStatus.filter(e => !e.set).map(e => e.key)
   results.environment = {
     ok: missingEnvs.length === 0,
     detail: missingEnvs.length > 0 ? `Missing: ${missingEnvs.join(', ')}` : 'All required env vars present',
     variables: envStatus,
+    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
   }
 
   // ─── 3. DATABASE ─────────────────────────────────────────
@@ -175,13 +163,16 @@ export async function GET(request: NextRequest) {
   }
 
   // ─── 6. AI ───────────────────────────────────────────────
-  // FIX C6: Never expose partial API keys
   try {
-    const hasKey = !!process.env.ZAI_API_KEY && process.env.ZAI_API_KEY.length > 10
+    const aiKey = process.env.ZAI_API_KEY
+    const hasKey = !!aiKey && aiKey.length > 10
     results.ai = {
       ok: hasKey,
-      detail: hasKey ? 'ZAI API Key configured' : 'ZAI_API_KEY not configured — AI features disabled',
+      detail: hasKey
+        ? `ZAI API Key configured (${aiKey!.substring(0, 8)}...)`
+        : 'ZAI_API_KEY not configured — AI features disabled',
       provider: 'z-ai-web-dev-sdk (GLM)',
+      apiKeySet: hasKey,
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -230,7 +221,4 @@ export async function GET(request: NextRequest) {
       ai: (results.ai as { ok: boolean }).ok ? 'ok' : 'warning',
     },
   })
-  } catch (error) {
-    return errorResponse(error, 'Error en diagnóstico del sistema')
-  }
 }

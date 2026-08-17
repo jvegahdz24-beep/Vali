@@ -5,30 +5,47 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
 
-// Demo credentials from env or defaults
-const DEMO_EMAIL = process.env.DEMO_EMAIL || 'jvegahdz24@gmail.com'
-const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'valiflow2026'
+// Demo access is opt-in and never has built-in credentials.
+const DEMO_EMAIL = process.env.DEMO_EMAIL
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD
+const DEMO_ACCESS_TOKEN = process.env.DEMO_ACCESS_TOKEN
+
+function hasValidDemoAccess(req: NextRequest): boolean {
+  // Never expose auto-provisioning in production, even if DEMO_MODE is set accidentally.
+  if (process.env.NODE_ENV === 'production' || process.env.DEMO_MODE !== 'true') return false
+  if (!DEMO_EMAIL || !DEMO_PASSWORD || DEMO_PASSWORD.length < 16 || !DEMO_ACCESS_TOKEN) return false
+
+  const provided = req.headers.get('x-demo-access-token')
+  if (!provided || provided.length !== DEMO_ACCESS_TOKEN.length) return false
+  return timingSafeEqual(Buffer.from(provided), Buffer.from(DEMO_ACCESS_TOKEN))
+}
 
 export async function GET(req: NextRequest) {
-  // Security: Demo login only available in development/staging
-  if (process.env.NODE_ENV === 'production' && !process.env.DEMO_MODE) {
-    return NextResponse.json({ error: 'Demo login not available in production' }, { status: 403 })
+  if (!hasValidDemoAccess(req)) {
+    // Return 404 to avoid advertising an auto-provisioning endpoint.
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+  const demoEmail = DEMO_EMAIL
+  const demoPassword = DEMO_PASSWORD
+  if (!demoEmail || !demoPassword) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   try {
     // ── 1. Find or create user ──────────────────────────────────
     let user = await db.user.findUnique({
-      where: { email: DEMO_EMAIL },
+      where: { email: demoEmail },
     })
 
     if (!user) {
-      const hashedPassword = bcrypt.hashSync(DEMO_PASSWORD, 12)
+      const hashedPassword = bcrypt.hashSync(demoPassword, 12)
       user = await db.user.create({
         data: {
-          email: DEMO_EMAIL,
+          email: demoEmail,
           password: hashedPassword,
           name: 'Demo ValiAutoFlow',
           role: 'owner',

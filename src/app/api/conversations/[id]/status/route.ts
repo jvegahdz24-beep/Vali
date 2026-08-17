@@ -29,7 +29,6 @@ export async function PUT(
     if (!conversation) {
       return Response.json({ error: 'Conversación no encontrada' }, { status: 404 })
     }
-
     await requireWorkspace(conversation.workspaceId, session.userId)
 
     const updated = await db.conversation.update({

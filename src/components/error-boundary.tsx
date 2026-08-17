@@ -34,8 +34,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo })
     // Log to console for debugging
-    console.error('[ValiFlow Error Boundary]', error)
-    console.error('[ValiFlow Error Info]', errorInfo)
+    console.error('[ValiAutoFlow Error]', error)
+    console.error('[ValiAutoFlow Error Info]', errorInfo)
+
+    // ChunkLoadError = stale JS cache after a deploy → force full reload
+    if (
+      typeof window !== 'undefined' &&
+      (error.name === 'ChunkLoadError' || error.message?.includes('Failed to load chunk'))
+    ) {
+      window.location.reload()
+      return
+    }
 
     // Also dispatch a custom event so we can catch it in window.onerror
     if (typeof window !== 'undefined') {

@@ -18,6 +18,15 @@ const MAX_LIFETIME_MS = 60 * 60 * 1000
 /** Auto-expire after this many ms of inactivity (15 minutes) */
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000
 
+/** Persistencia no disponible hasta migrar el modelo ephemeralAgent. */
+export const EPHEMERAL_AGENTS_ENABLED = process.env.EPHEMERAL_AGENTS_ENABLED === 'true'
+
+function assertEphemeralAgentsEnabled(): void {
+  if (!EPHEMERAL_AGENTS_ENABLED) {
+    throw new Error('Ephemeral agents are disabled until their Prisma migration is deployed')
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 export type EphemeralAgentType =
@@ -436,6 +445,7 @@ setInterval(cleanupActivityTracker, 5 * 60 * 1000)
  * Creates a DB record, marks it active, and invokes the AI to generate recommendations.
  */
 export async function spawnAgent(input: SpawnAgentInput): Promise<AgentResult> {
+  assertEphemeralAgentsEnabled()
   const timer = logTimer('AI', 'spawnAgent')
   const template = AGENT_TEMPLATES[input.agentType]
 
@@ -546,6 +556,8 @@ export async function getActiveAgents(
   expiresAt: Date
   completedAt: Date | null
 }>> {
+  if (!EPHEMERAL_AGENTS_ENABLED) return []
+
   const where: Record<string, unknown> = {
     workspaceId,
     status: { in: ['spawning', 'active', 'completed'] },
@@ -587,6 +599,8 @@ export async function getAgentResult(agentId: string): Promise<{
   expiresAt: Date
   completedAt: Date | null
 } | null> {
+  if (!EPHEMERAL_AGENTS_ENABLED) return null
+
   const agent = await db.ephemeralAgent.findUnique({
     where: { id: agentId },
   })
@@ -610,6 +624,8 @@ export async function getAgentResult(agentId: string): Promise<{
  * Manually expire an ephemeral agent.
  */
 export async function expireAgent(agentId: string): Promise<boolean> {
+  if (!EPHEMERAL_AGENTS_ENABLED) return false
+
   const agent = await db.ephemeralAgent.findUnique({
     where: { id: agentId },
   })
@@ -636,6 +652,8 @@ export async function expireAgent(agentId: string): Promise<boolean> {
  * Call this periodically (e.g., from a cron job).
  */
 export async function expireStaleAgents(): Promise<number> {
+  if (!EPHEMERAL_AGENTS_ENABLED) return 0
+
   const now = new Date()
 
   // Expire agents past their max lifetime
