@@ -1,172 +1,115 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Role-Based Access Control (RBAC)
-// Enforces workspace-level role permissions on API routes
+// ValiAutoFlow — RBAC (Role-Based Access Control)
+// Fuente única de verdad de qué puede VER y HACER cada rol dentro de
+// un workspace. Pura (sin imports de Next/DB) para usarse igual en el
+// cliente (ocultar UI) y en el servidor (rechazar APIs).
+//
+// Roles de workspace (WorkspaceMember.role):
+//   owner   — Dueño: control total, incl. facturación y panel avanzado.
+//   admin   — Admin: todo menos facturación y panel avanzado.
+//   member  — Miembro/Vendedor: CRM operativo, SOLO sus datos asignados.
+//   viewer  — Lector: solo lectura.
+// El rol GLOBAL de plataforma (User.role === 'superadmin') es aparte y
+// ve absolutamente todo; se maneja con `isSuperAdmin`.
 // ═══════════════════════════════════════════════════════════════
 
-import { db } from '@/lib/db'
-import { ApiError } from '@/lib/api-auth'
-import type { SessionPayload } from '@/lib/auth-edge'
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer'
 
-// ─── Role Definitions ──────────────────────────────────────────
+export const WORKSPACE_ROLES: WorkspaceRole[] = ['owner', 'admin', 'member', 'viewer']
 
-/**
- * Workspace roles in descending order of privilege.
- * Higher index = more permissions.
- */
-export const WORKSPACE_ROLES = ['viewer', 'member', 'admin', 'owner'] as const
-export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number]
-
-/**
- * Role hierarchy levels — used for permission comparisons.
- * owner (3) > admin (2) > member (1) > viewer (0)
- */
-const ROLE_LEVELS: Record<WorkspaceRole, number> = {
-  viewer: 0,
-  member: 1,
-  admin: 2,
-  owner: 3,
+export function isWorkspaceRole(x: unknown): x is WorkspaceRole {
+  return typeof x === 'string' && (WORKSPACE_ROLES as string[]).includes(x)
 }
 
-// ─── Permission Helpers ────────────────────────────────────────
-
-/**
- * Check if a role has at least the minimum required level.
- * Returns true if the user's role level >= the minimum level.
- */
-function hasMinimumRole(userRole: string, minimumRole: WorkspaceRole): boolean {
-  const userLevel = ROLE_LEVELS[userRole as WorkspaceRole]
-  const requiredLevel = ROLE_LEVELS[minimumRole]
-  return userLevel >= requiredLevel
+/** Normaliza cualquier string de rol a un WorkspaceRole conocido (default: viewer, el más restrictivo). */
+export function normalizeRole(role: string | null | undefined): WorkspaceRole {
+  return isWorkspaceRole(role) ? role : 'viewer'
 }
 
-/**
- * Check if a user's role is one of the allowed roles.
- */
-function hasAnyRole(userRole: string, allowedRoles: WorkspaceRole[]): boolean {
-  return allowedRoles.includes(userRole as WorkspaceRole)
+// ─── Capacidades (acciones) ──────────────────────────────────
+// Lo que un rol puede HACER, independientemente de la vista.
+
+export type Capability =
+  | 'crm.write'        // crear/editar contactos, deals, citas; enviar mensajes; mover pipeline
+  | 'crm.viewAll'      // ver TODOS los datos del workspace (si no, solo lo asignado a uno mismo)
+  | 'analytics.view'   // ver analíticas y reportes
+  | 'agents.manage'    // configurar agentes IA / playground / agent factory
+  | 'automations.manage'
+  | 'valiguard.view'
+  | 'team.manage'      // invitar, cambiar rol, eliminar miembros
+  | 'settings.manage'  // editar configuración del workspace
+  | 'settings.advanced'// panel de desarrollador / pestaña Avanzado
+  | 'billing.manage'   // facturación / suscripción
+
+const ROLE_CAPABILITIES: Record<WorkspaceRole, Capability[]> = {
+  owner: [
+    'crm.write', 'crm.viewAll', 'analytics.view', 'agents.manage', 'automations.manage',
+    'valiguard.view', 'team.manage', 'settings.manage', 'settings.advanced', 'billing.manage',
+  ],
+  admin: [
+    'crm.write', 'crm.viewAll', 'analytics.view', 'agents.manage', 'automations.manage',
+    'valiguard.view', 'team.manage', 'settings.manage',
+  ],
+  // Vendedor: opera el CRM pero SOLO sobre lo asignado a él (sin crm.viewAll).
+  member: ['crm.write'],
+  // Lector: ve datos y analíticas, no escribe.
+  viewer: ['crm.viewAll', 'analytics.view'],
 }
 
-// ─── Public RBAC Functions ─────────────────────────────────────
+export function hasCapability(role: string | null | undefined, cap: Capability): boolean {
+  return ROLE_CAPABILITIES[normalizeRole(role)].includes(cap)
+}
 
-/**
- * requireRole — Enforces workspace-level role permissions.
- *
- * Verifies that the authenticated user is a member of the workspace
- * AND has one of the allowed roles. Throws ApiError (403) if not.
- *
- * @param session - The verified JWT session payload
- * @param workspaceId - The workspace to check membership/role in
- * @param allowedRoles - Array of roles that are permitted to perform this action
- * @returns The WorkspaceMember record (useful for downstream logic)
- * @throws ApiError(400) if workspaceId is missing
- * @throws ApiError(403) if user is not a member or role is insufficient
- *
- * Usage:
- *   const session = await requireAuth(req)
- *   const member = await requireRole(session, workspaceId, ['owner', 'admin'])
- */
-export async function requireRole(
-  session: SessionPayload,
-  workspaceId: string,
-  allowedRoles: WorkspaceRole[]
-) {
-  if (!workspaceId) {
-    throw new ApiError(400, 'workspaceId es requerido')
-  }
+/** ¿El rol ve TODOS los datos del workspace, o solo lo asignado a su usuario? */
+export function canViewAllData(role: string | null | undefined): boolean {
+  return hasCapability(role, 'crm.viewAll')
+}
 
-  const member = await db.workspaceMember.findUnique({
-    where: {
-      userId_workspaceId: {
-        userId: session.userId,
-        workspaceId,
-      },
-    },
-  })
+// ─── Visibilidad de módulos (vistas del sidebar) ─────────────
+// Clave = id de ViewType. Lista = roles que pueden ABRIR esa vista.
+// developer/admin quedan vacíos: son exclusivos de superadmin (plataforma).
 
-  if (!member) {
-    throw new ApiError(403, 'No tienes acceso a este workspace')
-  }
-
-  if (!hasAnyRole(member.role, allowedRoles)) {
-    throw new ApiError(
-      403,
-      `No tienes permisos suficientes. Se requiere uno de: ${allowedRoles.join(', ')}. Tu rol actual: ${member.role}.`
-    )
-  }
-
-  return member
+export const MODULE_ROLES: Record<string, WorkspaceRole[]> = {
+  dashboard: ['owner', 'admin', 'member', 'viewer'],
+  manual: ['owner', 'admin', 'member', 'viewer'],
+  inbox: ['owner', 'admin', 'member', 'viewer'],
+  pipeline: ['owner', 'admin', 'member', 'viewer'],
+  inventory: ['owner', 'admin', 'member', 'viewer'],
+  contacts: ['owner', 'admin', 'member', 'viewer'],
+  calendar: ['owner', 'admin', 'member', 'viewer'],
+  // Solo lectura para viewer; member NO ve analíticas/reportes.
+  analytics: ['owner', 'admin', 'viewer'],
+  reports: ['owner', 'admin', 'viewer'],
+  // Módulos de administración del workspace.
+  agents: ['owner', 'admin'],
+  'agent-factory': ['owner', 'admin'],
+  gbrain: ['owner', 'admin'],
+  playground: ['owner', 'admin'],
+  'chat-demo': ['owner', 'admin'],
+  marketing: ['owner', 'admin'],
+  automations: ['owner', 'admin'],
+  valiguard: ['owner', 'admin'],
+  meli: ['owner', 'admin'],
+  copilot: ['owner', 'admin', 'member'],
+  settings: ['owner', 'admin'],
+  'settings:whatsapp': ['owner', 'admin'],
+  team: ['owner', 'admin'],
+  // Panel Desarrollador y administración de plataforma: exclusivos del
+  // superadmin global, nunca de un rol de workspace.
+  developer: [],
+  admin: [],
 }
 
 /**
- * requireMinimumRole — Check if user has at least the specified minimum role level.
- *
- * Simpler alternative when you want "at least X role" instead of an explicit list.
- * E.g., `requireMinimumRole(session, workspaceId, 'admin')` allows admin + owner.
- *
- * @param session - The verified JWT session payload
- * @param workspaceId - The workspace to check
- * @param minimumRole - The minimum role required (inclusive)
- * @returns The WorkspaceMember record
+ * ¿Puede el usuario abrir esta vista? Superadmin de plataforma ve todo.
  */
-export async function requireMinimumRole(
-  session: SessionPayload,
-  workspaceId: string,
-  minimumRole: WorkspaceRole
-) {
-  if (!workspaceId) {
-    throw new ApiError(400, 'workspaceId es requerido')
-  }
-
-  const member = await db.workspaceMember.findUnique({
-    where: {
-      userId_workspaceId: {
-        userId: session.userId,
-        workspaceId,
-      },
-    },
-  })
-
-  if (!member) {
-    throw new ApiError(403, 'No tienes acceso a este workspace')
-  }
-
-  if (!hasMinimumRole(member.role, minimumRole)) {
-    throw new ApiError(
-      403,
-      `No tienes permisos suficientes. Se requiere rol mínimo: ${minimumRole}. Tu rol actual: ${member.role}.`
-    )
-  }
-
-  return member
-}
-
-/**
- * Convenience presets for common permission checks.
- * These wrap requireRole with pre-configured allowed role lists.
- */
-export const rbac = {
-  /**
-   * Owner and admin only — used for billing, workspace settings, dangerous operations.
-   */
-  ownerOrAdmin: (session: SessionPayload, workspaceId: string) =>
-    requireRole(session, workspaceId, ['owner', 'admin']),
-
-  /**
-   * Any workspace member can access — owner, admin, or member.
-   * Viewers are excluded (read-only access).
-   */
-  canWrite: (session: SessionPayload, workspaceId: string) =>
-    requireRole(session, workspaceId, ['owner', 'admin', 'member']),
-
-  /**
-   * All roles including viewers — used for read/list operations.
-   */
-  canRead: (session: SessionPayload, workspaceId: string) =>
-    requireRole(session, workspaceId, ['owner', 'admin', 'member', 'viewer']),
-
-  /**
-   * Owner only — the most restrictive, for critical operations like workspace deletion.
-   */
-  ownerOnly: (session: SessionPayload, workspaceId: string) =>
-    requireRole(session, workspaceId, ['owner']),
+export function canViewModule(
+  role: string | null | undefined,
+  viewId: string,
+  opts?: { isSuperAdmin?: boolean },
+): boolean {
+  if (opts?.isSuperAdmin) return true
+  const allowed = MODULE_ROLES[viewId]
+  if (!allowed) return false // vista desconocida → denegar por defecto
+  return allowed.includes(normalizeRole(role))
 }

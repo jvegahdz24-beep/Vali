@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Bot,
   Plus,
@@ -17,8 +17,8 @@ import {
   TrendingUp,
   Activity,
 } from 'lucide-react'
-import { cn, timeAgoStr } from '@/lib/utils'
-import { AGENT_TYPES } from '@/lib/constants'
+import { cn } from '@/lib/utils'
+import { AGENT_TYPES, AI_PROVIDERS } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -153,6 +153,19 @@ function MiniSparkline({ data, maxVal }: { data: number[]; maxVal: number }) {
   )
 }
 
+function formatTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return 'Sin actividad'
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = now - then
+
+  if (diff < 60000) return 'Ahora'
+  if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)}m`
+  if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)}h`
+  if (diff < 604800000) return `Hace ${Math.floor(diff / 86400000)}d`
+  return new Date(dateStr).toLocaleDateString('es-MX')
+}
+
 function AgentCard({
   agent,
   metrics,
@@ -221,7 +234,7 @@ function AgentCard({
               <Clock className="h-3 w-3" />
               Última actividad
             </span>
-            <span className="text-muted-foreground">{timeAgoStr(metrics?.lastActivity ?? null)}</span>
+            <span className="text-muted-foreground">{formatTimeAgo(metrics?.lastActivity ?? null)}</span>
           </div>
         </div>
       </CardContent>
@@ -302,7 +315,7 @@ function AgentConfigDialog({
                   <SelectContent>
                     {AGENT_TYPES.map((t) => (
                       <SelectItem key={t.value} value={t.value}>
-                        {t.icon} {t.label}
+                        <span className="flex items-center gap-1.5">{typeIcons[t.value]} {t.label}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -325,11 +338,29 @@ function AgentConfigDialog({
           <TabsContent value="model" className="space-y-4 mt-4">
             <div className="grid gap-2">
               <Label>Modelo</Label>
-              <Input
+              <Select
                 value={formData.model}
-                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                placeholder="Ej: llama-3.3-70b-versatile"
-              />
+                onValueChange={(v) => setFormData({ ...formData, model: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(AI_PROVIDERS).map((provider) => (
+                    <React.Fragment key={provider.name}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</div>
+                      {provider.models.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          <span className="flex items-center gap-1.5">
+                            {m}
+                            {provider.defaultModel === m && <span className="text-[10px] text-emerald-500 font-medium">recomendado</span>}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label>Temperatura: {temperature}</Label>
@@ -584,7 +615,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
                     <SelectContent>
                       {AGENT_TYPES.map((t) => (
                         <SelectItem key={t.value} value={t.value}>
-                          {t.icon} {t.label}
+                          <span className="flex items-center gap-1.5">{typeIcons[t.value]} {t.label}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -610,11 +641,29 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
               </div>
               <div className="grid gap-2">
                 <Label>Modelo IA</Label>
-                <Input
+                <Select
                   value={newAgent.model}
-                  onChange={(e) => setNewAgent({ ...newAgent, model: e.target.value })}
-                  placeholder="Ej: llama-3.3-70b-versatile"
-                />
+                  onValueChange={(v) => setNewAgent({ ...newAgent, model: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.values(AI_PROVIDERS).map((provider) => (
+                      <React.Fragment key={provider.name}>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</div>
+                        {provider.models.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            <span className="flex items-center gap-1.5">
+                              {m}
+                              {provider.defaultModel === m && <span className="text-[10px] text-emerald-500 font-medium">recomendado</span>}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -813,7 +862,7 @@ export function AgentsView({ workspaceId }: AgentsViewProps) {
                           <TableCell className="py-3 text-center text-xs font-medium">{m.leadsQualified}</TableCell>
                           <TableCell className="py-3 text-center text-xs font-medium">{m.dealsClosed}</TableCell>
                           <TableCell className="py-3 text-center text-[10px] text-muted-foreground">
-                            {timeAgoStr(m.lastActivity)}
+                            {formatTimeAgo(m.lastActivity)}
                           </TableCell>
                         </TableRow>
                       ))}

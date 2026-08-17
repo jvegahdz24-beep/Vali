@@ -17,59 +17,19 @@ export function formatCurrency(amount: number, currency: string = 'MXN'): string
 export function formatPhoneNumber(phone: string | null | undefined): string {
   if (!phone) return ''
   const cleaned = phone.replace(/\D/g, '')
+  // Not a phone number at all — don't display the raw non-numeric string
+  if (cleaned.length === 0) return ''
   if (cleaned.length === 10) {
     return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`
   }
   if (cleaned.length === 12) {
     return `+${cleaned.slice(0, 2)} (${cleaned.slice(2, 4)}) ${cleaned.slice(4, 8)}-${cleaned.slice(8)}`
   }
-  return phone
-}
-
-/**
- * Normalizes a phone number to canonical format for DB storage and matching.
- * 
- * Rules:
- * 1. Strip ALL non-digit characters (+, spaces, dashes, parentheses)
- * 2. For Mexican numbers: normalize 521→52, 044→52, 045→52 prefixes
- * 3. For 10-digit Mexican numbers: prepend 52
- * 4. For numbers with + prefix: strip it
- * 5. Result: digits only (e.g. "529844498785" for Jonathan)
- * 
- * This ensures consistent phone matching between WhatsApp JID extraction,
- * CSV import, manual creation, and webhook inbound.
- */
-export function normalizePhone(phone: string | null | undefined): string {
-  if (!phone) return ''
-
-  // Step 1: Strip everything except digits
-  let digits = phone.replace(/[^\d]/g, '')
-
-  if (!digits || digits.length < 10) return digits
-
-  // Step 2: Handle Mexican prefixes
-  // WhatsApp JID for Mexican mobile: 521XXXXXXXXXX (52 + 1 + 10-digit)
-  // WhatsApp JID for Mexican landline: 52XXXXXXXXXX (52 + 10-digit)
-  // Mexican local dialing: 044/045XXXXXXXXXX (cell) or 01XXXXXXXXXX (LD)
-
-  if (digits.length === 13 && digits.startsWith('521')) {
-    // 521XXXXXXXXXX → 52XXXXXXXXXX (strip the mobile prefix 1)
-    digits = '52' + digits.slice(3)
-  } else if (digits.length === 13 && digits.startsWith('044')) {
-    // 044XXXXXXXXXX → 52XXXXXXXXXX
-    digits = '52' + digits.slice(3)
-  } else if (digits.length === 13 && digits.startsWith('045')) {
-    // 045XXXXXXXXXX → 52XXXXXXXXXX
-    digits = '52' + digits.slice(3)
-  } else if (digits.length === 12 && digits.startsWith('01')) {
-    // 01XXXXXXXXXX → 52XXXXXXXXXX
-    digits = '52' + digits.slice(2)
-  } else if (digits.length === 10) {
-    // 10-digit Mexican number → prepend country code 52
-    digits = '52' + digits
+  // International WhatsApp number (country code + number, 11-17 digits)
+  if (cleaned.length >= 11) {
+    return `+${cleaned}`
   }
-
-  return digits
+  return phone
 }
 
 export function getChannelIcon(channel: string): string {
@@ -138,12 +98,6 @@ export function timeAgo(date: Date): string {
   if (hours < 24) return `Hace ${hours}h`
   if (days < 7) return `Hace ${days}d`
   return new Date(date).toLocaleDateString('es-MX')
-}
-
-/** timeAgo variant that accepts an ISO string (or null/undefined) */
-export function timeAgoStr(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'Sin actividad'
-  return timeAgo(new Date(dateStr))
 }
 
 export function formatNumber(num: number): string {

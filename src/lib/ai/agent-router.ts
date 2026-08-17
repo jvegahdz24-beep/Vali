@@ -459,3 +459,135 @@ export class AgentRouter {
 // ─── Singleton ───────────────────────────────────────────────
 
 export const agentRouter = new AgentRouter()
+
+// ─── Section 5.1: getAgentForContact ────────────────────────
+// Looks up the contact's deal stage and lead score, then picks
+// the best DB-backed Agent record for that workspace.
+
+export async function getAgentForContact(
+  contactId: string,
+  workspaceId: string
+): Promise<{ agentId: string; agentName: string; agentType: AgentType; personalitySlug?: string } | null> {
+  const { db } = await import('@/lib/db')
+
+  const [contact, activeDeal, lastMessage] = await Promise.all([
+    db.contact.findUnique({
+      where: { id: contactId },
+      select: { leadScore: true, temperature: true, lastMessageAt: true },
+    }),
+    db.deal.findFirst({
+      where: { contactId, workspaceId, status: 'active' },
+      select: { stage: { select: { name: true } } },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    db.message.findFirst({
+      where: { conversation: { contactId, workspaceId }, direction: 'inbound' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+  ])
+
+  if (!contact) return null
+
+  const leadScore = contact.leadScore ?? 0
+  const temperature = contact.temperature ?? 'cold'
+  const stage = activeDeal?.stage?.name ?? 'new'
+  const lastActivityDate = lastMessage?.createdAt ?? contact.lastMessageAt ?? new Date(0)
+  const daysInactive = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24)
+
+  const HIGH_VALUE_STAGES = ['qualified', 'proposal', 'negotiation', 'Calificado', 'Propuesta', 'Negociacion', 'Negociación']
+  const isNegotiationStage = ['negotiation', 'Negociacion', 'Negociación'].includes(stage)
+  const isProposalOrNeg = HIGH_VALUE_STAGES.includes(stage)
+
+  // ── Routing rules — EXACTAS según la tabla del spec ──────────
+  // void isProposalOrNeg — ya no se usa para enrutar (la tabla manda por
+  // temperatura + etapa de Negociación + inactividad).
+  void isProposalOrNeg
+
+  // cold + score < 20 → NINGUNO (solo observación): no se asigna agente.
+  if (temperature === 'cold' && leadScore < 20) {
+    return null
+  }
+
+  let targetPersonality: string
+  let targetType: AgentType
+
+  // hot + Negociación + inactivo > 3 días → CERRADOR (cierre urgente)
+  if (temperature === 'hot' && isNegotiationStage && daysInactive > 3) {
+    targetPersonality = 'CERRADOR'
+    targetType = 'sales'
+  }
+  // hot (cualquier etapa) → SELLER Pro (busca el cierre)
+  else if (temperature === 'hot') {
+    targetPersonality = 'SELLER'
+    targetType = 'sales'
+  }
+  // cold + inactivo > 7 días → FollowUp Bot (JHON en modo reactivación suave)
+  else if (temperature === 'cold' && daysInactive > 7) {
+    targetPersonality = 'JHON'
+    targetType = 'followup'
+  }
+  // warm (Lead Nuevo / Contactado) → JHON (calificar)
+  else if (temperature === 'warm') {
+    targetPersonality = 'JHON'
+    targetType = 'qualifier'
+  }
+  // default → JHON
+  else {
+    targetPersonality = 'JHON'
+    targetType = 'qualifier'
+  }
+
+  // Try to find an agent matching the target personality name
+  const agentByPersonality = targetPersonality
+    ? await db.agent.findFirst({
+        where: {
+          workspaceId,
+          isActive: true,
+          personality: targetPersonality,
+        },
+        select: { id: true, name: true, type: true, personality: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    : null
+
+  if (agentByPersonality) {
+    return {
+      agentId: agentByPersonality.id,
+      agentName: agentByPersonality.name,
+      agentType: agentByPersonality.type as AgentType,
+      personalitySlug: agentByPersonality.personality,
+    }
+  }
+
+  // Fallback: agent by type
+  const agentByType = await db.agent.findFirst({
+    where: { workspaceId, isActive: true, type: targetType },
+    select: { id: true, name: true, type: true, personality: true },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (agentByType) {
+    return {
+      agentId: agentByType.id,
+      agentName: agentByType.name,
+      agentType: agentByType.type as AgentType,
+      personalitySlug: agentByType.personality,
+    }
+  }
+
+  // Final fallback: any active agent in workspace
+  const fallback = await db.agent.findFirst({
+    where: { workspaceId, isActive: true },
+    select: { id: true, name: true, type: true, personality: true },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (!fallback) return null
+  return {
+    agentId: fallback.id,
+    agentName: fallback.name,
+    agentType: fallback.type as AgentType,
+    personalitySlug: fallback.personality,
+  }
+}

@@ -1,32 +1,27 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Edge-Compatible JWT Module (Legacy Compatibility)
+// ValiAutoFlow — Edge-Compatible JWT Module
 // Used by middleware (runs in Edge Runtime — NO Node.js APIs)
 // Pure Web Crypto API — ZERO external dependencies
+// Replaces jose package to eliminate Turbopack bundling issues
 // ═══════════════════════════════════════════════════════════════
-//
-// NOTE: For full refresh-token auth in API routes, use:
-//   import { verifyAccessToken, createTokenPair } from '@/lib/auth'
-//
-// This module is kept for edge middleware compatibility only.
 
-// JWT secret from env — validated lazily at usage time
-const _JWT_SECRET = process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-secret-do-not-use-in-prod-32chars!!' : '')
+// JWT secret from env
+const JWT_SECRET = process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-secret-do-not-use-in-prod-32chars!!' : (() => { throw new Error('NEXTAUTH_SECRET environment variable is required in production') })())
 
-function getJWT_SECRET(): string {
-  if (!_JWT_SECRET) {
-    throw new Error('NEXTAUTH_SECRET environment variable is required in production')
-  }
-  return _JWT_SECRET
-}
+// Cookie name — use __Host- prefix in production for extra browser-enforced security
+// (__Host- requires Secure flag + Path=/ + no Domain attribute, which we already set)
+export const SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
+  ? '__Host-valiflow-session'
+  : 'valiflow-session'
 
-// Cookie name (shared with new auth module)
-export const SESSION_COOKIE_NAME = 'valiflow-session'
-
-// JWT expiration: 30 days in seconds (legacy, middleware-only)
-const JWT_EXPIRATION_SECONDS = 30 * 24 * 60 * 60
+// JWT expiration: 7 days in seconds
+const JWT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60
 
 // ─── Web Crypto Helpers ───────────────────────────────────────
 
+/**
+ * Base64URL encode a Uint8Array (RFC 7515 compliant).
+ */
 function base64urlEncode(data: Uint8Array): string {
   let binary = ''
   for (let i = 0; i < data.length; i++) {
@@ -38,6 +33,9 @@ function base64urlEncode(data: Uint8Array): string {
     .replace(/=+$/, '')
 }
 
+/**
+ * Base64URL decode a string to Uint8Array.
+ */
 function base64urlDecode(str: string): Uint8Array {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/')
   while (base64.length % 4 !== 0) {
@@ -51,9 +49,13 @@ function base64urlDecode(str: string): Uint8Array {
   return bytes
 }
 
+/**
+ * Get the HMAC-SHA256 signing key from the JWT secret.
+ * Uses crypto.subtle which is available in Edge Runtime and Node.js 15+.
+ */
 async function getSigningKey(): Promise<CryptoKey> {
   const encoder = new TextEncoder()
-  const keyData = encoder.encode(getJWT_SECRET())
+  const keyData = encoder.encode(JWT_SECRET)
   return crypto.subtle.importKey(
     'raw',
     keyData,
@@ -75,15 +77,20 @@ export interface SessionPayload {
 
 /**
  * Create a JWT session token for an authenticated user.
- * LEGACY: Used by edge middleware. For API routes, use @/lib/auth instead.
+ *
+ * JWT structure: base64url(header).base64url(payload).base64url(signature)
+ *
+ * Compatible with standard JWT libraries — produces valid HS256 tokens.
  */
 export async function createSessionToken(payload: SessionPayload): Promise<string> {
   const encoder = new TextEncoder()
 
+  // Header: {"alg":"HS256","typ":"JWT"}
   const header: Record<string, string> = { alg: 'HS256', typ: 'JWT' }
   const headerBytes = encoder.encode(JSON.stringify(header))
   const headerB64 = base64urlEncode(headerBytes)
 
+  // Payload: session data + timestamps
   const now = Math.floor(Date.now() / 1000)
   const jwtPayload: Record<string, unknown> = {
     ...payload,
@@ -93,6 +100,7 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
   const payloadBytes = encoder.encode(JSON.stringify(jwtPayload))
   const payloadB64 = base64urlEncode(payloadBytes)
 
+  // Signature: HMAC-SHA256(headerB64.payloadB64)
   const signingInput = `${headerB64}.${payloadB64}`
   const signingInputBytes = encoder.encode(signingInput)
 
@@ -105,10 +113,15 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 
 /**
  * Verify a JWT session token. Returns the payload if valid, null otherwise.
- * LEGACY: Used by edge middleware. For API routes, use @/lib/auth instead.
+ *
+ * Checks:
+ * - Signature integrity (HMAC-SHA256)
+ * - Expiration time (exp claim)
+ * - Required fields presence
  */
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
+    // Split token into parts
     const parts = token.split('.')
     if (parts.length !== 3) {
       return null
@@ -116,6 +129,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
 
     const [headerB64, payloadB64, signatureB64] = parts
 
+    // Verify signature
     const encoder = new TextEncoder()
     const signingInput = `${headerB64}.${payloadB64}`
     const signingInputBytes = encoder.encode(signingInput)
@@ -133,15 +147,18 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       return null
     }
 
+    // Decode payload
     const payloadBytes = base64urlDecode(payloadB64)
     const payloadText = new TextDecoder().decode(payloadBytes)
     const payload = JSON.parse(payloadText) as Record<string, unknown>
 
+    // Check expiration
     const exp = payload.exp as number | undefined
     if (exp && exp < Math.floor(Date.now() / 1000)) {
       return null
     }
 
+    // Validate required fields
     if (!payload.userId || !payload.email || !payload.name || !payload.role) {
       return null
     }

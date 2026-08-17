@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit
     const ip = getClientIp(req)
-    const rl = await rateLimit(`${ip}:ai:chat`, RATE_LIMITS.aiChat.limit, RATE_LIMITS.aiChat.windowMs)
+    const rl = rateLimit(`${ip}:ai:chat`, RATE_LIMITS.aiChat.limit, RATE_LIMITS.aiChat.windowMs)
     if (!rl.success) {
       return Response.json({ error: 'Demasiados intentos.', code: 'RATE_LIMITED' }, { status: 429 })
     }
@@ -24,7 +24,22 @@ export async function POST(req: NextRequest) {
     // Auth
     const session = await requireAuth(req)
     const body = await req.json()
-    const { workspaceId, conversationId, contactId, message, channel = 'whatsapp', contactData } = body
+    const {
+      workspaceId,
+      conversationId,
+      contactId,
+      message,
+      channel = 'whatsapp',
+      contactData,
+      // When true, the `message` was typed by a human operator in the
+      // inbox and has already been sent+persisted by /api/whatsapp/send.
+      // The processor should run the AI pipeline (so the assistant can
+      // produce its own reply) but must NOT save `message` as an
+      // inbound message from the contact — otherwise the operator's
+      // text shows up twice: once as outbound/human (correct) and once
+      // as inbound/contact (the bug we are fixing).
+      operatorInitiated = false,
+    } = body
 
     if (!message) {
       return Response.json({ error: 'Missing required field: message' }, { status: 400 })
@@ -42,17 +57,26 @@ export async function POST(req: NextRequest) {
       conversationId,
       contactId,
       skipMessageSave: false,
+      operatorInitiated,
     })
 
     return Response.json({
       success: true,
-      response: result.engineResult.response,
+      response: result.aiReplyText,
       analysis: {
         action: result.engineResult.action,
         strategy: result.engineResult.strategy,
-        agentRouting: result.engineResult.agentRouting,
-        followUpTasks: result.engineResult.followUpTasks,
-        crmUpdates: result.engineResult.crmUpdates,
+        agentRouting: result.engineResult.agentRouting
+          ? `${result.engineResult.agentRouting.agentType} (${Math.round(result.engineResult.agentRouting.confidence * 100)}%)`
+          : undefined,
+        followUpTasks: result.engineResult.followUpTasks?.map(
+          (t) => `${t.channel} +${t.delayHours}h: ${t.template}`
+        ) ?? [],
+        crmUpdates: result.engineResult.crmUpdates?.map(
+          (u) => `${u.type}: ${Array.isArray(u.value) ? u.value.join(', ') : u.value}`
+        ) ?? [],
+        crmTags: result.parsedCRMTags ?? [],
+        apptMetadata: result.apptMetadata ?? null,
       },
       conversationId: result.conversationId,
       contactId: result.contactId,

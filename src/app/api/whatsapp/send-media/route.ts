@@ -9,7 +9,10 @@ import { getMediaFilePath, getMediaInfo } from '@/lib/whatsapp/media-handler'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return Response.json({ error: 'No workspace in session' }, { status: 400 })
+    }
     const body = await req.json()
     const { phone, mediaId, caption, conversationId } = body
 
@@ -32,9 +35,10 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'Archivo no encontrado en disco' }, { status: 404 })
     }
 
-    // Import WhatsApp manager
-    const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    if (!whatsAppManager.isConnected()) {
+    // Import WhatsApp manager bound to this session's workspace
+    const { getWhatsAppManager } = await import('@/lib/whatsapp/connection')
+    const manager = getWhatsAppManager(session.workspaceId)
+    if (!manager.isConnected()) {
       return Response.json({ error: 'WhatsApp no esta conectado' }, { status: 503 })
     }
 
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Send via WhatsApp
-    const result = await whatsAppManager.sendMessageRaw(jid, messageContent)
+    const result = await manager.sendMessageRaw(jid, messageContent)
 
     // Save message to DB
     if (conversationId) {

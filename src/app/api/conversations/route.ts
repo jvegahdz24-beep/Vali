@@ -6,27 +6,32 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { canViewAllData } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
+    const member = await requireWorkspace(workspaceId!, session.userId)
 
     const channel = searchParams.get('channel') || undefined
     const status = searchParams.get('status') || undefined
     const contactId = searchParams.get('contactId') || undefined
     const assignedTo = searchParams.get('assignedTo') || undefined
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1)
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 100)
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 1000)
+
+    // RBAC: vendedor (member) solo ve SUS conversaciones asignadas. Otros roles
+    // ven todo el workspace (respetando el filtro opcional ?assignedTo).
+    const scopedAssignedTo = canViewAllData(member.role) ? assignedTo : session.userId
 
     const where: Record<string, unknown> = {
       workspaceId,
       ...(channel ? { channel } : {}),
       ...(status ? { status } : {}),
       ...(contactId ? { contactId } : {}),
-      ...(assignedTo ? { assignedTo } : {}),
+      ...(scopedAssignedTo ? { assignedTo: scopedAssignedTo } : {}),
     }
 
     const [conversations, total] = await Promise.all([

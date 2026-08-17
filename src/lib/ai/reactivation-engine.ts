@@ -3,9 +3,10 @@
 // 6 psychological angles + 4 automatic cycles for cold leads
 // ═══════════════════════════════════════════════════════════════
 
-import { debug } from '@/lib/logger'
 import { db } from '@/lib/db'
 import { leadProfiler, type LeadProfileData } from './lead-profiler'
+import { shouldStopFollowUps, markDisinterested } from './follow-up-guard'
+import { hardStopFollowUps } from './follow-up-engine'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -198,18 +199,19 @@ export class ReactivationEngine {
    * Find and reactivate cold leads for a workspace.
    * Returns a list of messages ready to send.
    */
-  async findAndReactivate(workspaceId: string): Promise<ReactivationResult[]> {
+  async findAndReactivate(workspaceId: string, opts?: { dryRun?: boolean }): Promise<ReactivationResult[]> {
+    const dryRun = opts?.dryRun === true
     const results: ReactivationResult[] = []
 
     try {
       // Get all reactivable leads
       const profiles = await leadProfiler.getReactivableLeads(workspaceId)
       if (profiles.length === 0) {
-        debug('[ReactivationEngine] No reactivable leads found')
+        console.log('[ReactivationEngine] No reactivable leads found')
         return []
       }
 
-      debug(`[ReactivationEngine] Found ${profiles.length} reactivable leads`)
+      console.log(`[ReactivationEngine] Found ${profiles.length} reactivable leads`)
 
       const now = new Date()
 
@@ -224,7 +226,7 @@ export class ReactivationEngine {
           if (profile.lastReactivateAt) {
             const hoursSinceReactivation = (now.getTime() - new Date(profile.lastReactivateAt).getTime()) / (1000 * 60 * 60)
             if (hoursSinceReactivation < 24) {
-              debug(`[ReactivationEngine] Skipping ${profile.contactId}: reactivated ${hoursSinceReactivation.toFixed(0)}h ago (< 24h)`)
+              console.log(`[ReactivationEngine] Skipping ${profile.contactId}: reactivated ${hoursSinceReactivation.toFixed(0)}h ago (< 24h)`)
               continue
             }
           }
@@ -234,9 +236,28 @@ export class ReactivationEngine {
             (c) => hoursSinceActive >= c.minHoursSinceActive && hoursSinceActive < c.maxHoursSinceActive
           ) || CYCLE_CONFIG[CYCLE_CONFIG.length - 1]
 
+          // PARO DURO: IA apagada, pausa, ya es cliente / TRATO GANADO, noqualify.
+          // (bug 2026-07-21: un ganado sin etiqueta 'cliente' se reactivaba.)
+          const hard = await hardStopFollowUps(profile.contactId)
+          if (hard.stop) {
+            console.log(`[ReactivationEngine] Skipping ${profile.contactId}: paro duro (${hard.reason})`)
+            if (!dryRun && /ganado|cliente|cerrado/.test(hard.reason || '')) {
+              await db.leadProfile.update({ where: { contactId: profile.contactId }, data: { isReactivable: false } }).catch(() => {})
+            }
+            continue
+          }
+
+          // FRENO ANTI-SPAM: si ya se le mandaron N follow-ups sin respuesta
+          // (default 2), no volver a reactivar — se marca no-reactivable.
+          if (await shouldStopFollowUps(profile.contactId, workspaceId)) {
+            console.log(`[ReactivationEngine] Skipping ${profile.contactId}: sin respuesta tras tope → desinteresado`)
+            if (!dryRun) await markDisinterested(profile.contactId, workspaceId)
+            continue
+          }
+
           // After cycle 4, mark as non-reactivable (max 4 cycles)
           if (profile.reactivationCycle >= 4) {
-            debug(`[ReactivationEngine] Skipping ${profile.contactId}: max cycles reached (4)`)
+            console.log(`[ReactivationEngine] Skipping ${profile.contactId}: max cycles reached (4)`)
             await db.leadProfile.update({
               where: { contactId: profile.contactId },
               data: { isReactivable: false },
@@ -264,7 +285,9 @@ export class ReactivationEngine {
             orderBy: { lastMessageAt: 'desc' },
           })
 
-          if (conversation) {
+          // dryRun = solo PREVIEW: no crea tareas (no envía nada). Sirve para
+          // que el usuario vea a quién escribiría antes de activar el auto-envío.
+          if (conversation && !dryRun) {
             await db.followUpTask.create({
               data: {
                 workspaceId,
@@ -273,6 +296,9 @@ export class ReactivationEngine {
                 conversationId: conversation.id,
                 status: 'pending',
                 scheduledAt: new Date(), // Send immediately
+                // Guarda el mensaje ya generado → el worker NO re-escanea (evita
+                // el spiral de volver a crear tareas al enviar).
+                metadata: JSON.stringify({ message, angle: angle.id, cycle: cycleConfig.cycle }),
               },
             })
           }
@@ -287,13 +313,13 @@ export class ReactivationEngine {
             workspaceId,
           })
 
-          debug(`[ReactivationEngine] Reactivation prepared: ${contact.firstName} | angle: ${angle.name} | cycle: ${cycleConfig.cycle}`)
+          console.log(`[ReactivationEngine] Reactivation prepared: ${contact.firstName} | angle: ${angle.name} | cycle: ${cycleConfig.cycle}`)
         } catch (err) {
           console.error(`[ReactivationEngine] Error processing profile ${profile.contactId}:`, err)
         }
       }
 
-      debug(`[ReactivationEngine] Prepared ${results.length} reactivation messages`)
+      console.log(`[ReactivationEngine] Prepared ${results.length} reactivation messages`)
       return results
 
     } catch (error) {

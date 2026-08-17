@@ -37,6 +37,7 @@ vi.mock('@/lib/db', () => ({
     message: {
       create: (...args: any[]) => mockCreate(...args),
       findMany: (...args: any[]) => mockFindMany(...args),
+      count: vi.fn().mockResolvedValue(0),
     },
     agent: {
       findFirst: (...args: any[]) => mockFindFirst(...args),
@@ -66,6 +67,8 @@ vi.mock('@/lib/ai', () => {
     RevenueEngine: class {
       processConversation = mockProcessConversation
     },
+    computeLeadScoreDelta: vi.fn().mockReturnValue(0),
+    buildIntentActionDirective: vi.fn().mockReturnValue('') ,
   }
 })
 
@@ -104,6 +107,7 @@ vi.mock('@/lib/logger', () => ({
 }))
 
 vi.mock('@/lib/event-bus', () => ({
+  publish: vi.fn(),
   eventBus: {
     emit: vi.fn().mockResolvedValue('evt_mock'),
     on: vi.fn().mockReturnValue(vi.fn()),
@@ -185,14 +189,11 @@ describe('processMessageCore', () => {
   })
 
   it('procesa mensaje exitosamente con workspace existente', async () => {
-    // phoneWorkspaceMapping returns null (no mapping → falls back)
-    mockFindFirst.mockResolvedValueOnce(null)
-    // Workspace exists
-    mockFindFirst.mockResolvedValueOnce({
+    mockFindUnique.mockResolvedValueOnce({
       id: 'ws_1',
       name: 'Test Workspace',
       industry: 'services',
-      settings: '{}',
+      settings: JSON.stringify({ apiKeys: { glm: 'test-api-key-12345' } }),
       isActive: true,
     })
 
@@ -237,6 +238,7 @@ describe('processMessageCore', () => {
       text: 'Hola, ¿cómo están?',
       phone: '5512345678',
       pushName: 'Juan',
+      workspaceId: 'ws_1',
     })
 
     expect(result.success).toBe(true)
@@ -245,10 +247,7 @@ describe('processMessageCore', () => {
   })
 
   it('crea conversación nueva si no existe', async () => {
-    // phoneWorkspaceMapping returns null
-    mockFindFirst.mockResolvedValueOnce(null)
-    // Workspace
-    mockFindFirst.mockResolvedValueOnce({
+    mockFindUnique.mockResolvedValueOnce({
       id: 'ws_1',
       name: 'WS',
       industry: 'services',
@@ -290,6 +289,7 @@ describe('processMessageCore', () => {
     const result = await processMessageCore({
       text: 'Nuevo mensaje',
       phone: '5598765432',
+      workspaceId: 'ws_1',
     })
 
     expect(result.conversationId).toBe('conv_new')
@@ -297,9 +297,7 @@ describe('processMessageCore', () => {
   })
 
   it('skipAI retorna sin respuesta de IA', async () => {
-    // phoneWorkspaceMapping returns null
-    mockFindFirst.mockResolvedValueOnce(null)
-    mockFindFirst.mockResolvedValueOnce({
+    mockFindUnique.mockResolvedValueOnce({
       id: 'ws_1',
       name: 'WS',
       industry: 'services',
@@ -331,6 +329,7 @@ describe('processMessageCore', () => {
     const result = await processMessageCore({
       text: '📷',
       phone: '5511111111',
+      workspaceId: 'ws_1',
       skipAI: true,
     })
 

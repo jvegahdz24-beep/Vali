@@ -604,12 +604,15 @@ async function executeCrmCreateDeal(
     where: { pipelineId: pipelineId as string },
     orderBy: { order: 'asc' },
   })
+  if (!firstStage) {
+    return JSON.stringify({ error: 'The pipeline has no stages configured' })
+  }
 
   const deal = await db.deal.create({
     data: {
       workspaceId: workspaceId as string,
       pipelineId: pipelineId as string,
-      stageId: firstStage?.id || null,
+      stageId: firstStage.id,
       contactId: (contactId as string) || null,
       title: title as string,
       value: (value as number) || 0,
@@ -812,6 +815,8 @@ async function executeWhatsappSendMessage(
       const sendResult = await ephemeralManager.sendAny(
         phone as string,
         message as string,
+        undefined,
+        { workspaceId: typeof workspaceId === 'string' ? workspaceId : undefined },
       )
       if (sendResult.success) {
         result = sendResult
@@ -823,8 +828,11 @@ async function executeWhatsappSendMessage(
 
   if (!result.success) {
     try {
-      const whatsAppManager = (await import('@/lib/whatsapp/connection')).whatsAppManager
-      const sendResult = await whatsAppManager.sendMessage(phone as string, message as string)
+      if (!workspaceId || typeof workspaceId !== 'string') {
+        throw new Error('workspaceId is required for persistent WhatsApp sending')
+      }
+      const { getWhatsAppManager } = await import('@/lib/whatsapp/connection')
+      const sendResult = await getWhatsAppManager(workspaceId).sendMessage(phone as string, message as string)
       if (sendResult.success) {
         result = sendResult
       }

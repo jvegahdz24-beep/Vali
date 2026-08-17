@@ -1,25 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { whatsAppManager } from '@/lib/whatsapp/connection'
+import { getWhatsAppManager } from '@/lib/whatsapp/connection'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req)
-    const status = whatsAppManager.getStatus()
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ error: 'No workspace in session' }, { status: 400 })
+    }
 
-    // FIX P4: Check actual socket liveness, not just in-memory flag.
-    // The `socketAlive` field checks if the Baileys WebSocket is OPEN,
-    // preventing "ghost connection" where _connected=true but socket is dead.
-    const socketAlive = whatsAppManager.isSocketAlive()
+    // Resolve manager strictly by the authenticated user's workspaceId.
+    // This is what guarantees tenant A can't see tenant B's WhatsApp status.
+    const manager = getWhatsAppManager(session.workspaceId)
+    const status = manager.getStatus()
+
+    const socketAlive = manager.isSocketAlive()
     const isGhost = status.connected && !socketAlive
 
-    // If ghost detected: log it and trigger silent reconnect
+    // Reconexión THROTTLEADA (ver ensureConnected): un socket fantasma o caído
+    // se reintenta como máximo cada ~25s, sin importar cuántas pestañas polleen.
+    // Antes cada poll de cada pestaña llamaba start() → tormenta de reconexiones
+    // que nunca dejaba estabilizar (el "parpadeo" de conectar WhatsApp).
     if (isGhost) {
-      console.warn('[Status] Ghost connection detected — triggering silent reconnect')
-      // Non-blocking reconnect attempt
-      whatsAppManager.start().catch((err) => {
-        console.error('[Status] Auto-reconnect failed:', err)
+      manager.ensureConnected()
+    } else if (!status.connected && !status.connecting) {
+      // Solo auto-conecta si hay credenciales guardadas (si no, QR manual).
+      const hasAuth = await db.whatsAppAuth.findFirst({
+        where: { workspace: session.workspaceId },
+        select: { workspace: true },
       })
+      if (hasAuth) manager.ensureConnected()
     }
 
     return NextResponse.json({

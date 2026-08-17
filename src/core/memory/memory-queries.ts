@@ -760,7 +760,7 @@ export async function getStaleContacts(
         daysInactive: daysInactiveCalc,
         temperature: contact.temperature,
         leadScore: contact.leadScore,
-        totalMemories: memoryCountMap.get(contact.id) || 0,
+        totalMemories: Number(memoryCountMap.get(contact.id) || 0),
         channel: contact.conversations[0]?.channel || 'unknown',
       }
     })

@@ -10,9 +10,9 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: [],
     env: {
-      NEXTAUTH_SECRET: 'test-secret-for-vitest',
+      NEXTAUTH_SECRET: 'test-secret-for-vitest-32-characters-long',
       NEXTAUTH_URL: 'http://localhost:3000',
-      DATABASE_URL: 'file:./db/test.db',
+      DATABASE_URL: 'mysql://test:test@127.0.0.1:1/test',
     },
     coverage: {
       provider: 'v8',

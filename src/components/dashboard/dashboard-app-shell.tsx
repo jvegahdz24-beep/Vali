@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
+import { DashboardLayout, type ViewType as LayoutViewType } from '@/components/dashboard/dashboard-layout'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { OnboardingWizard } from '@/components/dashboard/onboarding-wizard'
 import { Loader2, Database, AlertCircle } from 'lucide-react'
@@ -42,6 +42,25 @@ function ViewLoader() {
 }
 
 export type ViewType = 'dashboard' | 'chat-demo' | 'inbox' | 'pipeline' | 'contacts' | 'agents' | 'team' | 'analytics' | 'automations' | 'developer' | 'settings' | 'valiguard' | 'admin' | 'playground' | 'reports' | 'calendar'
+
+const layoutViewToShellView: Partial<Record<LayoutViewType, ViewType>> = {
+  dashboard: 'dashboard',
+  'chat-demo': 'chat-demo',
+  inbox: 'inbox',
+  pipeline: 'pipeline',
+  contacts: 'contacts',
+  agents: 'agents',
+  team: 'team',
+  analytics: 'analytics',
+  automations: 'automations',
+  developer: 'developer',
+  settings: 'settings',
+  valiguard: 'valiguard',
+  admin: 'admin',
+  reports: 'reports',
+  calendar: 'calendar',
+  playground: 'playground',
+}
 
 const pathToView: Record<string, ViewType> = {
   '/contacts': 'contacts',
@@ -76,6 +95,9 @@ export default function DashboardAppShell() {
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get('redirect') || ''
   const [activeView, setActiveView] = useState<ViewType>(() => pathToView[redirectPath] || 'dashboard')
+  const handleLayoutViewChange = useCallback((view: LayoutViewType) => {
+    setActiveView(layoutViewToShellView[view] || 'dashboard')
+  }, [])
   const [workspaceId, setWorkspaceId] = useState<string>('')
   const [isSeeding, setIsSeeding] = useState(false)
   const [seedError, setSeedError] = useState<string | null>(null)
@@ -221,7 +243,7 @@ export default function DashboardAppShell() {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout activeView={activeView} onViewChange={setActiveView} workspaceId={workspaceId}>
+      <DashboardLayout activeView={activeView} onViewChange={handleLayoutViewChange} workspaceId={workspaceId}>
         <Suspense fallback={<ViewLoader />}>
           {activeView === 'dashboard' && <DashboardMain workspaceId={workspaceId} onViewChange={(v) => setActiveView(v as ViewType)} />}
           {activeView === 'chat-demo' && <ChatDemo workspaceId={workspaceId} />}

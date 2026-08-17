@@ -5,7 +5,6 @@
 // Designed for on-demand sends, QR pairing, and short-lived tasks.
 // ═══════════════════════════════════════════════════════════════
 
-import { debug } from '@/lib/logger'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import path from 'path'
@@ -21,6 +20,8 @@ export interface EphemeralConfig {
   timeoutMs?: number        // Auto-destroy after idle (default: 30 min)
   maxLifetimeMs?: number    // Hard max lifetime (default: 2 hours)
   printQR?: boolean         // Print QR in terminal (default: false)
+  ownerId?: string          // Authenticated user that created the session
+  workspaceId?: string      // Tenant that owns the session
 }
 
 export interface EphemeralStatus {
@@ -75,8 +76,10 @@ async function loadBaileys(): Promise<BaileysModule> {
 
 export class EphemeralClient {
   readonly id: string
+  readonly ownerId: string | null
+  readonly workspaceId: string | null
   private sock: WASocket | null = null
-  private config: Required<EphemeralConfig>
+  private config: Required<Omit<EphemeralConfig, 'ownerId' | 'workspaceId'>>
   private _connected = false
   private _connecting = false
   private _phone: string | null = null
@@ -97,6 +100,8 @@ export class EphemeralClient {
 
   constructor(config: EphemeralConfig = {}) {
     this.id = crypto.randomUUID().slice(0, 8)
+    this.ownerId = config.ownerId ?? null
+    this.workspaceId = config.workspaceId ?? null
     this.config = {
       timeoutMs: config.timeoutMs ?? 30 * 60 * 1000,       // 30 min
       maxLifetimeMs: config.maxLifetimeMs ?? 2 * 60 * 60 * 1000, // 2 hours
@@ -108,7 +113,7 @@ export class EphemeralClient {
     this._authDir = path.join(process.cwd(), '.whatsapp-ephemeral', `session-${this.id}`)
     fs.mkdirSync(this._authDir, { recursive: true })
 
-    debug(`[Ephemeral:${this.id}] Created — timeout: ${this.config.timeoutMs / 1000}s, max: ${this.config.maxLifetimeMs / 1000}s`)
+    console.log(`[Ephemeral:${this.id}] Created — timeout: ${this.config.timeoutMs / 1000}s, max: ${this.config.maxLifetimeMs / 1000}s`)
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────
@@ -131,7 +136,7 @@ export class EphemeralClient {
       const { state, saveCreds } = await useMultiFileAuthState(this._authDir)
       const { version } = await fetchLatestBaileysVersion()
 
-      debug(`[Ephemeral:${this.id}] Baileys v${version}, creating socket...`)
+      console.log(`[Ephemeral:${this.id}] Baileys v${version}, creating socket...`)
 
       const logger = pino({ level: 'silent' })
 
@@ -154,13 +159,13 @@ export class EphemeralClient {
 
       this.sock.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update
-        debug(`[Ephemeral:${this.id}] STATUS: ${connection || update}`)
+        console.log(`[Ephemeral:${this.id}] STATUS: ${connection || update}`)
 
         if (qr) {
           try {
             const qrPng = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
             this._qrCode = qrPng.replace(/^data:image\/png;base64,/, '')
-            debug(`[Ephemeral:${this.id}] QR received`)
+            console.log(`[Ephemeral:${this.id}] QR received`)
           } catch {
             this._qrCode = qr
           }
@@ -168,7 +173,7 @@ export class EphemeralClient {
         }
 
         if (connection === 'open') {
-          debug(`[Ephemeral:${this.id}] ✅ CONNECTED`)
+          console.log(`[Ephemeral:${this.id}] ✅ CONNECTED`)
           this._connected = true
           this._connecting = false
           this._qrCode = null
@@ -187,10 +192,10 @@ export class EphemeralClient {
           this._connected = false
           this._connecting = false
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
-          debug(`[Ephemeral:${this.id}] Disconnected (code: ${statusCode})`)
+          console.log(`[Ephemeral:${this.id}] Disconnected (code: ${statusCode})`)
 
           if (statusCode === DisconnectReason.loggedOut) {
-            debug(`[Ephemeral:${this.id}] Logged out — session dead`)
+            console.log(`[Ephemeral:${this.id}] Logged out — session dead`)
             this.destroy()
           }
           // Don't auto-reconnect in ephemeral mode — let the caller decide
@@ -207,14 +212,20 @@ export class EphemeralClient {
           if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) return
           if (m.type !== 'notify') return
 
-          const phone = remoteJid.split('@')[0]
+          // Resolve real phone: @lid messages carry it in key.remoteJidAlt.
+          let phone = remoteJid.split('@')[0]
+          if (remoteJid.endsWith('@lid')) {
+            const alt = (msg.key as any)?.remoteJidAlt || (msg.key as any)?.participantAlt
+            const pn = typeof alt === 'string' ? alt.split('@')[0] : ''
+            if (/^\d{8,15}$/.test(pn)) phone = pn
+          }
           const text = this.extractText(msg)
           if (!text) return
 
           this._messagesReceived++
           this.touch()
 
-          debug(`[Ephemeral:${this.id}] Message from ${phone}: ${text.slice(0, 60)}`)
+          console.log(`[Ephemeral:${this.id}] Message from ${phone}: ${text.slice(0, 60)}`)
 
           if (this._messageHandler) {
             this._messageHandler({
@@ -232,7 +243,7 @@ export class EphemeralClient {
 
       // Start max lifetime timer
       this._maxLifetimeTimer = setTimeout(() => {
-        debug(`[Ephemeral:${this.id}] Max lifetime reached (${this.config.maxLifetimeMs / 1000}s)`)
+        console.log(`[Ephemeral:${this.id}] Max lifetime reached (${this.config.maxLifetimeMs / 1000}s)`)
         this.destroy()
       }, this.config.maxLifetimeMs)
 
@@ -276,7 +287,7 @@ export class EphemeralClient {
       // ignore
     }
 
-    debug(`[Ephemeral:${this.id}] Destroyed and auth cleaned`)
+    console.log(`[Ephemeral:${this.id}] Destroyed and auth cleaned`)
   }
 
   // ─── Send ────────────────────────────────────────────────
@@ -354,7 +365,7 @@ export class EphemeralClient {
   private resetIdleTimer(): void {
     if (this._idleTimer) clearTimeout(this._idleTimer)
     this._idleTimer = setTimeout(() => {
-      debug(`[Ephemeral:${this.id}] Idle timeout (${this.config.timeoutMs / 1000}s)`)
+      console.log(`[Ephemeral:${this.id}] Idle timeout (${this.config.timeoutMs / 1000}s)`)
       this.destroy()
     }, this.config.timeoutMs)
   }
@@ -378,9 +389,21 @@ export class EphemeralClient {
 // EphemeralManager — Pool of ephemeral clients
 // ═══════════════════════════════════════════════════════════════
 
+type EphemeralScope = {
+  ownerId?: string
+  workspaceId?: string
+}
+
 class EphemeralManager {
   private clients = new Map<string, EphemeralClient>()
   private _maxClients = 5
+
+  private belongs(client: EphemeralClient, scope?: EphemeralScope): boolean {
+    if (!scope) return true
+    if (scope.ownerId && client.ownerId !== scope.ownerId) return false
+    if (scope.workspaceId && client.workspaceId !== scope.workspaceId) return false
+    return true
+  }
 
   /**
    * Create a new ephemeral client
@@ -408,39 +431,43 @@ class EphemeralManager {
   /**
    * Get client by ID
    */
-  get(id: string): EphemeralClient | undefined {
+  get(id: string, scope?: EphemeralScope): EphemeralClient | undefined {
     const client = this.clients.get(id)
     if (client?.isDestroyed()) {
       this.clients.delete(id)
       return undefined
     }
+    if (client && !this.belongs(client, scope)) return undefined
     return client
   }
 
   /**
    * List all active clients
    */
-  list(): EphemeralStatus[] {
+  list(scope?: EphemeralScope): EphemeralStatus[] {
     this.cleanup()
-    return [...this.clients.values()].map(c => c.getStatus())
+    return [...this.clients.values()]
+      .filter(client => this.belongs(client, scope))
+      .map(c => c.getStatus())
   }
 
   /**
    * Destroy all clients
    */
-  async destroyAll(): Promise<void> {
-    for (const client of this.clients.values()) {
+  async destroyAll(scope?: EphemeralScope): Promise<void> {
+    for (const [id, client] of this.clients) {
+      if (!this.belongs(client, scope)) continue
       await client.destroy()
+      this.clients.delete(id)
     }
-    this.clients.clear()
   }
 
   /**
    * Destroy a specific client
    */
-  async destroy(id: string): Promise<boolean> {
+  async destroy(id: string, scope?: EphemeralScope): Promise<boolean> {
     const client = this.clients.get(id)
-    if (!client) return false
+    if (!client || !this.belongs(client, scope)) return false
     await client.destroy()
     this.clients.delete(id)
     return true
@@ -449,10 +476,10 @@ class EphemeralManager {
   /**
    * Get the first connected client (for quick sends)
    */
-  getConnected(): EphemeralClient | undefined {
+  getConnected(scope?: EphemeralScope): EphemeralClient | undefined {
     this.cleanup()
     for (const client of this.clients.values()) {
-      if (client.isConnected()) return client
+      if (client.isConnected() && this.belongs(client, scope)) return client
     }
     return undefined
   }
@@ -460,9 +487,9 @@ class EphemeralManager {
   /**
    * Send via any connected ephemeral client, or via persistent connection
    */
-  async sendAny(phone: string, text: string, persistentSender?: (phone: string, text: string) => Promise<{ success: boolean; id?: string; error?: string }>): Promise<{ success: boolean; id?: string; error?: string; source?: string }> {
-    // Try ephemeral first
-    const ephemeral = this.getConnected()
+  async sendAny(phone: string, text: string, persistentSender?: (phone: string, text: string) => Promise<{ success: boolean; id?: string; error?: string }>, scope?: EphemeralScope): Promise<{ success: boolean; id?: string; error?: string; source?: string }> {
+    // Try only a session owned by the requested tenant/user.
+    const ephemeral = this.getConnected(scope)
     if (ephemeral) {
       const result = await ephemeral.send(phone, text)
       return { ...result, source: `ephemeral:${ephemeral.id}` }

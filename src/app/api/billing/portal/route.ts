@@ -6,8 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createPortalSession, createCustomer } from '@/lib/stripe'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,9 +20,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-
-    // RBAC: Billing portal requires owner or admin
-    await rbac.ownerOrAdmin(session, workspaceId)
+    const caller = await requireWorkspace(workspaceId, session.userId, { allowSuspended: true })
+    requirePermission(caller.role, 'billing.manage')
 
     // Get workspace subscription
     const workspace = await db.workspace.findUnique({

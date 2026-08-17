@@ -48,7 +48,11 @@ export type {
 export {
   RevenueEngine,
   revenueEngine,
+  computeLeadScoreDelta,
+  buildIntentActionDirective,
 } from './revenue-engine'
+
+export type { IntentEnum } from './revenue-engine'
 
 // ─── Archetype Detector ──────────────────────────────────────
 export {
@@ -86,26 +90,3 @@ export type {
   ReactivationAngle,
   ReactivationResult,
 } from './reactivation-engine'
-
-// ─── Tool Calling / Function Calling ────────────────────────
-export {
-  chatWithTools,
-  getToolDefinitions,
-  getToolDefinition,
-  getToolNames,
-  executeTool,
-  onToolCallEvent,
-  emitToolCall,
-  TOOL_DEFINITIONS,
-} from './tool-calling'
-
-export type {
-  ToolDefinition,
-  ToolParameter,
-  ToolCall,
-  ToolCallMessage,
-  ToolResultMessage,
-  ToolCallLog,
-  ChatWithToolsOptions,
-  ChatWithToolsResult,
-} from './tool-calling'

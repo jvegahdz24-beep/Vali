@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { EventBusTicker } from '@/components/dashboard/event-bus-ticker'
 import {
   DndContext,
   closestCorners,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -37,6 +39,10 @@ import {
   TrendingUp,
   BarChart3,
   Target,
+  Star,
+  Clock,
+  ListChecks,
+  Activity,
 } from 'lucide-react'
 import { cn, formatCurrency, getInitials } from '@/lib/utils'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
@@ -55,6 +61,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import {
   Select,
@@ -82,15 +89,30 @@ import { Check as CheckIcon, ChevronsUpDown } from 'lucide-react'
 
 interface Deal {
   id: string
+  contactId?: string
   contactName: string
   title: string
   value: number
+  currency?: string
+  description?: string | null
   daysInStage: number
   stage: string
   stageId: string
   phone?: string
+  email?: string
   leadScore?: number
   source?: string
+  temperature?: string
+  tags?: string[]
+  notes?: string | null
+  lastMessageAt?: string | null
+  expectedCloseDate?: string | null
+  preferredProduct?: string | null
+  budget?: string | null
+  mainObjection?: string | null
+  timeline?: string | null
+  urgencyLevel?: string | null
+  priceSensitivity?: string | null
 }
 
 interface Stage {
@@ -124,6 +146,62 @@ function getStageProbability(stageName: string): number {
            stageName.toLowerCase().includes(s.name.toLowerCase().split(' ')[0])
   )
   return defaultStage?.probability ?? 0
+}
+
+function parseTags(value?: string | null): string[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+const LEGACY_PIPELINE_PRODUCTS = [
+  'sentra', 'versa', 'altima', 'kick', 'pathfinder', 'frontier', 'titan',
+  'corolla', 'rav4', 'camry', 'hilux', 'prius', 'yaris', 'silverado',
+  'tracker', 'equinox', 'trax', 'captiva', 'blazer', 'suburban', 'cx-3',
+  'cx-5', 'cx-30', 'cx-50', 'cx-90', 'seltos', 'sportage', 'rio', 'k5',
+  'sorento', 'carnival', 'telluride', 'cr-v', 'civic', 'hr-v', 'accord',
+  'fit', 'city', 'brio', 'mustang', 'bronco', 'ranger', 'maverick',
+  'explorer', 'escape', 'tucson', 'creta', 'accent', 'venue', 'santa fe',
+  'jetta', 'taos', 'golf', 'tiguan', 'polo', 'compass', 'cherokee',
+  'wrangler', 'gladiator', 'outlander', 'asx', 'l200', 'mirage',
+]
+
+function normalizePipelineText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s.-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isLegacyPipelineDeal(title: string): boolean {
+  const normalized = normalizePipelineText(title)
+  return normalized.endsWith('lead whatsapp') ||
+    normalized.endsWith('oportunidad') ||
+    LEGACY_PIPELINE_PRODUCTS.some((product) => normalized.endsWith(` ${product}`) || normalized.endsWith(`- ${product}`))
+}
+
+function parseBudgetAmount(value?: string | null): number {
+  if (!value) return 0
+  const numbers = value.match(/\d[\d,.\s]*/g)
+  if (!numbers?.length) return 0
+  const parsed = numbers
+    .map((raw) => Number(raw.replace(/[,\s]/g, '')))
+    .filter((num) => Number.isFinite(num) && num > 0)
+  return parsed.length > 0 ? Math.max(...parsed) : 0
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return 'Sin dato'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Sin dato'
+  return date.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 // ── Sortable Deal Card ──
@@ -162,9 +240,11 @@ function DealCard({
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, touchAction: 'manipulation' }}
+      {...attributes}
+      {...listeners}
       className={cn(
-        'bg-background rounded-lg border border-border/60 p-3 cursor-pointer hover:shadow-md transition-all duration-200 border-l-[3px]',
+        'bg-background rounded-lg border border-border/60 p-3 cursor-pointer hover:shadow-md transition-all duration-200 border-l-[3px] select-none',
         getScoreBorderColor(deal.leadScore),
         isDragging && 'opacity-50 shadow-lg',
         overlay && 'shadow-xl rotate-2'
@@ -172,57 +252,53 @@ function DealCard({
       onClick={onClick}
     >
       <div className="flex items-start gap-2">
-        <div
-          {...attributes}
-          {...listeners}
-          className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
-        >
+        <div className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
           <GripVertical className="h-3.5 w-3.5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="bg-zinc-100 text-zinc-600 text-[9px] font-semibold">
+            <Avatar className="h-7 w-7 shrink-0">
+              <AvatarFallback className="bg-gradient-to-br from-zinc-600 to-zinc-800 text-white text-[9px] font-semibold">
                 {getInitials(deal.contactName)}
               </AvatarFallback>
             </Avatar>
-            <span className="text-xs font-semibold text-foreground truncate">
-              {deal.contactName}
-            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-semibold text-foreground truncate block leading-tight">{deal.contactName}</span>
+              <span className="text-[10px] text-muted-foreground truncate block leading-tight">{deal.preferredProduct || deal.title}</span>
+            </div>
             {deal.leadScore !== undefined && deal.leadScore > 0 && (
               <Badge variant="secondary" className={cn(
-                "text-[9px] px-1 py-0 border-0",
-                deal.leadScore >= 80 ? "bg-emerald-100 text-emerald-700" :
-                deal.leadScore >= 50 ? "bg-yellow-100 text-yellow-700" :
-                deal.leadScore >= 30 ? "bg-orange-100 text-orange-700" :
-                "bg-red-100 text-red-700"
+                "text-[9px] px-1 py-0 border-0 shrink-0",
+                deal.leadScore >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" :
+                deal.leadScore >= 50 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300" :
+                deal.leadScore >= 30 ? "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300" :
+                "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300"
               )}>
                 {deal.leadScore}
               </Badge>
             )}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1 truncate">{deal.title}</p>
+          <p className="text-sm font-bold text-emerald-500 mt-2">{formatCurrency(deal.value)}</p>
+          {/* Probabilidad + barra (como el mockup) */}
+          {(() => {
+            const prob = getStageProbability(deal.stage)
+            const barColor = prob >= 70 ? 'bg-emerald-500' : prob >= 40 ? 'bg-amber-500' : 'bg-blue-500'
+            return (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                  <span>Probabilidad</span><span className="font-semibold text-foreground">{prob}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden"><div className={cn('h-full rounded-full', barColor)} style={{ width: `${prob}%` }} /></div>
+              </div>
+            )
+          })()}
           <div className="flex items-center justify-between mt-2">
-            <span className="text-xs font-bold text-emerald-600">
-              {formatCurrency(deal.value)}
+            <span className={cn('text-[10px] flex items-center gap-1', deal.daysInStage > 15 ? 'text-red-500 font-medium' : 'text-muted-foreground')}>
+              {deal.daysInStage > 15 ? <AlertCircle className="h-3 w-3" /> : <Calendar className="h-3 w-3" />}
+              {deal.daysInStage > 15 ? `${deal.daysInStage}d sin actividad` : `${deal.daysInStage}d`}
             </span>
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {deal.daysInStage}d
-            </span>
+            <Star className="h-3.5 w-3.5 text-muted-foreground/40" />
           </div>
-          {deal.phone && (
-            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
-              <Phone className="h-3 w-3" />
-              {deal.phone}
-            </div>
-          )}
-          {deal.daysInStage > 7 && (
-            <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-500">
-              <AlertCircle className="h-3 w-3" />
-              {deal.daysInStage}d sin movimiento
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -351,7 +427,7 @@ function PipelineColumn({
         items={deals.map((d) => d.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="space-y-2 min-h-[100px] p-1 rounded-lg border-2 border-dashed border-border/30 bg-muted/10 transition-colors hover:border-border/50">
+        <div className="space-y-2 min-h-[100px] max-h-[calc(100vh-430px)] overflow-y-auto custom-scroll p-1 rounded-lg border-2 border-dashed border-border/30 bg-muted/10 transition-colors hover:border-border/50">
           {deals.map((deal) => (
             <DealCard key={deal.id} deal={deal} onClick={() => onDealClick?.(deal)} />
           ))}
@@ -378,10 +454,21 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [deletingDealId, setDeletingDealId] = useState<string | null>(null)
+  const [savingDeal, setSavingDeal] = useState(false)
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
+
+  // Acceso directo desde el Tablero ("Nueva Oportunidad") → abre el modal al llegar
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('vaf-quick-action') === 'new-deal') {
+        sessionStorage.removeItem('vaf-quick-action')
+        setShowNewDeal(true)
+      }
+    } catch { /* */ }
+  }, [])
 
   // Filter state
   const [showFilters, setShowFilters] = useState(false)
@@ -393,6 +480,10 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
   const [newDealValue, setNewDealValue] = useState('')
   const [newDealStage, setNewDealStage] = useState('')
   const [newDealContact, setNewDealContact] = useState('')
+  const [editDealTitle, setEditDealTitle] = useState('')
+  const [editDealValue, setEditDealValue] = useState('')
+  const [editDealStageId, setEditDealStageId] = useState('')
+  const [editDealDescription, setEditDealDescription] = useState('')
   const [contactPickerOpen, setContactPickerOpen] = useState(false)
   const [contacts, setContacts] = useState<Array<{ id: string; firstName: string; lastName: string | null; phone: string | null }>>([])
   const [contactSearch, setContactSearch] = useState('')
@@ -427,12 +518,23 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
     }, 250)
   }, [fetchContacts])
 
+  // Sensores: mouse (arrastre tras 5px) + TÁCTIL con mantener-presionado (220ms).
+  // En móvil el deslizamiento normal hace SCROLL del tablero y el arrastre solo
+  // inicia si dejas el dedo quieto sobre la tarjeta. (Antes PointerSensor
+  // capturaba el touch y el tablero no tenía movilidad en celular.)
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   )
+
+  useEffect(() => {
+    if (!selectedDeal) return
+    setEditDealTitle(selectedDeal.title)
+    setEditDealValue(String(selectedDeal.value || ''))
+    setEditDealStageId(selectedDeal.stageId)
+    setEditDealDescription(selectedDeal.description || '')
+  }, [selectedDeal])
 
   const fetchPipeline = useCallback(async () => {
     if (!workspaceId) return
@@ -466,24 +568,76 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       // We need the actual stage deals — reconstruct from the API data
       const apiDealsMap: Record<string, Deal[]> = {}
       for (const s of pipeline.stages) {
-        const stageDeals = (s as unknown as { deals: Array<{ id: string; title: string; value: number; contact: { firstName: string; lastName: string; phone?: string; leadScore?: number; source?: string } | null; createdAt: string }> } | undefined)?.deals || []
+        const stageDeals = (s as unknown as {
+          deals: Array<{
+            id: string
+            title: string
+            value: number
+            currency?: string
+            description?: string | null
+            source?: string
+            expectedCloseDate?: string | null
+            createdAt: string
+            updatedAt?: string
+            contactId?: string | null
+            contact: {
+              id: string
+              firstName: string
+              lastName: string | null
+              phone?: string | null
+              email?: string | null
+              leadScore?: number
+              source?: string
+              temperature?: string
+              tags?: string
+              notes?: string | null
+              lastMessageAt?: string | null
+              createdAt?: string
+              leadProfile?: {
+                preferredProduct?: string | null
+                budget?: string | null
+                mainObjection?: string | null
+                timeline?: string | null
+                urgencyLevel?: string | null
+                priceSensitivity?: string | null
+              } | null
+            } | null
+          }>
+        } | undefined)?.deals || []
         apiDealsMap[s.name] = stageDeals.map((d) => {
           const contact = d.contact
           const contactName = contact ? `${contact.firstName} ${contact.lastName || ''}`.trim() : 'Sin contacto'
-          const created = new Date(d.createdAt)
+          const preferredProduct = contact?.leadProfile?.preferredProduct || null
+          const legacyDeal = isLegacyPipelineDeal(d.title)
+          const created = new Date(d.updatedAt || d.createdAt)
           const now = new Date()
           const daysInStage = Math.max(0, Math.floor((now.getTime() - created.getTime()) / 86400000))
           return {
             id: d.id,
+            contactId: d.contactId || contact?.id,
             contactName,
-            title: d.title,
-            value: d.value,
+            title: legacyDeal ? `${contactName} — ${preferredProduct || 'Oportunidad'}` : d.title,
+            value: legacyDeal ? parseBudgetAmount(contact?.leadProfile?.budget) : d.value,
+            currency: d.currency,
+            description: d.description,
             daysInStage,
             stage: s.name,
             stageId: s.id,
             phone: contact?.phone || undefined,
+            email: contact?.email || undefined,
             leadScore: contact?.leadScore || 0,
-            source: contact?.source || undefined,
+            source: d.source || contact?.source || undefined,
+            temperature: contact?.temperature || undefined,
+            tags: parseTags(contact?.tags),
+            notes: contact?.notes || null,
+            lastMessageAt: contact?.lastMessageAt || null,
+            expectedCloseDate: d.expectedCloseDate || null,
+            preferredProduct,
+            budget: contact?.leadProfile?.budget || null,
+            mainObjection: contact?.leadProfile?.mainObjection || null,
+            timeline: contact?.leadProfile?.timeline || null,
+            urgencyLevel: contact?.leadProfile?.urgencyLevel || null,
+            priceSensitivity: contact?.leadProfile?.priceSensitivity || null,
           }
         })
       }
@@ -539,7 +693,30 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       ? Math.round((wonDeals.length / (wonDeals.length + lostDeals.length)) * 100)
       : 0
 
-    return { totalActiveValue, totalDeals, avgDealValue, winRate, activeDealsCount: activeDeals.length }
+    // Valor ponderado (probabilidad × valor) de los tratos activos
+    const weightedValue = activeDeals.reduce((sum, d) => sum + Math.round(d.value * (getStageProbability(d.stage) / 100)), 0)
+    return { totalActiveValue, totalDeals, avgDealValue, winRate, activeDealsCount: activeDeals.length, weightedValue, wonCount: wonDeals.length }
+  }, [filteredDealsByStage, stages])
+
+  // Orden del pipeline como el mockup: activas por orden ascendente, luego ganado, y perdido al final.
+  const orderedStages = useMemo(() => {
+    const rank = (s: Stage) => (s.isLost ? 3 : s.isWon ? 2 : 1)
+    return [...stages].sort((a, b) => rank(a) - rank(b) || a.order - b.order)
+  }, [stages])
+
+  // Widgets inferiores (datos reales derivados de los tratos)
+  const bottomStats = useMemo(() => {
+    const active = Object.values(filteredDealsByStage).flat().filter((d) => {
+      const st = stages.find((s) => s.name === d.stage)
+      return st && !st.isWon && !st.isLost
+    })
+    const atRisk = active.filter((d) => d.daysInStage > 15).length
+    const needMove = active.filter((d) => d.daysInStage >= 3).length
+    const recent = [...active]
+      .filter((d) => d.lastMessageAt)
+      .sort((a, b) => new Date(b.lastMessageAt!).getTime() - new Date(a.lastMessageAt!).getTime())
+      .slice(0, 4)
+    return { atRisk, needMove, recent }
   }, [filteredDealsByStage, stages])
 
   const getStageDealIds = useCallback(
@@ -608,12 +785,14 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       })
 
       try {
-        await fetch('/api/deals', {
+        const res = await fetch('/api/deals', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: activeDealData.id, stageId: targetStage.id }),
         })
+        if (!res.ok) throw new Error('No se pudo mover el trato')
       } catch {
+        toast.error('No se pudo mover el trato')
         // Revert on error
         setDealsByStage((prev) => ({
           ...prev,
@@ -636,6 +815,46 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
       toast.error('Error al eliminar trato')
     } finally {
       setDeletingDealId(null)
+    }
+  }
+
+  const handleUpdateDeal = async () => {
+    if (!selectedDeal) return
+    const title = editDealTitle.trim()
+    if (!title) {
+      toast.error('El nombre del trato es requerido')
+      return
+    }
+
+    try {
+      setSavingDeal(true)
+      const numericValue = editDealValue.trim() ? Number(editDealValue) : 0
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
+        toast.error('El valor debe ser un número válido')
+        return
+      }
+
+      const res = await fetch(`/api/deals/${selectedDeal.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          value: numericValue,
+          stageId: editDealStageId,
+          description: editDealDescription.trim() || null,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Error al actualizar trato')
+
+      toast.success('Trato actualizado')
+      setSelectedDeal(null)
+      fetchPipeline()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar trato'
+      toast.error(message)
+    } finally {
+      setSavingDeal(false)
     }
   }
 
@@ -742,11 +961,11 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
   }
 
   return (
-    <div className="p-4 lg:p-6 h-full flex flex-col">
+    <div className="p-4 lg:p-6 h-full overflow-y-auto custom-scroll flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div>
-          <h3 className="text-lg font-semibold">Pipeline de Ventas</h3>
+          <h3 className="text-lg font-semibold">Ventas <span className="text-muted-foreground font-normal">(Pipeline)</span></h3>
           <p className="text-sm text-muted-foreground">
             {pipelineStats.totalDeals} tratos en total
           </p>
@@ -792,7 +1011,7 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
 
           <Dialog open={showNewDeal} onOpenChange={setShowNewDeal}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Button size="sm" data-tour="pipeline-nuevo" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Plus className="h-4 w-4" />
                 Nuevo Trato
               </Button>
@@ -920,61 +1139,25 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
         </div>
       </div>
 
-      {/* Summary Stats Bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 shrink-0">
-        <Card className="border-border/40 bg-muted/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-50">
-                <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+      {/* Resumen — UNA sola tarjeta dividida (como pidió Jhon) */}
+      <Card className="border-border/60 bg-card dark:bg-zinc-900/60 mb-4 shrink-0 overflow-hidden">
+        <CardContent className="p-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-border/60">
+            {[
+              { label: 'Total de tratos', value: String(pipelineStats.totalDeals), color: 'text-foreground' },
+              { label: 'Valor total del pipeline', value: formatCurrency(pipelineStats.totalActiveValue), color: 'text-emerald-500' },
+              { label: 'Valor ponderado', value: formatCurrency(pipelineStats.weightedValue), color: 'text-blue-500' },
+              { label: 'Tratos ganados', value: String(pipelineStats.wonCount), color: 'text-violet-500' },
+              { label: 'Tasa de conversión', value: `${pipelineStats.winRate}%`, color: 'text-amber-500' },
+            ].map((k) => (
+              <div key={k.label} className="p-4">
+                <p className="text-[10px] text-muted-foreground leading-tight">{k.label}</p>
+                <p className={cn('text-xl font-bold tracking-tight mt-1', k.color)}>{k.value}</p>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground">Valor Pipeline</p>
-                <p className="text-sm font-bold text-emerald-600">{formatCurrency(pipelineStats.totalActiveValue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40 bg-muted/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-blue-50">
-                <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground">Total Tratos</p>
-                <p className="text-sm font-bold">{pipelineStats.totalDeals}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40 bg-muted/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-amber-50">
-                <DollarSign className="h-3.5 w-3.5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground">Valor Promedio</p>
-                <p className="text-sm font-bold">{formatCurrency(pipelineStats.avgDealValue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40 bg-muted/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-violet-50">
-                <Target className="h-3.5 w-3.5 text-violet-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground">Tasa de Cierre</p>
-                <p className="text-sm font-bold">{pipelineStats.winRate}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filter Bar */}
       {showFilters && (
@@ -1029,57 +1212,153 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
 
       {/* Deal Detail Dialog */}
       <Dialog open={!!selectedDeal} onOpenChange={(open) => { if (!open) setSelectedDeal(null) }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedDeal?.title}</DialogTitle>
+            <DialogTitle>Detalle del trato</DialogTitle>
           </DialogHeader>
           {selectedDeal && (
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-3">
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Nombre del trato</Label>
+                  <Input
+                    value={editDealTitle}
+                    onChange={(e) => setEditDealTitle(e.target.value)}
+                    placeholder="Ej: Implementación CRM"
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Valor estimado</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editDealValue}
+                      onChange={(e) => setEditDealValue(e.target.value)}
+                      placeholder="0"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Etapa</Label>
+                    <Select value={editDealStageId} onValueChange={setEditDealStageId}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Seleccionar etapa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stages.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Descripción del trato</Label>
+                  <Textarea
+                    value={editDealDescription}
+                    onChange={(e) => setEditDealDescription(e.target.value)}
+                    placeholder="Vehículo de interés (modelo, año, color), enganche/mensualidad, contexto de la conversación, próximos pasos..."
+                    className="min-h-[90px] text-sm resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Valor</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Valor actual</p>
                   <p className="text-sm font-bold text-emerald-600">{formatCurrency(selectedDeal.value)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Etapa</p>
-                  <p className="text-sm font-medium">{selectedDeal.stage}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Días en etapa</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Días en etapa</p>
                   <p className="text-sm font-medium">{selectedDeal.daysInStage}d</p>
                 </div>
-                {selectedDeal.leadScore !== undefined && selectedDeal.leadScore > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fuente</p>
+                  <p className="text-sm font-medium capitalize">{selectedDeal.source || 'Sin dato'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Temperatura</p>
+                  <p className="text-sm font-medium capitalize">{selectedDeal.temperature || 'Sin dato'}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/60 p-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Lead Score</p>
+                    <p className="text-xs text-muted-foreground mb-1">Contacto</p>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-7 w-7">
+                        <AvatarFallback className="bg-zinc-100 text-zinc-600 text-[9px] font-semibold">
+                          {getInitials(selectedDeal.contactName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-semibold">{selectedDeal.contactName}</span>
+                    </div>
+                  </div>
+                  {selectedDeal.leadScore !== undefined && selectedDeal.leadScore > 0 && (
                     <Badge variant="secondary" className={cn(
-                      "text-[10px] px-1.5 py-0.5 border-0",
+                      "text-[10px] px-1.5 py-0.5 border-0 shrink-0",
                       selectedDeal.leadScore >= 80 ? "bg-emerald-100 text-emerald-700" :
                       selectedDeal.leadScore >= 50 ? "bg-yellow-100 text-yellow-700" :
                       selectedDeal.leadScore >= 30 ? "bg-orange-100 text-orange-700" :
                       "bg-red-100 text-red-700"
                     )}>
-                      {selectedDeal.leadScore}
+                      Score {selectedDeal.leadScore}
                     </Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 mt-3 text-xs">
+                  <p className="text-muted-foreground">
+                    Teléfono: <span className="text-foreground">{selectedDeal.phone || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Email: <span className="text-foreground">{selectedDeal.email || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Último mensaje: <span className="text-foreground">{formatDate(selectedDeal.lastMessageAt)}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Producto detectado: <span className="text-foreground">{selectedDeal.preferredProduct || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Presupuesto: <span className="text-foreground">{selectedDeal.budget || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Plazo: <span className="text-foreground">{selectedDeal.timeline || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Urgencia: <span className="text-foreground capitalize">{selectedDeal.urgencyLevel || 'Sin dato'}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Sensibilidad al precio: <span className="text-foreground capitalize">{selectedDeal.priceSensitivity || 'Sin dato'}</span>
+                  </p>
+                </div>
+
+                {selectedDeal.mainObjection && (
+                  <div className="mt-3">
+                    <p className="text-[10px] text-muted-foreground mb-1">Objeción principal</p>
+                    <p className="text-xs leading-relaxed">{selectedDeal.mainObjection}</p>
                   </div>
                 )}
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Contacto</p>
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="bg-zinc-100 text-zinc-600 text-[9px] font-semibold">
-                      {getInitials(selectedDeal.contactName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{selectedDeal.contactName}</span>
-                </div>
-                {selectedDeal.phone && (
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <Phone className="h-3 w-3" />
-                    {selectedDeal.phone}
-                  </p>
+                {selectedDeal.notes && (
+                  <div className="mt-3">
+                    <p className="text-[10px] text-muted-foreground mb-1">Notas del contacto</p>
+                    <p className="text-xs leading-relaxed whitespace-pre-line">{selectedDeal.notes}</p>
+                  </div>
+                )}
+                {selectedDeal.tags && selectedDeal.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {selectedDeal.tags.slice(0, 12).map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-[10px] border-0 bg-muted">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="flex justify-between pt-2">
@@ -1089,19 +1368,33 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
                 >
                   Cerrar
                 </Button>
-                <Button
-                  variant="destructive"
-                  className="gap-1.5"
-                  onClick={() => handleDeleteDeal(selectedDeal.id)}
-                  disabled={deletingDealId === selectedDeal.id}
-                >
-                  {deletingDealId === selectedDeal.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  Eliminar
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    className="gap-1.5"
+                    onClick={() => handleDeleteDeal(selectedDeal.id)}
+                    disabled={deletingDealId === selectedDeal.id || savingDeal}
+                  >
+                    {deletingDealId === selectedDeal.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    Eliminar
+                  </Button>
+                  <Button
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleUpdateDeal}
+                    disabled={savingDeal || !editDealTitle.trim()}
+                  >
+                    {savingDeal ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Guardar
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1116,9 +1409,12 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
         onDragEnd={handleDragEnd}
       >
         {viewMode === 'kanban' ? (
-          <ScrollArea className="flex-1">
-            <div className="flex gap-4 pb-4 -mx-4 px-4 lg:mx-0 lg:px-0 lg:overflow-x-visible lg:min-w-0 overflow-x-auto min-h-full">
-              {stages.map((stage) => {
+          /* Scroller NATIVO (no Radix ScrollArea): su wrapper display:table
+             expandía el contenido y el overflow-x-auto nunca desbordaba → en
+             móvil las columnas quedaban recortadas sin forma de alcanzarlas. */
+          <div className="overflow-x-auto overscroll-x-contain shrink-0 custom-scroll">
+            <div className="flex gap-4 pb-4 -mx-4 px-4 lg:mx-0 lg:px-0 lg:min-w-0 w-max lg:w-auto">
+              {orderedStages.map((stage) => {
                 const deals = filteredDealsByStage[stage.name] || []
                 const probability = getStageProbability(stage.name)
                 const weightedValue = Math.round(deals.reduce((sum, d) => sum + d.value, 0) * (probability / 100))
@@ -1134,11 +1430,11 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
                 )
               })}
             </div>
-          </ScrollArea>
+          </div>
         ) : (
-          <ScrollArea className="flex-1">
+          <div className="shrink-0">
             <div className="space-y-1 pb-4">
-              {stages.map((stage) => {
+              {orderedStages.map((stage) => {
                 const deals = filteredDealsByStage[stage.name] || []
                 if (deals.length === 0) return null
                 return (
@@ -1169,12 +1465,68 @@ export function CrmPipeline({ workspaceId }: CrmPipelineProps) {
                 )
               })}
             </div>
-          </ScrollArea>
+          </div>
         )}
         <DragOverlay>
           {activeDeal ? <DealCard deal={activeDeal} overlay /> : null}
         </DragOverlay>
       </DndContext>
+
+      {/* ═══ Widgets inferiores (como el mockup) ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4 shrink-0">
+        {/* Tratos en riesgo */}
+        <Card className="border-red-500/30">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-red-500 mb-1">Tratos en riesgo</p>
+            <p className="text-2xl font-bold text-foreground">{bottomStats.atRisk}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Tratos sin actividad &gt; 15 días</p>
+          </CardContent>
+        </Card>
+        {/* Tareas de seguimiento */}
+        <Card className="border-amber-500/30">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-amber-500 mb-1 flex items-center gap-1"><ListChecks className="h-3.5 w-3.5" /> Tareas de seguimiento</p>
+            <p className="text-2xl font-bold text-foreground">{bottomStats.needMove}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Tratos que necesitan moverse</p>
+          </CardContent>
+        </Card>
+        {/* Conversiones por etapa */}
+        <Card className="border-border/60">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1"><BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Conversiones por etapa</p>
+            <div className="space-y-1.5">
+              {orderedStages.filter((s) => !s.isWon && !s.isLost).slice(0, 6).map((s) => {
+                const prob = getStageProbability(s.name)
+                return (
+                  <div key={s.id} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground w-20 shrink-0 truncate">{s.name}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${prob}%`, backgroundColor: s.color }} /></div>
+                    <span className="text-[10px] font-medium text-foreground w-8 text-right">{prob}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+        {/* Actividad reciente del pipeline */}
+        <Card className="border-border/60">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1"><Activity className="h-3.5 w-3.5 text-violet-500" /> Actividad reciente</p>
+            {bottomStats.recent.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">Sin actividad reciente.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {bottomStats.recent.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-foreground truncate">{d.contactName} · {d.stage}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(d.lastMessageAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

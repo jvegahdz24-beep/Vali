@@ -20,7 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <NextThemesProvider
       attribute="class"
       defaultTheme="light"
-      enableSystem
+      enableSystem={false}
       disableTransitionOnChange
       storageKey="valiflow-theme"
     >

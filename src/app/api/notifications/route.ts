@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
     const workspaceId = searchParams.get('workspaceId')
     await requireWorkspace(workspaceId!, session.userId)
 
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000)
+    // Modo normal (campanita): últimos 15 min. Modo full ("Ver todas"): últimas 48 h.
+    const full = searchParams.get('full') === '1'
+    const fifteenMinutesAgo = new Date(Date.now() - (full ? 48 * 60 * 60 * 1000 : 15 * 60 * 1000))
 
     // Get recent messages as notifications
     const recentMessages = (await db.message.findMany({
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: full ? 120 : 20,
     })) as Array<any>
 
     // Get recent deals activity
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
         contact: true,
       },
       orderBy: { updatedAt: 'desc' },
-      take: 10,
+      take: full ? 40 : 10,
     })) as Array<any>
 
     // Get recent contact activity
@@ -52,10 +54,12 @@ export async function GET(request: NextRequest) {
         createdAt: { gte: fifteenMinutesAgo },
       },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: full ? 40 : 10,
     })
 
-    // Build notifications
+    // Build notifications. contactId + view permiten al cliente navegar a donde
+    // corresponde (mensaje → esa conversación en la bandeja, trato → pipeline,
+    // contacto nuevo → módulo de contactos).
     const notifications: Array<{
       id: string
       type: 'message' | 'deal_won' | 'deal_lost' | 'new_contact' | 'ai_response' | 'system'
@@ -63,22 +67,29 @@ export async function GET(request: NextRequest) {
       description: string
       timestamp: Date
       read: boolean
+      contactId?: string
+      view?: string
       actionUrl?: string
     }> = []
+
+    const descLimit = full ? 220 : 80
 
     for (const msg of recentMessages) {
       const contactName = msg.conversation.contact
         ? `${msg.conversation.contact.firstName}${msg.conversation.contact.lastName ? ' ' + msg.conversation.contact.lastName : ''}`
         : 'Cliente'
+      const cId = msg.conversation.contact?.id as string | undefined
 
       if (msg.direction === 'inbound') {
         notifications.push({
           id: `msg-${msg.id}`,
           type: 'message',
           title: `Nuevo mensaje de ${contactName}`,
-          description: msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''),
+          description: msg.content.substring(0, descLimit) + (msg.content.length > descLimit ? '...' : ''),
           timestamp: msg.createdAt,
           read: false,
+          contactId: cId,
+          view: 'inbox',
         })
       }
 
@@ -87,9 +98,11 @@ export async function GET(request: NextRequest) {
           id: `ai-${msg.id}`,
           type: 'ai_response',
           title: `IA respondió a ${contactName}`,
-          description: msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''),
+          description: msg.content.substring(0, descLimit) + (msg.content.length > descLimit ? '...' : ''),
           timestamp: msg.createdAt,
           read: false,
+          contactId: cId,
+          view: 'inbox',
         })
       }
     }
@@ -107,6 +120,8 @@ export async function GET(request: NextRequest) {
           description: `${contactName} — ${deal.title} ($${deal.value.toLocaleString('es-MX')} MXN)`,
           timestamp: deal.wonAt || deal.updatedAt,
           read: false,
+          contactId: deal.contactId || deal.contact?.id,
+          view: 'pipeline',
         })
       } else if (deal.status === 'lost') {
         notifications.push({
@@ -116,6 +131,8 @@ export async function GET(request: NextRequest) {
           description: `${contactName} — ${deal.title}`,
           timestamp: deal.lostAt || deal.updatedAt,
           read: false,
+          contactId: deal.contactId || deal.contact?.id,
+          view: 'pipeline',
         })
       }
     }
@@ -128,6 +145,8 @@ export async function GET(request: NextRequest) {
         description: `${contact.firstName}${contact.lastName ? ' ' + contact.lastName : ''} — ${contact.source}`,
         timestamp: contact.createdAt,
         read: false,
+        contactId: contact.id,
+        view: 'contacts',
       })
     }
 
@@ -144,7 +163,7 @@ export async function GET(request: NextRequest) {
 
     return Response.json({
       success: true,
-      notifications: notifications.slice(0, 20),
+      notifications: notifications.slice(0, full ? 150 : 20),
       unreadCount: notifications.length,
       recentEventCount: recentEvents,
     })
@@ -155,22 +174,8 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await requireAuth(request)
-    const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
-
-    const body = await request.json()
-    const { notificationId } = body
-
-    // Store last-read timestamp in workspace for notification tracking
-    // Since we don't have a Notification table, we store the timestamp
-    // as a workspace setting for cross-session persistence
-    await db.workspace.update({
-      where: { id: workspaceId! },
-      data: { updatedAt: new Date() }, // Using updatedAt as a read marker
-    })
-
+    await requireAuth(request)
+    // Mark all as read (just return success — real implementation would track read state)
     return Response.json({ success: true, message: 'Todas las notificaciones marcadas como leídas' })
   } catch (error) {
     return errorResponse(error)

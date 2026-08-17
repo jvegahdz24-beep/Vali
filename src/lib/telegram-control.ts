@@ -188,18 +188,74 @@ export function verifyTelegramWebhook(
 }
 
 // ─── Workspace Bot Lookup ───────────────────────────────────
-
-async function findBotByToken(botToken: string) {
-  return db.telegramBot.findFirst({
-    where: { botToken },
-    include: { workspace: true },
-  })
+// Telegram credentials are stored in Workspace/settings and the linked chat
+// belongs to the workspace owner. There is intentionally no TelegramBot
+// Prisma model in the current schema.
+type TelegramWorkspaceBot = {
+  id: string
+  workspaceId: string
+  botToken: string
+  isActive: boolean
+  chatId: string | null
+  pausedAt: Date | null
+  createdAt: Date
+  workspace: { id: string; name: string }
 }
 
-async function findBotByWorkspace(workspaceId: string) {
-  return db.telegramBot.findUnique({
-    where: { workspaceId },
+function parseWorkspaceSettings(settings: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(settings || '{}')
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+async function findBotByWorkspace(workspaceId: string): Promise<TelegramWorkspaceBot | null> {
+  const workspace = await db.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { id: true, name: true, ownerId: true, telegramBotToken: true, settings: true, isActive: true, createdAt: true },
   })
+  if (!workspace) return null
+
+  const settings = parseWorkspaceSettings(workspace.settings)
+  const botToken = workspace.telegramBotToken || (typeof settings.telegramBotToken === 'string' ? settings.telegramBotToken : '')
+  if (!botToken) return null
+
+  const owner = await db.user.findUnique({ where: { id: workspace.ownerId }, select: { telegramChatId: true } })
+  const pausedAtValue = typeof settings.telegramPausedAt === 'string' ? new Date(settings.telegramPausedAt) : null
+  const pausedAt = pausedAtValue && !Number.isNaN(pausedAtValue.getTime()) ? pausedAtValue : null
+
+  return {
+    id: workspace.id,
+    workspaceId: workspace.id,
+    botToken,
+    isActive: workspace.isActive,
+    chatId: owner?.telegramChatId || null,
+    pausedAt,
+    createdAt: workspace.createdAt,
+    workspace: { id: workspace.id, name: workspace.name },
+  }
+}
+
+/**
+ * Token-only lookup is intentionally disabled. The supported webhook includes
+ * the workspace id; accepting a token without tenant context would require a
+ * global scan of secrets stored in settings.
+ */
+async function findBotByToken(_botToken: string, workspaceId?: string): Promise<TelegramWorkspaceBot | null> {
+  if (!workspaceId) return null
+  const bot = await findBotByWorkspace(workspaceId)
+  return bot?.botToken === _botToken ? bot : null
+}
+
+async function setWorkspaceTelegramPaused(workspaceId: string, pausedAt: Date | null): Promise<void> {
+  const workspace = await db.workspace.findUnique({ where: { id: workspaceId }, select: { settings: true } })
+  if (!workspace) return
+  const settings = parseWorkspaceSettings(workspace.settings)
+  if (pausedAt) settings.telegramPausedAt = pausedAt.toISOString()
+  else delete settings.telegramPausedAt
+  await db.workspace.update({ where: { id: workspaceId }, data: { settings: JSON.stringify(settings) } })
 }
 
 // ─── Command Router ──────────────────────────────────────────
@@ -304,10 +360,7 @@ async function cmdStatus(ctx: CommandContext): Promise<string> {
     db.contact.count({
       where: { workspaceId, status: 'active' },
     }),
-    db.telegramBot.findUnique({
-      where: { workspaceId },
-      select: { pausedAt: true },
-    }),
+    findBotByWorkspace(workspaceId),
   ])
 
   const pipelineValue = await db.deal.aggregate({
@@ -614,9 +667,7 @@ ${results.join('\n\n')}`
 async function cmdPause(ctx: CommandContext): Promise<string> {
   const { workspaceId } = ctx
 
-  const bot = await db.telegramBot.findUnique({
-    where: { workspaceId },
-  })
+  const bot = await findBotByWorkspace(workspaceId)
 
   if (!bot) {
     return '❌ No Telegram bot configured for this workspace.'
@@ -630,10 +681,7 @@ Paused since ${timeAgo(new Date(bot.pausedAt))}.
 Use <b>/resume</b> to reactivate.`
   }
 
-  await db.telegramBot.update({
-    where: { workspaceId },
-    data: { pausedAt: new Date() },
-  })
+  await setWorkspaceTelegramPaused(workspaceId, new Date())
 
   // Also pause all active automations
   const pausedCount = await db.automation.updateMany({
@@ -653,9 +701,7 @@ Use <b>/resume</b> to reactivate everything.`
 async function cmdResume(ctx: CommandContext): Promise<string> {
   const { workspaceId } = ctx
 
-  const bot = await db.telegramBot.findUnique({
-    where: { workspaceId },
-  })
+  const bot = await findBotByWorkspace(workspaceId)
 
   if (!bot) {
     return '❌ No Telegram bot configured for this workspace.'
@@ -667,10 +713,7 @@ async function cmdResume(ctx: CommandContext): Promise<string> {
 Everything is running normally.`
   }
 
-  await db.telegramBot.update({
-    where: { workspaceId },
-    data: { pausedAt: null as unknown as undefined },
-  })
+  await setWorkspaceTelegramPaused(workspaceId, null)
 
   // Re-enable automations that were previously active
   // We re-activate based on the workspace — this is a blanket resume
@@ -827,11 +870,26 @@ async function cmdFollowups(ctx: CommandContext): Promise<string> {
     where: { workspaceId, status: 'pending' },
     orderBy: { scheduledAt: 'asc' },
     take: 15,
-    include: {
-      contact: { select: { firstName: true, lastName: true } },
-      rule: { select: { name: true, channel: true } },
+    select: {
+      id: true,
+      contactId: true,
+      ruleId: true,
+      scheduledAt: true,
+      retryCount: true,
     },
   })
+  const [contacts, rules] = await Promise.all([
+    db.contact.findMany({
+      where: { workspaceId, id: { in: pendingTasks.map((task) => task.contactId) } },
+      select: { id: true, firstName: true, lastName: true },
+    }),
+    db.followUpRule.findMany({
+      where: { workspaceId, id: { in: pendingTasks.map((task) => task.ruleId) } },
+      select: { id: true, name: true, channel: true },
+    }),
+  ])
+  const contactsById = new Map(contacts.map((contact) => [contact.id, contact]))
+  const rulesById = new Map(rules.map((rule) => [rule.id, rule]))
 
   const overdueTasks = await db.followUpTask.count({
     where: {
@@ -852,14 +910,16 @@ async function cmdFollowups(ctx: CommandContext): Promise<string> {
   }
 
   const lines = pendingTasks.map((task, i) => {
-    const name = task.contact
-      ? `${task.contact.firstName}${task.contact.lastName ? ' ' + task.contact.lastName : ''}`
+    const contact = contactsById.get(task.contactId)
+    const rule = rulesById.get(task.ruleId)
+    const name = contact
+      ? `${contact.firstName}${contact.lastName ? ' ' + contact.lastName : ''}`
       : 'Unknown'
     const dueDate = task.scheduledAt < new Date() ? '🔴 OVERDUE' : `📅 ${timeAgo(new Date(task.scheduledAt))}`
-    const channel = task.rule?.channel || 'whatsapp'
+    const channel = rule?.channel || 'whatsapp'
     const channelIcon = channel === 'whatsapp' ? '💬' : channel === 'telegram' ? '✈️' : '📱'
     return `  ${i + 1}. <b>${escapeHtml(name)}</b> ${dueDate}
-     ${channelIcon} ${escapeHtml(task.rule?.name || 'Follow-up')} | Retry: ${task.retryCount}`
+     ${channelIcon} ${escapeHtml(rule?.name || 'Follow-up')} | Retry: ${task.retryCount}`
   })
 
   return `<b>📞 Pending Follow-ups (${pendingTasks.length})</b>
@@ -1225,7 +1285,8 @@ export async function processTelegramUpdate(
  */
 export async function handleTelegramWebhook(
   update: TelegramUpdate,
-  botToken: string
+  botToken: string,
+  workspaceId?: string
 ): Promise<{ processed: boolean; reply?: string; error?: string }> {
   try {
     const message = update.message
@@ -1236,7 +1297,10 @@ export async function handleTelegramWebhook(
     const text = message.text.trim()
 
     // Find the bot and workspace
-    const bot = await findBotByToken(botToken)
+    const bot = await findBotByToken(botToken, workspaceId)
+    if (!workspaceId) {
+      return { processed: false, error: 'Workspace context required for Telegram webhook' }
+    }
     if (!bot || !bot.isActive) {
       return { processed: false, error: 'Bot not found or inactive' }
     }
@@ -1251,10 +1315,9 @@ export async function handleTelegramWebhook(
 
     // If this is the first message (no chatId set), register it
     if (!bot.chatId && text.startsWith('/start')) {
-      await db.telegramBot.update({
-        where: { id: bot.id },
-        data: { chatId },
-      })
+      const workspace = await db.workspace.findUnique({ where: { id: bot.workspaceId }, select: { ownerId: true } })
+      if (!workspace) return { processed: false, error: 'Workspace not found' }
+      await db.user.update({ where: { id: workspace.ownerId }, data: { telegramChatId: chatId } })
       console.log(`[Telegram] Registered chat ${chatId} for workspace ${bot.workspaceId}`)
     }
 
@@ -1349,25 +1412,21 @@ export async function setupTelegramBot(
       return { success: false, error: 'Invalid bot token. Could not verify with Telegram API.' }
     }
 
-    // Upsert the bot record
-    await db.telegramBot.upsert({
-      where: { workspaceId },
-      create: {
-        workspaceId,
-        botToken,
-        isActive: true,
-      },
-      update: {
-        botToken,
-        isActive: true,
-      },
-    })
-
-    // Optionally set webhook
+        const workspace = await db.workspace.findUnique({ where: { id: workspaceId }, select: { settings: true } })
+    if (!workspace) return { success: false, error: 'Workspace not found' }
+    const settings = parseWorkspaceSettings(workspace.settings)
+    settings.telegramBotToken = botToken
+    settings.telegramBotUsername = botInfo.username || settings.telegramBotUsername
+    let webhookSecret: string | undefined
     if (webhookUrl) {
-      const secret = crypto.randomBytes(32).toString('hex')
-      await setTelegramWebhook(botToken, webhookUrl, secret)
+      webhookSecret = crypto.randomBytes(32).toString('hex')
+      settings.telegramWebhookSecret = webhookSecret
+      await setTelegramWebhook(botToken, webhookUrl, webhookSecret)
     }
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { telegramBotToken: botToken, settings: JSON.stringify(settings) },
+    })
 
     console.log(`[Telegram] Bot registered for workspace ${workspaceId}: @${botInfo.username || botInfo.id}`)
 
@@ -1394,9 +1453,15 @@ export async function disconnectTelegramBot(
     // Remove webhook
     await deleteTelegramWebhook(bot.botToken)
 
-    // Delete bot record
-    await db.telegramBot.delete({
-      where: { workspaceId },
+    const workspace = await db.workspace.findUnique({ where: { id: workspaceId }, select: { settings: true } })
+    const settings = parseWorkspaceSettings(workspace?.settings)
+    delete settings.telegramBotToken
+    delete settings.telegramBotUsername
+    delete settings.telegramWebhookSecret
+    delete settings.telegramPausedAt
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { telegramBotToken: null, settings: JSON.stringify(settings) },
     })
 
     return { success: true }

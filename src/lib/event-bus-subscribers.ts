@@ -86,10 +86,15 @@ async function handleGhostingDetected(event: EventEnvelope<'ghosting.detected'>)
 // If energy < 30, spawns emotional_support agent + sends Telegram alert.
 
 async function handleNexusEnergyChanged(event: EventEnvelope<'nexus.energy_changed'>): Promise<void> {
-  const { userId, oldScore, newScore, breakdown, label } = event.payload
+  const payload = event.payload
+  const userId = typeof payload.userId === 'string' ? payload.userId : ''
+  const oldScore = typeof payload.oldScore === 'number' ? payload.oldScore : null
+  const newScore = typeof payload.newScore === 'number' ? payload.newScore : null
+  const breakdown = payload.breakdown
+  const label = typeof payload.label === 'string' ? payload.label : ''
 
-  // Only act when energy drops below 30
-  if (newScore >= 30) return
+  // Only act when energy drops below 30 and the event has a valid actor.
+  if (!userId || newScore === null || newScore >= 30) return
 
   logInfo('EVENT_BUS', 'subscriber:nexus_low_energy', {
     userId,
@@ -117,10 +122,10 @@ async function handleNexusEnergyChanged(event: EventEnvelope<'nexus.energy_chang
   // 1. Spawn emotional_support agent (fire-and-forget)
   spawnFromEvent(EVENT_TYPES.NEXUS_ENERGY_CHANGED, workspaceId, undefined, {
     userId,
-    oldScore,
-    newScore,
-    breakdown,
-    label,
+      oldScore,
+      newScore,
+      breakdown,
+      label,
   }).catch((err) => {
     logWarn('EVENT_BUS', 'subscriber:nexus_spawn_failed', {
       userId,
@@ -155,7 +160,7 @@ async function handleDealStageChanged(event: EventEnvelope<'deal.stage_changed'>
   const { dealId, workspaceId, contactId, fromStageId, toStageId, toStageName, value } = event.payload
 
   // Check if the new stage indicates "closing"
-  const stageLower = toStageName.toLowerCase()
+  const stageLower = (toStageName ?? '').toLowerCase()
   const isClosing =
     stageLower.includes('closing') ||
     stageLower.includes('cierre') ||
@@ -173,7 +178,7 @@ async function handleDealStageChanged(event: EventEnvelope<'deal.stage_changed'>
   })
 
   // Spawn closing_agent ephemeral agent (fire-and-forget)
-  spawnFromEvent('deal_stage_closing', workspaceId, contactId, {
+  spawnFromEvent('deal_stage_closing', workspaceId, contactId ?? undefined, {
     dealId,
     toStageName,
     value,
@@ -241,21 +246,13 @@ async function handleSystemError(event: EventEnvelope<'system.error'>): Promise<
     context,
   })
 
-  // Find any active workspace with a configured Telegram bot
-  let workspaceId = ''
-  try {
-    const bot = await db.telegramBot.findFirst({
-      where: { isActive: true, chatId: { not: null } },
-      select: { workspaceId: true },
-    })
-    workspaceId = bot?.workspaceId || ''
-  } catch {
-    // No workspace found — can't send Telegram
+  // Las alertas de error solo pueden dirigirse a un workspace explícito
+  // incluido por el productor; nunca se elige un tenant global al azar.
+  const workspaceId = typeof event.payload.workspaceId === 'string' ? event.payload.workspaceId : ''
+  if (!workspaceId) {
     logWarn('EVENT_BUS', 'subscriber:error_no_workspace', {})
     return
   }
-
-  if (!workspaceId) return
 
   try {
     await sendNotification({

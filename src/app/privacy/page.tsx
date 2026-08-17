@@ -35,7 +35,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900">3. Almacenamiento y Seguridad</h2>
             <p className="text-gray-600 leading-relaxed">
-              Tus datos se almacenan en servidores de Supabase (AWS) con encriptación en reposo y en tránsito.
+              Tus datos se almacenan en servidores propios con encriptación en reposo y en tránsito.
               Implementamos medidas de seguridad incluyendo autenticación JWT, encriptación de contraseñas,
               y controles de acceso basados en roles. Retenemos tus datos mientras tu cuenta esté activa
               y los eliminamos dentro de los 30 días posteriores al cierre de cuenta, salvo requerimiento legal.

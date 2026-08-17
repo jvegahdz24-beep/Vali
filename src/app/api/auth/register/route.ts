@@ -1,93 +1,39 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow CRM — Registration API Endpoint
-// POST /api/auth/register — Create User + Workspace + Membership
-// Issues access + refresh tokens (auto-login after registration)
+// ValiAutoFlow — Registration API
+// POST /api/auth/register — Create new user + workspace + membership
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
+import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
-import { logInfo, logOk, logWarn, logError } from '@/lib/logger'
-import { hashPassword } from '@/lib/auth/auth'
-import {
-  createTokenPair,
-  SESSION_COOKIE_NAME,
-  REFRESH_COOKIE_NAME,
-} from '@/lib/auth'
+import { validateBody, registerSchema } from '@/lib/validations'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
-export const dynamic = 'force-dynamic'
-
-// ─── Validation ───────────────────────────────────────────────
-
-const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name is too long'),
-  email: z.string().email('Invalid email address'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Must contain at least one number')
-    .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-})
-
-// ─── Cookie Helpers ───────────────────────────────────────────
-
-const cookieBase = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
+function hashPassword(plain: string): string {
+  return bcrypt.hashSync(plain, 10)
 }
 
-const ACCESS_MAX_AGE = 15 * 60        // 900 seconds (15 minutes)
-const REFRESH_MAX_AGE = 7 * 24 * 3600 // 604800 seconds (7 days)
-
-// ─── Route Handler ────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
-  logInfo('AUTH', 'register_start', {})
-
   try {
     // Rate limit: 3 registrations per minute per IP
-    const clientIp =
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      'unknown'
-    const rl = await rateLimit(`register:${clientIp}`, RATE_LIMITS.register.limit, RATE_LIMITS.register.windowMs)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rl = rateLimit(`register:${clientIp}`, RATE_LIMITS.register.limit, RATE_LIMITS.register.windowMs)
     if (!rl.success) {
-      logWarn('AUTH', 'register_rate_limited', { ip: clientIp })
       return NextResponse.json(
-        { error: 'Too many registration attempts. Try again later.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },
-        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+        { error: 'Demasiados intentos. Espera un momento.', code: 'RATE_LIMITED', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
       )
     }
 
-    // Parse & validate request body
-    let body: unknown
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid request body. Expected JSON.', code: 'BAD_REQUEST' },
-        { status: 400 },
-      )
+    const body = await req.json()
+
+    const validation = validateBody(registerSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, code: 'VALIDATION_ERROR' }, { status: 400 })
     }
 
-    const parsed = registerSchema.safeParse(body)
-    if (!parsed.success) {
-      const message = parsed.error.issues.map((i) => i.message).join('. ')
-      return NextResponse.json(
-        { error: message, code: 'VALIDATION_ERROR' },
-        { status: 400 },
-      )
-    }
-
-    const { name, email, password } = parsed.data
+    const { name, email, password } = validation.data
     const normalizedEmail = email.trim().toLowerCase()
 
     // ─── Check email uniqueness ─────────────────────────────
@@ -96,17 +42,16 @@ export async function POST(req: NextRequest) {
     })
 
     if (existingUser) {
-      logWarn('AUTH', 'register_email_exists', { email: normalizedEmail })
       return NextResponse.json(
-        { error: 'An account with this email already exists', code: 'EMAIL_EXISTS' },
-        { status: 409 },
+        { error: 'Este correo electrónico ya está registrado' },
+        { status: 409 }
       )
     }
 
     // ─── Hash password ──────────────────────────────────────
     const hashedPassword = hashPassword(password)
 
-    // ─── Create User + Workspace + Membership (transaction) ─
+    // ─── Create User + Workspace + Membership ──────────────
     const user = await db.user.create({
       data: {
         name: name.trim(),
@@ -118,13 +63,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Generate workspace slug from name
-    const baseSlug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-    const uniqueSlug = `${baseSlug}-workspace`
+    // Generate workspace slug from name. Evita colisión (dos empresas con el
+    // mismo nombre chocaban en slug @unique → el 2º registro daba 500).
+    const baseSlug = (name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) || 'ws'
+    let uniqueSlug = `${baseSlug}-workspace`
+    const slugTaken = await db.workspace.findUnique({ where: { slug: uniqueSlug }, select: { id: true } }).catch(() => null)
+    if (slugTaken) uniqueSlug = `${baseSlug}-${Date.now().toString(36).slice(-5)}`
 
     const workspace = await db.workspace.create({
       data: {
@@ -152,7 +96,7 @@ export async function POST(req: NextRequest) {
     })
 
     // ─── Create default pipeline ───────────────────────────
-    await db.pipeline.create({
+    const pipeline = await db.pipeline.create({
       data: {
         workspaceId: workspace.id,
         name: 'Pipeline de Ventas',
@@ -186,21 +130,14 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // ─── Issue tokens (auto-login) ─────────────────────────
-    const tokens = await createTokenPair({
-      userId: user.id,
-      email: user.email,
-      name: user.name || '',
-      role: user.role,
-      workspaceId: workspace.id,
-    })
-
-    // ─── Build response ─────────────────────────────────────
-    const response = NextResponse.json({
+    // ─── Success ───────────────────────────────────────────
+    return NextResponse.json({
+      success: true,
+      message: 'Cuenta creada exitosamente',
       user: {
         id: user.id,
-        email: user.email,
         name: user.name,
+        email: user.email,
         role: user.role,
       },
       workspace: {
@@ -209,31 +146,11 @@ export async function POST(req: NextRequest) {
         slug: workspace.slug,
       },
     })
-
-    // Set access token cookie
-    response.cookies.set(SESSION_COOKIE_NAME, tokens.accessToken, {
-      ...cookieBase,
-      maxAge: ACCESS_MAX_AGE,
-    })
-
-    // Set refresh token cookie
-    response.cookies.set(REFRESH_COOKIE_NAME, tokens.refreshToken, {
-      ...cookieBase,
-      maxAge: REFRESH_MAX_AGE,
-    })
-
-    logOk('AUTH', 'register_success', {
-      userId: user.id,
-      email: user.email,
-      workspaceId: workspace.id,
-    })
-
-    return response
-  } catch (err) {
-    logError('AUTH', 'register_unexpected_error', err)
+  } catch (error) {
+    console.error('[Register Error]', error)
     return NextResponse.json(
-      { error: 'Failed to create account. Please try again.', code: 'INTERNAL_ERROR' },
-      { status: 500 },
+      { error: 'Error al crear la cuenta. Intenta de nuevo.' },
+      { status: 500 }
     )
   }
 }

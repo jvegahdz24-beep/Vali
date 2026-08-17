@@ -1,33 +1,51 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { requireAuth } from '@/lib/api-auth'
+import { cookies } from 'next/headers'
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
 
-// FIX C7: Added requireAuth — SQL schema no longer public
-export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request)
-  if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
+// Split the full migration SQL into 3 parts for easy copy-paste
+export async function GET() {
+  // Require superadmin authentication
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const sessionPayload = await verifySessionToken(sessionToken)
+  if (!sessionPayload || sessionPayload.role !== 'superadmin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
-    const sqlPath = join(process.cwd(), 'download', 'supabase-migration-complete.sql')
+    const sqlPath = join(process.cwd(), 'download', 'migration-complete.sql')
     const fullSql = readFileSync(sqlPath, 'utf8')
 
+    // Find split points
     const rlsStart = fullSql.indexOf('-- RLS')
     const dataStart = fullSql.indexOf('-- DATA MIGRATION')
 
+    // Part 1: BEGIN + CREATE TABLE + INDEXES + FK (no COMMIT)
     const part1 = fullSql.substring(0, rlsStart).trim()
+    // Part 2: RLS + Triggers
     const part2Content = fullSql.substring(rlsStart, dataStart).trim()
+    // Part 3: Data INSERT + GRANT + COMMIT
     const part3 = fullSql.substring(dataStart).trim()
 
+    // Ensure each part is a valid transaction
     const parts = [
       {
         name: 'Parte 1: Tablas + Indices + FK',
-        sql: part1 + '\n\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;\n',
+        sql: part1 + '\n\n-- Temporarily disable RLS for bulk insert\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;\n',
       },
-      { name: 'Parte 2: RLS + Triggers', sql: part2Content },
-      { name: 'Parte 3: Datos (256 registros)', sql: part3 },
+      {
+        name: 'Parte 2: RLS + Triggers',
+        sql: part2Content,
+      },
+      {
+        name: 'Parte 3: Datos (256 registros)',
+        sql: part3,
+      },
     ]
 
     return NextResponse.json({ parts, totalLines: fullSql.split('\n').length })

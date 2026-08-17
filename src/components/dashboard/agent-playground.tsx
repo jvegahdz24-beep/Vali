@@ -18,7 +18,11 @@ import {
   Settings2,
   PanelRightClose,
   PanelRightOpen,
+  FlaskConical,
+  GraduationCap,
 } from 'lucide-react'
+import { TrainingStudio } from './training-studio'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -69,6 +73,8 @@ interface ChatMessage {
     agentRouting?: string
     followUpTasks?: string[]
     crmUpdates?: string[]
+    crmTags?: Array<{ type: string; value: string }>
+    apptMetadata?: { proposedDate?: string; time1?: string; time2?: string; proposedAt?: string } | null
   }
 }
 
@@ -83,6 +89,14 @@ const presetMessages = [
   { label: 'Agendar cita', text: 'Quiero agendar una cita para revisar las opciones' },
 ]
 
+// Appointment-flow follow-up presets (shown during active conversation)
+const appointmentFlowMessages = [
+  { label: '📅 Cambiar día', text: 'Mejor el martes, ¿tienes disponibilidad?' },
+  { label: '☀️ Temprano', text: 'El martes temprano mejor' },
+  { label: '✅ Elegir 11am', text: 'Me va bien a las 11am' },
+  { label: '✅ Confirmar', text: 'Sí, confirmado, queda el martes a las 9am' },
+]
+
 export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState<string>('')
@@ -93,6 +107,9 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
   const [loadingAgents, setLoadingAgents] = useState(true)
   const [analyzeOpen, setAnalyzeOpen] = useState(true)
   const [conversationId, setConversationId] = useState<string | undefined>(undefined)
+  const [sandboxMode, setSandboxMode] = useState(false)
+  const [sandboxSystemPrompt, setSandboxSystemPrompt] = useState('')
+  const [mode, setMode] = useState<'test' | 'train'>('test')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -133,7 +150,7 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
   }, [messages])
 
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || !selectedAgent || isLoading) return
+    if (!text.trim() || (!selectedAgent && !sandboxMode) || isLoading) return
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -147,46 +164,71 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
     setIsLoading(true)
 
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text.trim(),
-          agentId: selectedAgent.id,
-          workspaceId,
-          channel: 'webchat',
-          conversationId,
-        }),
-      })
+      if (sandboxMode) {
+        const res = await fetch('/api/ai/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspaceId,
+            message: text.trim(),
+            systemPrompt: sandboxSystemPrompt.trim() || undefined,
+          }),
+        })
+        if (!res.ok) throw new Error('Error en modo sandbox')
+        const data = await res.json()
+        const aiMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          content: data.response || 'Sin respuesta',
+          timestamp: new Date(),
+          agentName: 'Sandbox IA',
+          agentModel: data.model,
+          latencyMs: data.latencyMs,
+          tokenCount: data.tokensUsed || undefined,
+        }
+        setMessages(prev => [...prev, aiMsg])
+      } else {
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text.trim(),
+            agentId: selectedAgent!.id,
+            workspaceId,
+            channel: 'webchat',
+            conversationId,
+          }),
+        })
 
-      if (!res.ok) throw new Error('Error en la respuesta del agente')
+        if (!res.ok) throw new Error('Error en la respuesta del agente')
 
-      const data = await res.json()
+        const data = await res.json()
 
-      if (data.conversationId && !conversationId) {
-        setConversationId(data.conversationId)
+        if (data.conversationId && !conversationId) {
+          setConversationId(data.conversationId)
+        }
+
+        const aiMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          content: data.response || 'Sin respuesta',
+          timestamp: new Date(),
+          agentName: selectedAgent!.name,
+          agentModel: selectedAgent!.modelName || selectedAgent!.model,
+          latencyMs: data.latencyMs,
+          tokenCount: data.analysis ? Math.ceil((data.response || '').length / 4) : undefined,
+          analysis: data.analysis || undefined,
+        }
+
+        setMessages(prev => [...prev, aiMsg])
       }
-
-      const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: data.response || 'Sin respuesta',
-        timestamp: new Date(),
-        agentName: selectedAgent.name,
-        agentModel: selectedAgent.modelName || selectedAgent.model,
-        latencyMs: data.latencyMs,
-        tokenCount: data.analysis ? Math.ceil((data.response || '').length / 4) : undefined,
-        analysis: data.analysis || undefined,
-      }
-
-      setMessages(prev => [...prev, aiMsg])
     } catch (err) {
       const errorMsg: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'ai',
         content: 'Lo siento, ocurrió un error al procesar tu mensaje. Inténtalo de nuevo.',
         timestamp: new Date(),
-        agentName: selectedAgent.name,
+        agentName: selectedAgent?.name ?? 'IA',
       }
       setMessages(prev => [...prev, errorMsg])
       toast.error('Error al enviar mensaje')
@@ -194,7 +236,7 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
       setIsLoading(false)
       inputRef.current?.focus()
     }
-  }, [selectedAgent, isLoading, workspaceId, conversationId])
+  }, [selectedAgent, sandboxMode, sandboxSystemPrompt, isLoading, workspaceId, conversationId])
 
   const handleSend = () => {
     sendMessage(inputValue)
@@ -212,20 +254,57 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
   // Get the last AI message with analysis for the panel
   const lastAnalysis = [...messages].reverse().find(m => m.role === 'ai' && m.analysis)?.analysis
 
+  // Segmented control: Probar (chat tester) vs Entrenar (training studio)
+  const modeBar = (
+    <div className="flex items-center gap-1 px-4 lg:px-6 pt-3 pb-2 border-b border-border bg-muted/20">
+      <button
+        onClick={() => setMode('test')}
+        className={cn('flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors',
+          mode === 'test' ? 'bg-emerald-600 text-white' : 'text-muted-foreground hover:bg-muted')}
+      >
+        <Sparkles className="h-4 w-4" /> Probar
+      </button>
+      <button
+        onClick={() => setMode('train')}
+        className={cn('flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors',
+          mode === 'train' ? 'bg-emerald-600 text-white' : 'text-muted-foreground hover:bg-muted')}
+      >
+        <GraduationCap className="h-4 w-4" /> Entrenar
+      </button>
+    </div>
+  )
+
+  if (mode === 'train') {
+    return (
+      <div className="flex flex-col h-full">
+        {modeBar}
+        <div className="flex-1 min-h-0">
+          <TrainingStudio workspaceId={workspaceId} />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-full gap-0">
+    <div className="flex flex-col h-full overflow-hidden">
+      {modeBar}
+      <div className="flex flex-1 min-h-0 gap-0">
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Header */}
         <div className="p-4 lg:p-6 border-b border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-emerald-500" />
-                Playground IA
+                {sandboxMode
+                  ? <FlaskConical className="h-5 w-5 text-violet-500" />
+                  : <Sparkles className="h-5 w-5 text-emerald-500" />}
+                {sandboxMode ? 'Sandbox IA' : 'Playground IA'}
               </h3>
               <p className="text-sm text-muted-foreground">
-                Prueba y evalúa tus agentes IA en tiempo real
+                {sandboxMode
+                  ? 'Prueba prompts directamente — sin guardar en DB'
+                  : 'Prueba y evalúa tus agentes IA en tiempo real'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -275,6 +354,15 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant={sandboxMode ? 'default' : 'outline'}
+                size="sm"
+                className={cn('h-9 gap-1.5', sandboxMode && 'bg-violet-600 hover:bg-violet-700 text-white')}
+                onClick={() => { setSandboxMode(v => !v); clearChat() }}
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                Sandbox
+              </Button>
               <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={clearChat} disabled={messages.length === 0}>
                 <Trash2 className="h-3.5 w-3.5" />
                 Limpiar
@@ -291,8 +379,24 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
             </div>
           </div>
 
+          {/* Sandbox: system prompt textarea */}
+          {sandboxMode && (
+            <div className="mt-3">
+              <Textarea
+                placeholder="System prompt (opcional) — instrucciones para el modelo..."
+                className="text-xs min-h-[80px] resize-none font-mono"
+                value={sandboxSystemPrompt}
+                onChange={e => setSandboxSystemPrompt(e.target.value)}
+              />
+              <p className="text-[10px] text-violet-500 mt-1 flex items-center gap-1">
+                <FlaskConical className="h-3 w-3" />
+                Modo Sandbox — sin guardar en DB ni enviar por WhatsApp
+              </p>
+            </div>
+          )}
+
           {/* Agent Config Display */}
-          {selectedAgent && (
+          {!sandboxMode && selectedAgent && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-[10px] gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
                 <Settings2 className="h-3 w-3" />
@@ -316,8 +420,9 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
         </div>
 
         {/* Preset Messages */}
-        {messages.length === 0 && (
+        {messages.length === 0 && !sandboxMode && (
           <div className="px-4 lg:px-6 pt-4">
+            <p className="text-[10px] text-muted-foreground mb-2">Escenarios de prueba:</p>
             <div className="flex flex-wrap gap-2">
               {presetMessages.map((preset) => (
                 <button
@@ -333,8 +438,29 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
           </div>
         )}
 
+        {/* Appointment flow shortcuts — appear once a conversation is active */}
+        {messages.length > 0 && !sandboxMode && lastAnalysis?.apptMetadata?.proposedDate && (
+          <div className="px-4 lg:px-6 pt-3">
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+              <span>⚠️</span> Propuesta activa: {lastAnalysis.apptMetadata.proposedDate} {lastAnalysis.apptMetadata.time1 && `${lastAnalysis.apptMetadata.time1}${lastAnalysis.apptMetadata.time2 ? ' / ' + lastAnalysis.apptMetadata.time2 : ''}`}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {appointmentFlowMessages.map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => handlePresetClick(preset.text)}
+                  disabled={isLoading}
+                  className="text-[11px] px-2.5 py-1.5 rounded-full border border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 lg:px-6 py-4">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10">
@@ -421,17 +547,17 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
           <div className="flex items-center gap-2 max-w-3xl mx-auto">
             <Input
               ref={inputRef}
-              placeholder={selectedAgent ? `Mensaje para ${selectedAgent.name}...` : 'Selecciona un agente primero...'}
+              placeholder={sandboxMode ? 'Escribe tu mensaje al modelo...' : selectedAgent ? `Mensaje para ${selectedAgent.name}...` : 'Selecciona un agente primero...'}
               className="flex-1 h-11"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-              disabled={!selectedAgent || isLoading}
+              disabled={(!selectedAgent && !sandboxMode) || isLoading}
             />
             <Button
-              className="h-11 w-11 p-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className={cn('h-11 w-11 p-0 text-white', sandboxMode ? 'bg-violet-600 hover:bg-violet-700' : 'bg-emerald-600 hover:bg-emerald-700')}
               onClick={handleSend}
-              disabled={!inputValue.trim() || !selectedAgent || isLoading}
+              disabled={!inputValue.trim() || (!selectedAgent && !sandboxMode) || isLoading}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -445,7 +571,7 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
               {messages.length > 0 && `${messages.length} mensaje${messages.length !== 1 ? 's' : ''} · ${conversationId ? 'Conversación activa' : 'Nueva conversación'}`}
             </span>
             {messages.length > 0 && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 {presetMessages.map((preset) => (
                   <button
                     key={preset.label}
@@ -464,8 +590,8 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
 
       {/* Analysis Panel */}
       {analyzeOpen && (
-        <div className="hidden lg:flex flex-col w-[320px] border-l border-border bg-muted/30 dark:bg-slate-950/50 shrink-0">
-          <div className="p-4 border-b border-border">
+        <div className="hidden lg:flex flex-col w-[320px] min-h-0 border-l border-border bg-muted/30 dark:bg-slate-950/50 shrink-0">
+          <div className="p-4 border-b border-border shrink-0">
             <h4 className="text-sm font-semibold flex items-center gap-2">
               <Brain className="h-4 w-4 text-emerald-500" />
               Panel de Análisis
@@ -473,7 +599,7 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
             <p className="text-[10px] text-muted-foreground mt-0.5">Revenue Engine en acción</p>
           </div>
 
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea className="flex-1 min-h-0 p-4">
             {lastAnalysis ? (
               <div className="space-y-4">
                 {/* Action */}
@@ -519,6 +645,62 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
                     </CardHeader>
                     <CardContent className="p-3 pt-0">
                       <p className="text-xs text-muted-foreground">{lastAnalysis.agentRouting}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* CRM Tags (raw parsed) */}
+                {lastAnalysis.crmTags && lastAnalysis.crmTags.length > 0 && (
+                  <Card className="border-border/60">
+                    <CardHeader className="pb-2 p-3">
+                      <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                        <Settings2 className="h-3 w-3 text-orange-500" />
+                        Tags CRM emitidos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-0 space-y-1">
+                      {lastAnalysis.crmTags.map((tag, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[9px] px-1.5 font-mono bg-slate-100 dark:bg-slate-800 border-0">
+                            {tag.type}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground font-mono truncate">{tag.value}</span>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Appointment Proposal State */}
+                {(lastAnalysis.apptMetadata !== undefined) && (
+                  <Card className={lastAnalysis.apptMetadata ? 'border-amber-300 dark:border-amber-500/40' : 'border-border/60'}>
+                    <CardHeader className="pb-2 p-3">
+                      <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                        <span className="text-sm">📅</span>
+                        Estado de Cita
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-0">
+                      {lastAnalysis.apptMetadata ? (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Propuesta activa (no confirmada)</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            <span className="font-medium">Día:</span> {lastAnalysis.apptMetadata.proposedDate}
+                          </p>
+                          {lastAnalysis.apptMetadata.time1 && (
+                            <p className="text-[11px] text-muted-foreground">
+                              <span className="font-medium">Horarios:</span> {lastAnalysis.apptMetadata.time1}{lastAnalysis.apptMetadata.time2 ? ` / ${lastAnalysis.apptMetadata.time2}` : ''}
+                            </p>
+                          )}
+                          {lastAnalysis.apptMetadata.proposedAt && (
+                            <p className="text-[10px] text-muted-foreground/70">
+                              {new Date(lastAnalysis.apptMetadata.proposedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">Sin propuesta activa</p>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -579,6 +761,7 @@ export function AgentPlayground({ workspaceId }: AgentPlaygroundProps) {
           </ScrollArea>
         </div>
       )}
+      </div>
     </div>
   )
 }

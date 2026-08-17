@@ -4,11 +4,15 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ success: false, error: 'No workspace in session' }, { status: 400 })
+    }
+
     const body = await req.json()
     const phoneNumber = body?.phone
 
@@ -19,28 +23,26 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    const connectFn = (whatsAppManager as any).connectWithPairingCode
+    const { getWhatsAppManager } = await import('@/lib/whatsapp/connection')
+    const manager = getWhatsAppManager(session.workspaceId)
+    const connectFn = (manager as any).connectWithPairingCode
     if (typeof connectFn !== 'function') {
       return NextResponse.json({
         success: false,
         error: 'El método de conexión por código no está disponible. Usa QR escaneo.',
       }, { status: 400 })
     }
-    const result = await connectFn.call(whatsAppManager, phoneNumber)
+    const result = await connectFn.call(manager, phoneNumber)
 
     if (result.success) {
       return NextResponse.json({
         success: true,
         pairingCode: result.pairingCode,
-        status: whatsAppManager.getStatus(),
+        status: manager.getStatus(),
         message: 'Codigo de vinculacion generado. Abre WhatsApp > Dispositivos vinculados > Vincular con numero.',
       })
     } else {
-      return NextResponse.json({
-        success: false,
-        error: result.error,
-      }, { status: 500 })
+      return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
   } catch (error: any) {
     const msg = error instanceof Error ? error.message : String(error)

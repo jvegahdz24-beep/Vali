@@ -6,13 +6,16 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { whatsAppManager } from '@/lib/whatsapp/connection'
+import { tryGetWhatsAppManager } from '@/lib/whatsapp/connection'
 import { chatWithAI } from '@/lib/ai/providers'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, errorResponse } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return Response.json({ error: 'No workspace in session' }, { status: 400 })
+    }
     const body = await req.json()
     const { contactId, conversationId, customMessage } = body
 
@@ -20,9 +23,9 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'contactId required' }, { status: 400 })
     }
 
-    // Find contact with conversation history
-    const contact = await db.contact.findUnique({
-      where: { id: contactId },
+    // SECURITY: ensure contact belongs to the authenticated workspace.
+    const contact = await db.contact.findFirst({
+      where: { id: contactId, workspaceId: session.workspaceId },
       include: {
         conversations: {
           where: { status: 'active', channel: 'whatsapp' },
@@ -36,8 +39,6 @@ export async function POST(req: NextRequest) {
     if (!contact || !contact.phone) {
       return Response.json({ error: 'Contact not found or no phone' }, { status: 404 })
     }
-
-    await requireWorkspace(contact.workspaceId, session.userId)
 
     const conversation = contact.conversations[0]
     const messageHistory = conversation?.messages || []
@@ -117,10 +118,11 @@ REGLAS:
       data: { lastMessageAt: new Date() },
     })
 
-    // Try to send via WhatsApp if connected
+    // Try to send via WhatsApp if connected (only this workspace's manager)
     let sent = false
-    if (whatsAppManager.isConnected()) {
-      const sendResult = await whatsAppManager.sendMessage(contact.phone, reactivationMessage)
+    const manager = tryGetWhatsAppManager(session.workspaceId)
+    if (manager && manager.isConnected()) {
+      const sendResult = await manager.sendMessage(contact.phone, reactivationMessage)
       sent = sendResult.success
     }
 

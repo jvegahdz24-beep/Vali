@@ -49,12 +49,9 @@ export default function SetupSQLPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif', padding: 20 }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 24, marginBottom: 8, color: '#38bdf8' }}>Supabase SQL Migration</h1>
+        <h1 style={{ fontSize: 24, marginBottom: 8, color: '#38bdf8' }}>SQL Migration</h1>
         <p style={{ color: '#94a3b8', marginBottom: 20 }}>
-          Copia cada parte y pegala en el{' '}
-          <a href="https://supabase.com/dashboard/project/ffxppvsdunvsmotxkdiy/sql/new" target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
-            SQL Editor de Supabase
-          </a>. Ejecuta en orden: Parte 1 - Parte 2 - Parte 3.
+          Copia cada parte y ejecútala en tu base de datos MySQL. Ejecuta en orden: Parte 1 - Parte 2 - Parte 3.
         </p>
 
         <div style={{ marginBottom: 16 }}>
@@ -101,7 +98,7 @@ export default function SetupSQLPage() {
         <div style={{ marginTop: 24, padding: 16, background: '#1e293b', borderRadius: 8, border: '1px solid #334155' }}>
           <h3 style={{ color: '#fbbf24', fontSize: 14, marginBottom: 8 }}>Instrucciones:</h3>
           <ol style={{ color: '#94a3b8', fontSize: 13, paddingLeft: 20, lineHeight: 1.8 }}>
-            <li>Abre el <a href="https://supabase.com/dashboard/project/ffxppvsdunvsmotxkdiy/sql/new" target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>SQL Editor de Supabase</a></li>
+            <li>Abre tu cliente MySQL (phpMyAdmin, DBeaver, MySQL Workbench)</li>
             <li>Clic &quot;Copiar TODO&quot; o copia cada parte por separado</li>
             <li>Pega en el editor (Ctrl+V)</li>
             <li>Clic &quot;Run&quot; o Ctrl+Enter</li>
