@@ -24,7 +24,12 @@ export interface PublishOpts {
   base: string
 }
 
-export interface PublishOutcome extends Partial<PublishResult> { network: string; format: string; status: string; error?: string }
+export interface PublishOutcome extends Partial<PublishResult> {
+  network: string
+  format: string
+  status: 'ok' | 'error'
+  error?: string
+}
 
 const renderUrl = (base: string, ws: string, car: string, format: string, template: string) =>
   `${base.replace(/\/$/, '')}/api/marketing/render?workspaceId=${ws}&carId=${car}&format=${format}&template=${template}`
@@ -93,7 +98,14 @@ export async function publishCar(opts: PublishOpts): Promise<{ results: PublishO
       continue
     }
     const ready = network === 'facebook' ? canPublishFacebook(creds) : canPublishInstagram(creds)
-    if (!ready) { results.push({ network, format: '-', status: 'error', error: `${network === 'facebook' ? 'Facebook' : 'Instagram'} no está conectado` }); continue }
+    if (!ready) {
+      const msg = `${network === 'facebook' ? 'Facebook' : 'Instagram'} no está conectado`
+      results.push({ network, format: '-', status: 'error', error: msg })
+      await db.marketingPost.create({
+        data: { workspaceId, carId, network, format: '-', status: 'error', error: msg, source },
+      })
+      continue
+    }
     for (const format of formats) {
       // Los reels solo existen en Instagram por esta API. En Facebook no se
       // intentan (se omiten en silencio, no es un error que deba alarmar).
@@ -135,5 +147,8 @@ export async function publishCar(opts: PublishOpts): Promise<{ results: PublishO
       }
     }
   }
-  return { results, published: results.filter((r) => r.status === 'ok').length }
+  return {
+    results,
+    published: results.filter((result) => result.status === 'ok').length,
+  }
 }

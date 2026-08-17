@@ -11,19 +11,6 @@ import { cookies } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
-// WhatsApp connection state (in-memory singleton)
-let whatsappState: { status: string; qrCode: string | null; phone: string | null; lastActivity: string | null } = {
-  status: 'unknown',
-  qrCode: null,
-  phone: null,
-  lastActivity: null,
-}
-
-// Expose for whatsapp module to update
-export function setWhatsappDebugState(state: typeof whatsappState) {
-  whatsappState = state
-}
-
 async function checkComponent(name: string, fn: () => Promise<{ ok: boolean; detail: string; latencyMs?: number }>) {
   const start = Date.now()
   try {

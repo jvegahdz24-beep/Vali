@@ -16,6 +16,7 @@ import type { FollowUpTipo } from '@/lib/ai/follow-up-engine'
 import { shouldStopFollowUps, cancelPendingFollowUps, markDisinterested } from '@/lib/ai/follow-up-guard'
 import { nextAllowedSend } from '@/lib/ai/quiet-hours'
 import { notifyFollowUpApproval } from '@/lib/telegram-events'
+import { claimPendingFollowUpTask, recoverStuckProcessingFollowUps } from '@/lib/followups/task-claim'
 
 const WORKER_KEY = process.env.WORKER_KEY
 
@@ -28,6 +29,10 @@ function verifyWorkerKey(request: NextRequest): boolean {
     return false
   }
   return request.headers.get('x-worker-key') === WORKER_KEY
+}
+
+function statusAfterRetry(retryCount: number): 'pending' | 'failed' {
+  return retryCount >= 3 ? 'failed' : 'pending'
 }
 
 interface WorkerResult {
@@ -127,6 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const now = new Date()
     console.log(`[FollowUp Worker] Starting at ${now.toISOString()}`)
+    await recoverStuckProcessingFollowUps(now)
 
     // Red de seguridad: responde mensajes de clientes que quedaron sin contestar
     // (corre SIEMPRE, haya o no follow-ups pendientes).
@@ -163,10 +169,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(result)
     }
 
-    result.processed = pendingTasks.length
-
     for (const task of pendingTasks) {
       try {
+        const claimed = await claimPendingFollowUpTask(task.id, task.metadata, now)
+        if (!claimed) {
+          result.skipped++
+          continue
+        }
+        result.processed++
+
         const contact = await db.contact.findUnique({
           where: { id: task.contactId },
           select: { id: true, firstName: true, lastName: true, phone: true, status: true, customFields: true },
@@ -195,7 +206,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           const allowed = nextAllowedSend(now, wsS)
           if (allowed.getTime() > now.getTime()) {
             const jitterMs = Math.floor(Math.random() * 60 * 60 * 1000)
-            await db.followUpTask.update({ where: { id: task.id }, data: { scheduledAt: new Date(allowed.getTime() + jitterMs) } })
+            await db.followUpTask.update({
+              where: { id: task.id },
+              data: { status: 'pending', scheduledAt: new Date(allowed.getTime() + jitterMs) },
+            })
             result.skipped++
             continue
           }
@@ -211,7 +225,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           where: { contactId: task.contactId, status: 'sent', sentAt: { gte: cooldownCutoff } },
         })
         if (recentSent > 0) {
-          await db.followUpTask.update({ where: { id: task.id }, data: { scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) } })
+          await db.followUpTask.update({
+            where: { id: task.id },
+            data: { status: 'pending', scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+          })
           result.skipped++
           continue
         }
@@ -286,8 +303,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             try { taskMeta = JSON.parse(task.metadata || '{}') } catch { /* ignore */ }
 
             if (taskMeta.tipo) {
-              // Mark as processing to prevent double-execution
-              await db.followUpTask.update({ where: { id: task.id }, data: { status: 'processing' } })
               try {
                 const workspace = await db.workspace.findUnique({
                   where: { id: task.workspaceId },
@@ -306,8 +321,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               } catch (aiErr) {
                 const aiErrMsg = aiErr instanceof Error ? aiErr.message : String(aiErr)
                 console.error(`[FollowUp Worker] AI generation failed for task ${task.id}: ${aiErrMsg}`)
-                // Reset to pending so next run retries
-                await db.followUpTask.update({ where: { id: task.id }, data: { status: 'pending', retryCount: { increment: 1 } } })
+                const nextRetryCount = task.retryCount + 1
+                await db.followUpTask.update({
+                  where: { id: task.id },
+                  data: { status: statusAfterRetry(nextRetryCount), retryCount: { increment: 1 }, error: `AI gen failed: ${aiErrMsg}` },
+                })
                 result.errors++
                 result.errorDetails.push({ taskId: task.id, contactId: task.contactId, error: `AI gen failed: ${aiErrMsg}` })
                 continue
@@ -369,7 +387,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const sendSource = sent.channel || 'none'
 
         if (!sendResult.success) {
-          await db.followUpTask.update({ where: { id: task.id }, data: { error: sent.error || 'Canal no conectado', retryCount: { increment: 1 } } })
+            const nextRetryCount = task.retryCount + 1
+            await db.followUpTask.update({
+              where: { id: task.id },
+              data: {
+                status: statusAfterRetry(nextRetryCount),
+                error: sent.error || 'Canal no conectado',
+                retryCount: { increment: 1 },
+              },
+            })
           result.skipped++
           continue
         }
@@ -426,7 +452,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       } catch (taskError) {
         const errorMsg = taskError instanceof Error ? taskError.message : String(taskError)
         console.error(`[FollowUp Worker] Task ${task.id}: EXCEPTION — ${errorMsg}`)
-        await db.followUpTask.update({ where: { id: task.id }, data: { error: errorMsg, retryCount: { increment: 1 } } }).catch(() => {})
+        const nextRetryCount = task.retryCount + 1
+        await db.followUpTask.update({
+          where: { id: task.id },
+          data: {
+            status: statusAfterRetry(nextRetryCount),
+            error: errorMsg,
+            retryCount: { increment: 1 },
+          },
+        }).catch(() => {})
         result.errors++
         result.errorDetails.push({ taskId: task.id, contactId: task.contactId, error: errorMsg })
       }

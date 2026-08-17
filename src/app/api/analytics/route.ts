@@ -7,12 +7,17 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
+const ANALYTICS_POLLING_INTERVAL_MS = 30_000
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
+    if (!workspaceId) {
+      return Response.json({ error: 'workspaceId es obligatorio' }, { status: 400 })
+    }
+    await requireWorkspace(workspaceId, session.userId)
 
     const period = searchParams.get('period') || '7d'
 
@@ -318,6 +323,10 @@ export async function GET(req: NextRequest) {
     }))
 
     return Response.json({
+      dataType: 'snapshot',
+      realtime: false,
+      pollingIntervalMs: ANALYTICS_POLLING_INTERVAL_MS,
+      generatedAt: new Date().toISOString(),
       keyMetrics,
       previousPeriodKeyMetrics,
       summary,

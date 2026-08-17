@@ -128,9 +128,9 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response
 }
 
-// ─── Middleware ────────────────────────────────────────────────
+// ─── Proxy ────────────────────────────────────────────────────
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Nexus is intentionally disabled until its Prisma schema and migration are

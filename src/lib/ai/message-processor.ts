@@ -112,7 +112,7 @@ import { sanitizeContactName } from '@/lib/contact-name'
 import { parseCRMActions, stripCRMActions, buildCRMToolsInstruction } from '@/lib/ai/crm-tool-parser'
 import { createTenantPaymentLink, createTenantInvoice } from '@/lib/erp/payments'
 import { computeLeadScoreDelta, buildIntentActionDirective } from '@/lib/ai'
-import { canUseTool, canRunTool } from '@/lib/ai/agent-permissions'
+import { canRunToolForAgent } from '@/lib/ai/agent-permissions'
 import { buildTrackedQuoteLink } from '@/lib/tracking'
 import { getAgentForContact } from '@/lib/ai/agent-router'
 import { broadcastToWorkspace, sendTelegramNotification } from '@/lib/telegram'
@@ -1410,7 +1410,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     } catch { /* */ }
 
     const pagoAction = parsedCRMActions.find(a => a.type === 'pago')
-    if (pagoAction && !canRunTool(personalityName, 'generatePaymentLink', routedAgent?.forbiddenActions)) {
+    if (pagoAction && !canRunToolForAgent(personalityName, 'generatePaymentLink', routedAgent?.allowedTools, routedAgent?.forbiddenActions)) {
       console.warn(`[Core:9a-bis] ${routedAgent?.name || personalityName} not permitted to use generatePaymentLink — skipping (permisos por agente)`)
     } else if (pagoAction && requireApproval) {
       // Retener para aprobación humana
@@ -1460,7 +1460,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     }
 
     const facturaAction = parsedCRMActions.find(a => a.type === 'factura')
-    if (facturaAction && !canRunTool(personalityName, 'createInvoice', routedAgent?.forbiddenActions)) {
+    if (facturaAction && !canRunToolForAgent(personalityName, 'createInvoice', routedAgent?.allowedTools, routedAgent?.forbiddenActions)) {
       console.warn(`[Core:9a-bis] ${routedAgent?.name || personalityName} not permitted to use createInvoice — skipping (permisos por agente)`)
     } else if (facturaAction && requireApproval) {
       try {
@@ -2009,7 +2009,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     const stageAction = parsedCRMActions.find(a => a.type === 'stage')
     // Permiso por ficha del agente: si el agente ruteado tiene prohibido mover el
     // pipeline (NO puede updateDealStage), ignoramos su override de etapa.
-    const canMoveStage = canRunTool(personalityName, 'updateDealStage', routedAgent?.forbiddenActions)
+    const canMoveStage = canRunToolForAgent(personalityName, 'updateDealStage', routedAgent?.allowedTools, routedAgent?.forbiddenActions)
     if (stageAction && !canMoveStage) {
       console.warn(`[Core:11b] ${routedAgent?.name || personalityName} no puede mover el pipeline — se ignora [CRM:stage]`)
     }
@@ -2027,7 +2027,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
   // ── 11c. Create calendar appointment if AI confirmed one ──
   const appointmentAction = parsedCRMActions.find(a => a.type === 'appointment')
-  if (appointmentAction && !canRunTool(personalityName, 'scheduleAppointment', routedAgent?.forbiddenActions)) {
+  if (appointmentAction && !canRunToolForAgent(personalityName, 'scheduleAppointment', routedAgent?.allowedTools, routedAgent?.forbiddenActions)) {
     console.warn(`[Core:11c] ${routedAgent?.name || personalityName} no puede agendar citas (ficha NO puede) — se ignora [CRM:appointment]`)
   } else if (appointmentAction) {
     const parts = appointmentAction.value.split('|')
