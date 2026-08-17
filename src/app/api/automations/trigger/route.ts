@@ -10,6 +10,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { executeAutomationActions } from '@/lib/automations/executor'
 
 interface TriggerBody {
   automationId: string
@@ -63,118 +64,21 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Parse + execute actions ────────────────────────────
-    let actions: Array<{ type: string; payload?: Record<string, unknown> }> = []
+    let actions: Array<{ type: string; payload?: Record<string, unknown>; config?: Record<string, unknown> }> = []
     try {
-      actions = JSON.parse(automation.actions || '[]')
+      const parsed = JSON.parse(automation.actions || '[]')
+      actions = Array.isArray(parsed) ? parsed : []
     } catch {
       actions = []
     }
 
-    const executedActions: string[] = []
-    const errors: string[] = []
-
-    for (const action of actions) {
-      try {
-        switch (action.type) {
-          case 'send_message': {
-            // Queue or send message to contact via conversation
-            if (contact) {
-              const messageText = (action.payload?.message as string) ||
-                (action.payload?.content as string) || ''
-              if (messageText && contact.phone) {
-                // Find or create conversation
-                const conv = await db.conversation.findFirst({
-                  where: {
-                    workspaceId: automation.workspaceId,
-                    contactId: contact.id,
-                    status: 'active',
-                  },
-                  select: { id: true },
-                })
-                if (conv) {
-                  await db.message.create({
-                    data: {
-                      conversationId: conv.id,
-                      content: messageText,
-                      senderType: 'agent',
-                      isAiGenerated: false,
-                      metadata: JSON.stringify({ source: 'automation', automationId }),
-                    },
-                  })
-                  executedActions.push(`send_message: "${messageText.slice(0, 50)}"`)
-                } else {
-                  errors.push('send_message: no active conversation for contact')
-                }
-              }
-            }
-            break
-          }
-
-          case 'update_contact': {
-            if (contact && action.payload) {
-              const allowed = ['leadScore', 'tags', 'assignedTo', 'stage']
-              const updateData: Record<string, unknown> = {}
-              for (const k of allowed) {
-                if (k in action.payload) updateData[k] = action.payload[k]
-              }
-              if (Object.keys(updateData).length > 0) {
-                await db.contact.update({
-                  where: { id: contact.id },
-                  data: updateData as Parameters<typeof db.contact.update>[0]['data'],
-                })
-                executedActions.push(`update_contact: ${Object.keys(updateData).join(', ')}`)
-              }
-            }
-            break
-          }
-
-          case 'add_tag': {
-            if (contact) {
-              const existing = await db.contact.findUnique({
-                where: { id: contact.id },
-                select: { tags: true },
-              })
-              const currentTags: string[] = JSON.parse(existing?.tags || '[]')
-              const tag = action.payload?.tag as string
-              if (tag && !currentTags.includes(tag)) {
-                await db.contact.update({
-                  where: { id: contact.id },
-                  data: { tags: JSON.stringify([...currentTags, tag]) },
-                })
-                executedActions.push(`add_tag: "${tag}"`)
-              }
-            }
-            break
-          }
-
-          case 'webhook': {
-            const url = action.payload?.url as string
-            if (url && url.startsWith('https://')) {
-              // Fire-and-forget webhook
-              fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  automationId,
-                  contactId: contact?.id,
-                  context,
-                  triggeredAt: new Date().toISOString(),
-                }),
-                signal: AbortSignal.timeout(5000),
-              }).catch((e) => console.error('[Automation webhook]', e))
-              executedActions.push(`webhook: ${url}`)
-            }
-            break
-          }
-
-          default:
-            executedActions.push(`skipped: unknown action type "${action.type}"`)
-        }
-      } catch (actionErr) {
-        const msg = actionErr instanceof Error ? actionErr.message : String(actionErr)
-        errors.push(`${action.type}: ${msg}`)
-      }
-    }
+    const { executedActions, errors } = await executeAutomationActions({
+      automationId,
+      workspaceId: automation.workspaceId,
+      actions,
+      contact,
+      context,
+    })
 
     // ─── Create log + update runCount ───────────────────────
     await db.$transaction([
@@ -197,11 +101,11 @@ export async function POST(req: NextRequest) {
     ])
 
     return Response.json({
-      success: true,
+      success: errors.length === 0,
       automationName: automation.name,
       executedActions,
       errors: errors.length > 0 ? errors : undefined,
-    })
+    }, { status: errors.length > 0 && executedActions.length === 0 ? 502 : 200 })
   } catch (error) {
     return errorResponse(error)
   }
