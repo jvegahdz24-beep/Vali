@@ -11,6 +11,8 @@ import { requireAuth, requireWorkspace, requirePermission, errorResponse } from 
 import { canViewAllData } from '@/lib/rbac'
 import { recordDealOutcome } from '@/lib/engine/outcomes'
 import { markInventorySoldForWonDeal, reserveInventoryForDeal, releaseInventoryForDeal, markContactAsCustomer } from '@/lib/crm/inventory-sync'
+import { eventBus, EVENT_TYPES } from '@/lib/event-bus'
+import { persistDealStageChangedEvent } from '@/lib/engine/durable-events'
 
 export async function GET(req: NextRequest) {
   try {
@@ -253,6 +255,34 @@ export async function PUT(req: NextRequest) {
         workspaceId: existing.workspaceId, dealId: deal.id, contactId: dealContactId,
         reason: becameLost ? 'trato perdido' : 'el trato salió de Negociación',
       }).catch(() => {})
+    }
+
+    const stageChanged = Boolean(stageId && existing.stageId !== stageId)
+    if (stageChanged) {
+      const durableEventId = await persistDealStageChangedEvent({
+        dealId: deal.id,
+        workspaceId: existing.workspaceId,
+        contactId: dealContactId,
+        fromStageId: existing.stageId,
+        fromStageName: oldStageName || null,
+        toStageId: deal.stageId,
+        toStageName: deal.stage?.name,
+        status: deal.status,
+        value: String(deal.value),
+      })
+
+      // La persistencia durable ocurre primero; el bus en memoria mantiene la
+      // reacción inmediata del proceso sin ser la única fuente del evento.
+      void eventBus.emit(EVENT_TYPES.DEAL_STAGE_CHANGED, {
+        dealId: deal.id,
+        workspaceId: existing.workspaceId,
+        contactId: dealContactId,
+        fromStageId: existing.stageId,
+        fromStageName: oldStageName || null,
+        toStageId: deal.stageId,
+        toStageName: deal.stage?.name,
+        value: String(deal.value),
+      }, 'deals-api', { durableEventId })
     }
 
     // Track event
