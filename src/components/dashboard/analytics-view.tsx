@@ -76,6 +76,10 @@ interface AgentWorkloadItem {
 }
 
 interface AnalyticsData {
+  dataType?: 'snapshot' | 'stream'
+  realtime?: boolean
+  pollingIntervalMs?: number
+  generatedAt?: string
   keyMetrics: KeyMetricsData
   previousPeriodKeyMetrics: KeyMetricsData
   messagesOverTime: { date: string; count: number }[]
@@ -143,23 +147,27 @@ export function AnalyticsView({ workspaceId }: AnalyticsViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [expandedFunnel, setExpandedFunnel] = useState<string | null>(null)
 
-  const fetchAnalytics = useCallback(async () => {
+  const fetchAnalytics = useCallback(async (silent = false) => {
     if (!workspaceId) return
     try {
-      setIsLoading(true)
-      const res = await fetch(`/api/analytics?workspaceId=${workspaceId}&period=${period}`)
+      if (!silent) setIsLoading(true)
+      const res = await fetch(`/api/analytics?workspaceId=${encodeURIComponent(workspaceId)}&period=${period}`)
       if (!res.ok) throw new Error('Error al cargar analíticas')
-      const json = await res.json()
+      const json = await res.json() as AnalyticsData
       setData(json)
     } catch {
-      toast.error('Error al cargar analíticas')
+      if (!silent) toast.error('Error al cargar analíticas')
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }, [workspaceId, period])
 
   useEffect(() => {
-    fetchAnalytics()
+    void fetchAnalytics()
+    const interval = window.setInterval(() => {
+      void fetchAnalytics(true)
+    }, 30_000)
+    return () => window.clearInterval(interval)
   }, [fetchAnalytics])
 
   const exportCSV = useCallback(() => {
@@ -287,12 +295,15 @@ export function AnalyticsView({ workspaceId }: AnalyticsViewProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">Analíticas</h3>
-          <p className="text-sm text-muted-foreground">
-            Métricas y rendimiento del equipo · incluye el Motor de Seguimiento
-          </p>
+            <p className="text-sm text-muted-foreground">
+              Métricas y rendimiento del equipo · incluye el Motor de Seguimiento
+            </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Tabs value={period} onValueChange={setPeriod}>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px] font-medium">
+              {data?.dataType === 'snapshot' ? `Snapshot · actualización ${Math.round((data.pollingIntervalMs || 30_000) / 1000)} s` : 'Snapshot'}
+            </Badge>
+            <Tabs value={period} onValueChange={setPeriod}>
             <TabsList>
               {periodTabs.map((tab) => (
                 <TabsTrigger key={tab.value} value={tab.value} className="text-xs">
