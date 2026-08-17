@@ -84,7 +84,34 @@ export function canRunTool(
   tool: AgentTool,
   agentForbidden?: string[],
 ): boolean {
+  return canRunToolForAgent(personality, tool, undefined, agentForbidden)
+}
+
+/**
+ * Permiso efectivo para un AgentInstance concreto.
+ *
+ * `allowedTools` es una allow-list explícita: cuando está presente y tiene
+ * elementos, la herramienta debe estar declarada allí. Una lista vacía
+ * conserva el comportamiento de compatibilidad y delega en la matriz base.
+ * La matriz base y las prohibiciones explícitas siguen aplicándose siempre.
+ */
+export function canRunToolForAgent(
+  personality: string | undefined,
+  tool: AgentTool,
+  allowedTools?: string[],
+  forbiddenActions?: string[],
+): boolean {
   if (!canUseTool(personality, tool)) return false
-  if (agentForbidsTool(agentForbidden, tool)) return false
+
+  if (Array.isArray(allowedTools) && allowedTools.length > 0) {
+    const normalizedAllowedTools = new Set(
+      allowedTools
+        .filter((candidate): candidate is string => typeof candidate === 'string')
+        .map((candidate) => candidate.trim().toLowerCase()),
+    )
+    if (!normalizedAllowedTools.has(tool.toLowerCase())) return false
+  }
+
+  if (agentForbidsTool(forbiddenActions, tool)) return false
   return true
 }
