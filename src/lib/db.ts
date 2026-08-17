@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { PrismaClient } from '@prisma/client'
+import type { NexusModelDelegates } from '@/lib/nexus-prisma-compat'
 
 // MySQL error codes that indicate a dropped/stale connection
 const TRANSIENT_CODES = new Set(['P1017', 'P1001', 'P1008'])
@@ -64,7 +65,7 @@ function createPrismaClient() {
   })
 }
 
-type DbClient = ReturnType<typeof createPrismaClient>
+type DbClient = ReturnType<typeof createPrismaClient> & NexusModelDelegates
 
 const globalForPrisma = globalThis as unknown as {
   prisma: DbClient | undefined
@@ -72,7 +73,7 @@ const globalForPrisma = globalThis as unknown as {
 
 export const db: DbClient =
   globalForPrisma.prisma ??
-  createPrismaClient()
+  (createPrismaClient() as unknown as DbClient)
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 

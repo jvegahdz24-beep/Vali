@@ -8,7 +8,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
-import { publish } from '@/lib/event-bus'
+import { EVENT_TYPES, publish } from '@/lib/event-bus'
 import { recordDealOutcome } from '@/lib/engine/outcomes'
 
 export async function GET(
@@ -146,7 +146,7 @@ export async function PUT(
         },
       })
 
-      publish('deal.stage.changed', {
+      publish(EVENT_TYPES.DEAL_STAGE_CHANGED, {
         dealId: deal.id,
         workspaceId: existing.workspaceId,
         contactId: deal.contact?.id ?? existing.contactId,

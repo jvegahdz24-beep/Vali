@@ -5,19 +5,30 @@
 // (y WhatsApp opcional) a la hora local configurada, una vez al día.
 // ═══════════════════════════════════════════════════════════════
 
+import { timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { collectBriefing, formatBriefing } from '@/lib/copilot/briefing'
 import { broadcastToWorkspace } from '@/lib/telegram'
 import { getWhatsAppManager } from '@/lib/whatsapp/connection'
 
+// Evita solapamientos dentro de la misma instancia. El claim en DB cubre
+// ejecuciones concurrentes normales; una cola durable sería la solución final.
+const inFlightWorkspaces = new Set<string>()
+
+function secureEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a)
+  const right = Buffer.from(b)
+  return left.length === right.length && timingSafeEqual(left, right)
+}
+
 function isAuthorized(req: NextRequest): boolean {
-  if (process.env.NODE_ENV !== 'production') return true
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return false
   const auth = req.headers.get('authorization')
-  const cronH = req.headers.get('x-cron-secret')
-  return auth === `Bearer ${cronSecret}` || cronH === cronSecret
+  const cronHeader = req.headers.get('x-cron-secret')
+  const presented = auth?.startsWith('Bearer ') ? auth.slice(7) : cronHeader
+  return !!presented && secureEqual(presented, cronSecret)
 }
 
 interface BriefingCfg { enabled?: boolean; hour?: number; whatsappPhone?: string; lastSentDate?: string }
@@ -34,46 +45,106 @@ function localNow(tz: string): { hour: number; date: string } {
   }
 }
 
+function parseSettings(raw: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const t0 = Date.now()
-  const results: Record<string, string> = {}
+  const summary = { processed: 0, sent: 0, waiting: 0, alreadySent: 0, busy: 0, failed: 0 }
+
   try {
     const workspaces = await db.workspace.findMany({ where: { isActive: true }, select: { id: true, settings: true } })
     for (const ws of workspaces) {
-      let settings: Record<string, unknown> = {}
-      try { settings = JSON.parse(ws.settings || '{}') } catch { /* */ }
+      const settings = parseSettings(ws.settings)
       const cfg = (settings.copilotBriefing || {}) as BriefingCfg
       if (!cfg.enabled) continue
+
       const tz = String(settings.timezone || 'America/Mexico_City')
       const { hour, date } = localNow(tz)
-      const targetHour = typeof cfg.hour === 'number' ? cfg.hour : 8
-      if (hour < targetHour) { results[ws.id] = `esperando (son las ${hour}, envío a las ${targetHour})`; continue }
-      if (cfg.lastSentDate === date) { results[ws.id] = 'ya enviado hoy'; continue }
+      const targetHour = typeof cfg.hour === 'number' && cfg.hour >= 0 && cfg.hour <= 23 ? cfg.hour : 8
+      if (hour < targetHour) { summary.waiting += 1; continue }
+      if (cfg.lastSentDate === date) { summary.alreadySent += 1; continue }
+      if (inFlightWorkspaces.has(ws.id)) { summary.busy += 1; continue }
 
-      // Componer y enviar
-      const data = await collectBriefing(ws.id)
-      let sentTg = false, sentWa = false
-      try { await broadcastToWorkspace(ws.id, formatBriefing(data, { html: true, timezone: tz })); sentTg = true } catch { /* */ }
-      if (cfg.whatsappPhone) {
+      inFlightWorkspaces.add(ws.id)
+      let claimedSettings: string | null = null
+      let originalSettings: string | null = null
+      try {
+        // Releer y reclamar atómicamente el día antes de hacer llamadas externas.
+        const fresh = await db.workspace.findUnique({ where: { id: ws.id }, select: { settings: true } })
+        originalSettings = fresh?.settings ?? '{}'
+        const freshSettings = parseSettings(originalSettings)
+        const freshCfg = (freshSettings.copilotBriefing || {}) as BriefingCfg
+        if (freshCfg.lastSentDate === date || !freshCfg.enabled) {
+          summary.alreadySent += 1
+          continue
+        }
+        const nextSettings = {
+          ...freshSettings,
+          copilotBriefing: { ...(freshSettings.copilotBriefing as object || {}), lastSentDate: date },
+        }
+        claimedSettings = JSON.stringify(nextSettings)
+        const claim = await db.workspace.updateMany({
+          where: { id: ws.id, settings: originalSettings },
+          data: { settings: claimedSettings },
+        })
+        if (claim.count !== 1) {
+          summary.alreadySent += 1
+          continue
+        }
+
+        const data = await collectBriefing(ws.id)
+        let sentTg = false
+        let sentWa = false
         try {
-          const mgr = getWhatsAppManager(ws.id)
-          if (mgr.getStatus().connected) {
-            const r = await mgr.sendMessage(String(cfg.whatsappPhone).replace(/\D/g, ''), formatBriefing(data, { timezone: tz }))
-            sentWa = !!r.success
+          await broadcastToWorkspace(ws.id, formatBriefing(data, { html: true, timezone: tz }))
+          sentTg = true
+        } catch { /* keep WhatsApp fallback */ }
+        if (freshCfg.whatsappPhone) {
+          try {
+            const mgr = getWhatsAppManager(ws.id)
+            if (mgr.getStatus().connected) {
+              const phone = String(freshCfg.whatsappPhone).replace(/\D/g, '')
+              if (/^\d{8,15}$/.test(phone)) {
+                const result = await mgr.sendMessage(phone, formatBriefing(data, { timezone: tz }))
+                sentWa = !!result.success
+              }
+            }
+          } catch { /* one channel may fail while the other succeeds */ }
+        }
+
+        if (sentTg || sentWa) {
+          summary.processed += 1
+          summary.sent += 1
+        } else {
+          // No se confirmó ningún canal: liberar el claim para permitir reintento.
+          if (claimedSettings && originalSettings) {
+            await db.workspace.updateMany({ where: { id: ws.id, settings: claimedSettings }, data: { settings: originalSettings } })
           }
-        } catch { /* */ }
+          summary.failed += 1
+        }
+      } catch {
+        if (claimedSettings && originalSettings) {
+          await db.workspace.updateMany({ where: { id: ws.id, settings: claimedSettings }, data: { settings: originalSettings } }).catch(() => {})
+        }
+        summary.failed += 1
+      } finally {
+        inFlightWorkspaces.delete(ws.id)
       }
-      // Marcar como enviado hoy (releer settings para no pisar cambios)
-      const fresh = await db.workspace.findUnique({ where: { id: ws.id }, select: { settings: true } })
-      let s2: Record<string, unknown> = {}
-      try { s2 = JSON.parse(fresh?.settings || '{}') } catch { /* */ }
-      s2.copilotBriefing = { ...(s2.copilotBriefing as object || {}), lastSentDate: date }
-      await db.workspace.update({ where: { id: ws.id }, data: { settings: JSON.stringify(s2) } })
-      results[ws.id] = `enviado (telegram:${sentTg ? 'ok' : 'no'}, whatsapp:${sentWa ? 'ok' : cfg.whatsappPhone ? 'falló' : 'n/a'})`
     }
-    return NextResponse.json({ success: true, tookMs: Date.now() - t0, results })
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'error' }, { status: 500 })
+
+    return NextResponse.json({ success: true, tookMs: Date.now() - t0, summary })
+  } catch {
+    return NextResponse.json({ error: 'Error al ejecutar el briefing' }, { status: 500 })
   }
 }
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'

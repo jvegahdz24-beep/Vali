@@ -10,12 +10,18 @@ import { Resend } from 'resend'
 const FROM_NAME = 'ValiAutoFlow'
 const FROM_EMAIL = process.env.EMAIL_FROM || 'noreply@valiautoflow.com'
 
-async function sendEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+export type EmailResult = { success: boolean; error?: string; skipped?: boolean }
+export type EmailInput = { to: string; subject: string; html: string; text?: string }
+
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+}
+
+async function sendEmailRaw(to: string, subject: string, html: string, text: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('RESEND_API_KEY not configured')
 
   const resend = new Resend(apiKey)
-
   const { error } = await resend.emails.send({
     from: `${FROM_NAME} <${FROM_EMAIL}>`,
     to,
@@ -23,13 +29,54 @@ async function sendEmail(to: string, subject: string, html: string, text: string
     html,
     text,
   })
-
   if (error) throw new Error(error.message)
+}
+
+/** Public worker-facing API. Never throws for missing configuration. */
+export async function sendEmail(input: EmailInput): Promise<EmailResult> {
+  if (!input?.to || !input.subject || !input.html) {
+    return { success: false, error: 'Invalid email payload' }
+  }
+  if (!isEmailConfigured()) {
+    return { success: true, skipped: true }
+  }
+  try {
+    await sendEmailRaw(input.to, input.subject, input.html, input.text || input.html.replace(/<[^>]+>/g, ''))
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Email delivery failed' }
+  }
+}
+
+// ─── Password Reset Email ──────────────────────────────────────
+
+export async function sendPasswordResetEmail(input: {
+  email: string
+  token: string
+  name?: string
+}): Promise<EmailResult> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const recipientName = input.name || 'Usuario'
+  const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(input.token)}`
+  const html = `<p>Hola ${recipientName},</p><p>Solicitaste restablecer tu contraseña de ValiAutoFlow.</p><p><a href="${resetUrl}">Restablecer contraseña</a></p><p>Si no solicitaste este cambio, ignora este correo.</p>`
+  return sendEmail({
+    to: input.email,
+    subject: 'Restablece tu contraseña — ValiAutoFlow',
+    html,
+    text: `Hola ${recipientName},\n\nRestablece tu contraseña aquí: ${resetUrl}\n\nSi no solicitaste este cambio, ignora este correo.`,
+  })
 }
 
 // ─── Verification Code Email ──────────────────────────────────
 
-export async function sendVerificationEmail(to: string, name: string, code: string): Promise<void> {
+export async function sendVerificationEmail(
+  toOrInput: string | { email: string; token: string; name?: string },
+  name?: string,
+  code?: string,
+): Promise<EmailResult> {
+  const to = typeof toOrInput === 'string' ? toOrInput : toOrInput.email
+  const recipientName = typeof toOrInput === 'string' ? (name || 'Usuario') : (toOrInput.name || 'Usuario')
+  const verificationCode = typeof toOrInput === 'string' ? (code || '') : toOrInput.token
   const html = `
 <!DOCTYPE html>
 <html lang="es">
@@ -58,13 +105,13 @@ export async function sendVerificationEmail(to: string, name: string, code: stri
             <td style="padding:36px 40px;">
               <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:600;">Verifica tu correo</h2>
               <p style="margin:0 0 28px;color:#6b7280;font-size:15px;line-height:1.6;">
-                Hola <strong style="color:#111827;">${name}</strong>, usa el código de abajo para completar tu registro. Este código expira en <strong>10 minutos</strong>.
+                Hola <strong style="color:#111827;">${recipientName}</strong>, usa el código de abajo para completar tu registro. Este código expira en <strong>10 minutos</strong>.
               </p>
 
               <!-- Code Box -->
               <div style="background:#f0fdf4;border:2px solid #10b981;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px;">
                 <p style="margin:0 0 6px;color:#6b7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:1px;">Tu código de verificación</p>
-                <div style="font-size:40px;font-weight:800;color:#059669;letter-spacing:12px;font-family:monospace;">${code}</div>
+                <div style="font-size:40px;font-weight:800;color:#059669;letter-spacing:12px;font-family:monospace;">${verificationCode}</div>
               </div>
 
               <p style="margin:0 0 8px;color:#9ca3af;font-size:13px;text-align:center;">
@@ -88,17 +135,18 @@ export async function sendVerificationEmail(to: string, name: string, code: stri
 </html>
   `.trim()
 
-  await sendEmail(
+  const result = await sendEmail({
     to,
-    `${code} — Tu código de verificación ValiAutoFlow`,
+    subject: `${verificationCode} — Tu código de verificación ValiAutoFlow`,
     html,
-    `Hola ${name},\n\nTu código de verificación es: ${code}\n\nEste código expira en 10 minutos.\n\nSi no solicitaste este código, ignora este mensaje.\n\n— ValiAutoFlow`,
-  )
+    text: `Hola ${recipientName},\n\nTu código de verificación es: ${verificationCode}\n\nEste código expira en 10 minutos.\n\nSi no solicitaste este código, ignora este mensaje.\n\n— ValiAutoFlow`,
+  })
+  return result
 }
 
 // ─── Welcome Email (sent after plan selection) ────────────────
 
-export async function sendWelcomeEmail(to: string, name: string, plan: string): Promise<void> {
+export async function sendWelcomeEmail(to: string, name = 'Usuario', plan = 'trial'): Promise<EmailResult> {
   const planLabels: Record<string, string> = {
     free: 'Plan Free',
     trial: 'Prueba de 14 días',
@@ -151,12 +199,12 @@ export async function sendWelcomeEmail(to: string, name: string, plan: string): 
 </html>
   `.trim()
 
-  await sendEmail(
+  return sendEmail({
     to,
-    `¡Bienvenido a ValiAutoFlow! — ${planLabel}`,
+    subject: `¡Bienvenido a ValiAutoFlow! — ${planLabel}`,
     html,
-    `¡Bienvenido, ${name}! Tu cuenta de ValiAutoFlow está lista con el ${planLabel}. Accede en: ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}`,
-  )
+    text: `¡Bienvenido, ${name}! Tu cuenta de ValiAutoFlow está lista con el ${planLabel}. Accede en: ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}`,
+  })
 }
 
 // ─── Billing: Payment Confirmed ──────────────────────────────
@@ -227,7 +275,7 @@ export async function sendPaymentSuccessEmail(
 </body>
 </html>`.trim()
 
-  await sendEmail(
+  await sendEmailRaw(
     to,
     `Pago confirmado — ValiAutoFlow ${planLabel}`,
     html,
@@ -291,7 +339,7 @@ export async function sendPaymentFailedEmail(
 </body>
 </html>`.trim()
 
-  await sendEmail(
+  await sendEmailRaw(
     to,
     '⚠️ Problema con tu pago — ValiAutoFlow',
     html,
@@ -348,7 +396,7 @@ export async function sendSubscriptionCancelledEmail(
 </body>
 </html>`.trim()
 
-  await sendEmail(
+  await sendEmailRaw(
     to,
     'Tu suscripción a ValiAutoFlow ha sido cancelada',
     html,
@@ -447,7 +495,7 @@ export async function sendAppointmentConfirmationEmail(params: {
 </body>
 </html>`.trim()
 
-  await sendEmail(
+  await sendEmailRaw(
     to,
     `Confirmación de cita — ${businessName}`,
     html,

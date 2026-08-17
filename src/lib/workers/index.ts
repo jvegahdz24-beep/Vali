@@ -88,16 +88,23 @@ async function processFollowUpJob(job: Job<FollowUpJobData>): Promise<{ sent: bo
   const { taskId, contactId, conversationId, workspaceId, channel, step, tipo } = job.data
 
   // ── Guard: load the task and verify it is still pending ──
-  const task = await db.followUpTask.findUnique({
-    where: { id: taskId },
-    include: {
-      contact: { select: { firstName: true, lastName: true, phone: true, email: true } },
-      rule: { select: { name: true } },
-    },
-  })
+  const task = await db.followUpTask.findUnique({ where: { id: taskId } })
 
-  if (!task) {
-    logWarn('FOLLOWUP', 'task_not_found', { taskId })
+  if (!task || task.workspaceId !== workspaceId || task.contactId !== contactId) {
+    logWarn('FOLLOWUP', 'task_not_found_or_scope_mismatch', { taskId, workspaceId })
+    return { sent: false, taskId }
+  }
+
+  const contact = await db.contact.findFirst({
+    where: { id: task.contactId, workspaceId: task.workspaceId },
+    select: { firstName: true, lastName: true, phone: true, email: true },
+  })
+  const rule = await db.followUpRule.findFirst({
+    where: { id: task.ruleId, workspaceId: task.workspaceId },
+    select: { name: true },
+  })
+  if (!contact) {
+    logWarn('FOLLOWUP', 'contact_not_found_or_scope_mismatch', { taskId, workspaceId })
     return { sent: false, taskId }
   }
 
@@ -145,7 +152,6 @@ async function processFollowUpJob(job: Job<FollowUpJobData>): Promise<{ sent: bo
     )
 
     // Send via the appropriate channel
-    const contact = task.contact
     const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim()
     let sendSuccess = false
 
@@ -167,7 +173,7 @@ async function processFollowUpJob(job: Job<FollowUpJobData>): Promise<{ sent: bo
         const result = await sendTelegramNotification({
           type: 'followup_due',
           workspaceId,
-          title: `Seguimiento: ${task.rule?.name || 'Auto Follow-Up'}`,
+          title: `Seguimiento: ${rule?.name || 'Auto Follow-Up'}`,
           body: message,
           contactName: contactName || undefined,
         })
@@ -182,7 +188,7 @@ async function processFollowUpJob(job: Job<FollowUpJobData>): Promise<{ sent: bo
         if (contact.email) {
           const result = await sendEmail({
             to: contact.email,
-            subject: `${task.rule?.name || 'Seguimiento'} — ${workspace?.name || 'ValiAutoFlow'}`,
+            subject: `${rule?.name || 'Seguimiento'} — ${workspace?.name || 'ValiAutoFlow'}`,
             html: `
               <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
                 <p style="font-size:16px;line-height:1.6;color:#374151;">${message.replace(/\n/g, '<br>')}</p>

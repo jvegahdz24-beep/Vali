@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse, ApiError } from '@/lib/api-auth'
-import { gcalAppReady, gcalAuthUrl, gcalState, readGCal, readGCalUsers, gcalConnected, gcalDisconnect, gcalDisconnectUser } from '@/lib/gcal'
+import { gcalAppReady, gcalAuthUrl, gcalState, GCAL_STATE_COOKIE_NAME, readGCal, readGCalUsers, gcalConnected, gcalDisconnect, gcalDisconnectUser } from '@/lib/gcal'
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,8 +28,18 @@ export async function GET(req: NextRequest) {
       })
     }
     if (!gcalAppReady()) throw new ApiError(400, 'La integración con Google aún no está activada en el servidor. El administrador debe crear la app en Google Cloud (una sola vez) y poner GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET en el .env.')
-    // state firmado ata la conexión a ESTE usuario y workspace
-    return NextResponse.redirect(gcalAuthUrl(gcalState(workspaceId, session.userId)))
+    // State firmado + cookie HttpOnly atan la conexión a ESTE navegador,
+    // usuario y workspace durante el flujo OAuth.
+    const state = gcalState(workspaceId, session.userId)
+    const response = NextResponse.redirect(gcalAuthUrl(state))
+    response.cookies.set(GCAL_STATE_COOKIE_NAME, state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 10 * 60,
+      path: '/',
+    })
+    return response
   } catch (error) { return errorResponse(error) }
 }
 

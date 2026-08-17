@@ -2,6 +2,14 @@ import { describe, it, expect } from 'vitest'
 
 // Test API route handlers by importing the route modules
 // These test the handler functions directly without making HTTP calls
+import { vi } from 'vitest'
+
+// The login contract is tested without requiring a live Prisma datasource.
+vi.mock('@/lib/db', () => ({
+  db: {
+    user: { findUnique: vi.fn().mockResolvedValue(null) },
+  },
+}))
 
 describe('API: Health Check', () => {
   it('should export a GET function', async () => {
@@ -84,14 +92,11 @@ describe('API: Seed', () => {
     expect(typeof mod.POST).toBe('function')
   })
 
-  it('GET should return seed status', async () => {
+  it('GET remains closed and does not expose seed status', async () => {
     const mod = await import('@/app/api/seed/route')
     const req = new Request('http://localhost/api/seed') as any
     const res = await mod.GET(req)
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data).toHaveProperty('seeded')
-    expect(data).toHaveProperty('stats')
+    expect(res.status).toBe(404)
   })
 })
 

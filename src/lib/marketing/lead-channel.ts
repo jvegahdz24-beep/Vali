@@ -132,7 +132,12 @@ export async function sendToLead(
   const { getWhatsAppManager } = await import('@/lib/whatsapp/connection')
   const { ephemeralManager } = await import('@/lib/whatsapp/ephemeral-client')
   const mgr = getWhatsAppManager(workspaceId)
-  const eph = await ephemeralManager.sendAny(target.address, text, (p: string, t: string) => mgr.sendMessage(p, t))
+  const eph = await ephemeralManager.sendAny(
+    target.address,
+    text,
+    (p: string, t: string) => mgr.sendMessage(p, t),
+    { workspaceId },
+  )
   return { success: eph.success, channel: 'whatsapp', id: eph.id, error: eph.error || r.error }
 }
 

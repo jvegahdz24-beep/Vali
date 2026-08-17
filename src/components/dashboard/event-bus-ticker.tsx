@@ -15,17 +15,15 @@ import { cn } from '@/lib/utils'
 
 // Etapas de la arquitectura (leyenda tenue cuando aún no hay eventos reales)
 const PIPELINE_STEPS = [
-  'lead.created', 'gBrain.analyzed', 'agent.assigned', 'message.received',
-  'deal.moved', 'score.updated', 'automation.run',
+  'lead.created', 'gBrain.analyzed', 'message.received',
+  'deal.moved', 'automation.run',
 ]
 
 // Mapa evento SSE → etiqueta corta mostrada en la cinta
 const EVENT_LABEL: Record<string, string> = {
   'message.received': 'message.received',
-  'deal.stage.changed': 'deal.moved',
-  'lead.score.updated': 'score.updated',
-  'agent.assigned': 'agent.assigned',
-  'automation.executed': 'automation.run',
+  'deal.stage_changed': 'deal.moved',
+  'automation.triggered': 'automation.run',
 }
 
 interface FeedItem { id: number; label: string; at: number }

@@ -8,12 +8,14 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { parseMetaWebhook, sendMetaMessage } from '@/lib/meta/messenger'
+import { verifyMetaWebhookSignature } from '@/lib/whatsapp/meta-api'
 import { processMessageCore } from '@/lib/ai/message-processor'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 // Dedup en memoria (evita doble respuesta si Meta reintenta)
+const MAX_META_BODY_BYTES = 1_000_000
 const _seen = new Map<string, number>()
 function isDup(id?: string): boolean {
   if (!id) return false
@@ -37,7 +39,23 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null)
+  const rawBody = await req.text().catch(() => '')
+  if (!rawBody || Buffer.byteLength(rawBody, 'utf8') > MAX_META_BODY_BYTES) {
+    return new Response('Bad request', { status: 400 })
+  }
+
+  // Meta firma el cuerpo completo con la app secret. Nunca se debe parsear ni
+  // procesar un evento antes de validar esta firma.
+  const appSecret = process.env.META_APP_SECRET
+  if (!appSecret) {
+    console.error('[MetaWebhook] META_APP_SECRET no configurado')
+    return new Response('Webhook unavailable', { status: 503 })
+  }
+  if (!verifyMetaWebhookSignature(rawBody, req.headers.get('x-hub-signature-256'), appSecret)) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  const body = JSON.parse(rawBody) as unknown
   // Meta exige un 200 rápido: procesamos en segundo plano (server persistente PM2).
   void processMetaEvents(body).catch((e) => console.error('[MetaWebhook] error:', e))
   return new Response('EVENT_RECEIVED', { status: 200 })

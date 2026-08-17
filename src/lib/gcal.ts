@@ -36,18 +36,58 @@ export function readGCalUsers(settingsJson: string | null | undefined): Record<s
 }
 export const gcalConnected = (c: GCalCfg) => !!c.refreshToken
 
-// ── State firmado (evita que un tercero ate su Google a otro workspace/usuario) ──
-const stateSecret = () => process.env.NEXTAUTH_SECRET || process.env.GOOGLE_CLIENT_SECRET || 'vaf-gcal'
-const sign = (payload: string) => crypto.createHmac('sha256', stateSecret()).update(payload).digest('hex').slice(0, 20)
-export function gcalState(workspaceId: string, userId: string): string {
-  return `${workspaceId}.${userId}.${sign(`${workspaceId}.${userId}`)}`
+// ── State OAuth firmado, con expiración, nonce y cookie de correlación ──
+// La firma evita manipulación de workspace/usuario; la cookie evita que un
+// tercero reutilice un state válido desde otro navegador (CSRF/binding).
+export const GCAL_STATE_COOKIE_NAME = process.env.NODE_ENV === 'production'
+  ? '__Host-valiflow-gcal-state'
+  : 'valiflow-gcal-state'
+const GCAL_STATE_TTL_SECONDS = 10 * 60
+const stateSecret = () => {
+  const secret = process.env.NEXTAUTH_SECRET || process.env.GOOGLE_CLIENT_SECRET
+  if (!secret) throw new Error('OAuth state secret is not configured')
+  return secret
 }
-export function gcalParseState(state: string): { workspaceId: string; userId: string } | null {
-  const parts = (state || '').split('.')
-  if (parts.length !== 3) return null
-  const [workspaceId, userId, sig] = parts
-  if (sig !== sign(`${workspaceId}.${userId}`)) return null
-  return { workspaceId, userId }
+const b64url = (value: string) => Buffer.from(value, 'utf8').toString('base64url')
+const sign = (payload: string) => crypto.createHmac('sha256', stateSecret()).update(payload).digest('base64url')
+
+export function gcalState(workspaceId: string, userId: string): string {
+  const payload = JSON.stringify({
+    workspaceId,
+    userId,
+    issuedAt: Math.floor(Date.now() / 1000),
+    nonce: crypto.randomBytes(16).toString('hex'),
+  })
+  const encoded = b64url(payload)
+  return `${encoded}.${sign(encoded)}`
+}
+
+export function gcalParseState(state: string): { workspaceId: string; userId: string; nonce: string } | null {
+  try {
+    const [encoded, signature, extra] = (state || '').split('.')
+    if (!encoded || !signature || extra) return null
+    const expected = sign(encoded)
+    const expectedBytes = Buffer.from(expected)
+    const receivedBytes = Buffer.from(signature)
+    if (expectedBytes.length !== receivedBytes.length || !crypto.timingSafeEqual(expectedBytes, receivedBytes)) return null
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
+      workspaceId?: unknown
+      userId?: unknown
+      issuedAt?: unknown
+      nonce?: unknown
+    }
+    const now = Math.floor(Date.now() / 1000)
+    if (
+      typeof payload.workspaceId !== 'string' || !payload.workspaceId ||
+      typeof payload.userId !== 'string' || !payload.userId ||
+      typeof payload.nonce !== 'string' || !payload.nonce ||
+      typeof payload.issuedAt !== 'number' ||
+      payload.issuedAt > now + 30 || now - payload.issuedAt > GCAL_STATE_TTL_SECONDS
+    ) return null
+    return { workspaceId: payload.workspaceId, userId: payload.userId, nonce: payload.nonce }
+  } catch {
+    return null
+  }
 }
 
 export function gcalAuthUrl(state: string): string {

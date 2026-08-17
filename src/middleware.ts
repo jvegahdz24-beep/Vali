@@ -133,6 +133,14 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Nexus is intentionally disabled until its Prisma schema and migration are
+  // present. Keeping this gate in middleware prevents partially migrated routes
+  // from reaching nonexistent delegates and makes the feature opt-in after the
+  // migration is reviewed and deployed.
+  if ((pathname === '/api/nexus' || pathname.startsWith('/api/nexus/')) && process.env.NEXUS_ENABLED !== 'true') {
+    return addSecurityHeaders(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+  }
+
   // Allow public routes
   if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     return addSecurityHeaders(NextResponse.next())

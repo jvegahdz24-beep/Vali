@@ -7,9 +7,9 @@
 import { useEffect, useRef, useCallback } from 'react'
 
 export type SSEDashboardEvent =
-  | 'deal.stage.changed'
+  | 'deal.stage_changed'
   | 'message.received'
-  | 'automation.executed'
+  | 'automation.triggered'
   | 'connected'
   | 'ping'
 
@@ -59,9 +59,9 @@ export function useSSEDashboard({
     esRef.current = es
 
     const events: SSEDashboardEvent[] = [
-      'deal.stage.changed',
+      'deal.stage_changed',
       'message.received',
-      'automation.executed',
+      'automation.triggered',
       'connected',
       'ping',
     ]

@@ -769,7 +769,11 @@ Classify this message NOW. Return ONLY the JSON object.`,
     let memories: ContactMemory[] = []
     let profileContext = ''
 
-    if (!input.contactId) return { memories, profileContext }
+    // Nexus permanece opt-in hasta que sus modelos y migración estén desplegados.
+    // Sin este gate no se deben leer/escribir memorias con un scope ambiguo.
+    if (process.env.NEXUS_ENABLED !== 'true' || !input.contactId || !input.workspaceId) {
+      return { memories, profileContext }
+    }
 
     try {
       // Load NexusMemories (personal memories)
@@ -962,7 +966,7 @@ Classify this message NOW. Return ONLY the JSON object.`,
     _output: OrchestratorOutput,
     contactId: string
   ): Promise<void> {
-    if (!input.contactId || contactId === 'anonymous') return
+    if (process.env.NEXUS_ENABLED !== 'true' || !input.contactId || !input.workspaceId || contactId === 'anonymous') return
 
     try {
       const extractMessages: AIMessage[] = [

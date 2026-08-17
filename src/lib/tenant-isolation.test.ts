@@ -8,7 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Setea secretos requeridos ANTES de que se evalúen los módulos importados
 // (auth-edge exige NEXTAUTH_SECRET al cargar).
-vi.hoisted(() => { process.env.NEXTAUTH_SECRET ||= 'test-secret'; process.env.NODE_ENV = 'test' })
+vi.hoisted(() => {
+  process.env.NEXTAUTH_SECRET ||= 'test-secret-for-isolation-tests-2026'
+})
 
 // Mock de la BD ANTES de importar el módulo bajo prueba.
 const memberFindUnique = vi.fn()

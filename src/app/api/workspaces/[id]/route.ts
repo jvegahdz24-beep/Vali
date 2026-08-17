@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
-import { publish } from '@/lib/event-bus'
 
 export async function GET(req: NextRequest) {
   try {
@@ -102,8 +101,6 @@ export async function PUT(req: NextRequest) {
       })
     }
 
-    // Section 14: Broadcast settings.updated so other services can react
-    await publish('settings.updated', { workspaceId, settings })
 
     return NextResponse.json({ success: true, workspace })
   } catch (error) {

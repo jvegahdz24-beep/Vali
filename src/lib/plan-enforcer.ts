@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db'
+import { PLANS } from '@/lib/constants'
 
 export type ResourceType = 'contacts' | 'agents' | 'conversations' | 'automations'
 
@@ -35,7 +36,6 @@ export async function checkPlanLimit(
       maxContacts: true,
       maxAgents: true,
       maxConversations: true,
-      maxAutomations: true,
     },
   })
 
@@ -67,7 +67,7 @@ export async function checkPlanLimit(
       break
     case 'automations':
       current = await db.automation.count({ where: { workspaceId } })
-      max = workspace.maxAutomations
+      max = PLANS[workspace.plan]?.limits.maxAutomations ?? 0
       break
   }
 

@@ -2,9 +2,9 @@
 // ValiAutoFlow — SSE: Real-Time Dashboard Events
 // GET /api/sse/dashboard?workspaceId=...
 // Streams Server-Sent Events to the client dashboard:
-//   - deal.stage.changed
+//   - deal.stage_changed
 //   - message.received
-//   - automation.executed
+//   - automation.triggered
 //   - ping (keep-alive, every 30s)
 // ═══════════════════════════════════════════════════════════════
 
@@ -17,11 +17,9 @@ export const runtime = 'nodejs'
 
 // Events to forward over SSE (must match keys of EventMap)
 const DASHBOARD_EVENTS = [
-  'deal.stage.changed',
+  'deal.stage_changed',
   'message.received',
-  'automation.executed',
-  'lead.score.updated',
-  'agent.assigned',
+  'automation.triggered',
 ] as const satisfies readonly (keyof EventMap)[]
 
 export async function GET(req: NextRequest) {

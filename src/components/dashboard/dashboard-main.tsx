@@ -530,7 +530,7 @@ export function DashboardMain({ workspaceId, onViewChange, onOpenContact }: Dash
     workspaceId: workspaceId ?? '',
     disabled: !workspaceId,
     onEvent(event) {
-      if (event === 'deal.stage.changed' || event === 'message.received') {
+      if (event === 'deal.stage_changed' || event === 'message.received') {
         fetchStats()
       }
     },

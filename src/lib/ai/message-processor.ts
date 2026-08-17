@@ -105,6 +105,7 @@ import { buildIndustryPersona } from '@/lib/ai/industries'
 import { getFinancingConfig, computeAutoQuote, formatQuoteMessage } from '@/lib/finance/auto-credit'
 import { tzFromSettings, zonedNaiveToUtc } from '@/lib/timezone'
 import type { PhysicalLocationConfig, AgentProfileConfig } from '@/lib/ai/prompt-composer'
+import type { Channel } from '@/lib/types'
 import { selectAgentForConversation, type AgentRouteResult } from '@/lib/ai/agent-selector'
 import { publish } from '@/lib/event-bus'
 import { sanitizeContactName } from '@/lib/contact-name'
@@ -252,6 +253,16 @@ export interface ProcessMessageInput {
   adContext?: { title?: string; body?: string; sourceUrl?: string }
 }
 
+const SUPPORTED_CHANNELS = new Set<Channel>(['whatsapp', 'telegram', 'instagram', 'webchat'])
+
+function normalizeChannel(value: string): Channel {
+  const normalized = value.trim().toLowerCase()
+  if (!SUPPORTED_CHANNELS.has(normalized as Channel)) {
+    throw new Error(`[CORE] Unsupported channel: ${value}`)
+  }
+  return normalized as Channel
+}
+
 export interface ProcessMessageResult {
   success: boolean
   conversationId: string
@@ -302,7 +313,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     pushName,
     remoteJid,
     externalId,
-    channel = 'whatsapp',
+    channel: rawChannel = 'whatsapp',
     workspaceId: forcedWorkspaceId,
     conversationId: forcedConversationId,
     contactId: forcedContactId,
@@ -323,7 +334,9 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   console.log(`[CORE 2] Mensaje: "${text.slice(0, 100)}"`)
   console.log(`[Core:1] 📩 Processing from ${phone}: "${text.slice(0, 60)}"`)
 
-  // ── 1. Find workspace ──
+  const channel = normalizeChannel(rawChannel)
+
+  // ── 1. Resolve workspace ──
   // STRICT MULTI-TENANT: workspaceId MUST be supplied by the caller.
   // Auto-detect fallbacks (findFirst, "any active workspace", phone matching)
   // are intentionally removed — they were the root cause of incoming
@@ -335,7 +348,7 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
   }
   if (!workspace) {
     throw new Error(
-      `[CORE] Refusing to process message without an explicit workspaceId. ` +
+      `No workspace found: [CORE] refusing to process message without an explicit workspaceId. ` +
       `Caller must pass workspaceId resolved from the authenticated channel/session. ` +
       `(forcedWorkspaceId="${forcedWorkspaceId ?? ''}")`
     )
@@ -441,10 +454,12 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
     }
     // Event Bus: mensaje entrante real (lo consume el ticker "EVENT BUS EN VIVO" vía SSE)
     publish('message.received', {
+      messageId: savedInbound.id,
       conversationId: conversation.id,
       workspaceId: conversation.workspaceId,
       contactId: conversation.contactId,
       channel: (conversation as { channel?: string }).channel || 'whatsapp',
+      content: text,
     })
   } else if (operatorInitiated) {
     console.log(`[Core:4] ⏭️  Skipping inbound save (operatorInitiated=true) — text was already persisted as outbound/human by caller`)
@@ -978,15 +993,8 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
 
       // Métrica por agente: cuenta los mensajes que este agente del factory atendió. No bloquea.
       void db.agentInstance.update({ where: { id: routed.instanceId }, data: { totalMessagesSent: { increment: 1 } } }).catch(() => {})
-      // Event Bus: agente asignado (alimenta el ticker en vivo)
-      publish('agent.assigned', {
-        workspaceId: workspace.id,
-        conversationId: conversation?.id ?? null,
-        contactId: contact?.id ?? null,
-        agentName: routed.name,
-        role: routed.role,
-        vertical: routed.vertical,
-      })
+      // La asignación queda persistida en metadata y métricas; no se publica
+      // un evento legacy sin contrato en el bus canónico.
     }
   } catch (e) {
     console.warn('[AgentFactory] routing skipped (non-critical):', e instanceof Error ? e.message : e)
@@ -1726,13 +1734,14 @@ export async function processMessageCore(input: ProcessMessageInput): Promise<Pr
       },
     })
 
-    // Event Bus: cambio de score del lead (alimenta el ticker en vivo)
+    // Event Bus: cambio de score del lead dentro del evento canónico de contacto.
     if (newLeadScore !== contact.leadScore) {
-      publish('lead.score.updated', {
+      publish('contact.updated', {
         contactId: contact.id,
         workspaceId: workspace.id,
-        oldScore: contact.leadScore,
-        newScore: newLeadScore,
+        changes: {
+          leadScore: { from: contact.leadScore, to: newLeadScore },
+        },
       })
     }
 

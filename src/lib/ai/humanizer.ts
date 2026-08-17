@@ -95,9 +95,11 @@ export function humanizeResponse(text: string): string {
   // 5. Fix common AI artifacts
   result = fixAIArtifacts(result)
 
-  // 6. Add occasional emoji (10% chance)
-  result = maybeAddEmoji(result)
+  // 6. Remove identity and AI-disclaimer leaks.
+  result = enforceIdentity(result)
+  result = removeAIReferences(result)
 
+  // Emojis are opt-in; the sales prompt must not add them silently.
   return result.trim()
 }
 
@@ -253,6 +255,28 @@ export function maybeAddEmoji(text: string): string {
   const emoji = CASUAL_EMOJIS[Math.floor(Math.random() * CASUAL_EMOJIS.length)]
 
   return `${text.trim()} ${emoji}`
+}
+
+/**
+ * Keep the assistant identity consistent in customer-facing replies.
+ * This is intentionally narrow: it rewrites self-introductions only,
+ * not legitimate mentions of the product name in a business context.
+ */
+export function enforceIdentity(text: string): string {
+  if (text == null || typeof text !== 'string') return text as any
+  return text
+    .replace(/\bMe llamo\s+(?:Carlos|Vali|Valentina)\b/gi, 'Me llamo Jhon')
+    .replace(/\bSoy\s+(?:Carlos|Vali|Valentina)\b/gi, 'Soy Jhon')
+    .replace(/\bde\s+ValiAutoFlow,\s+soy\b/gi, 'soy Jhon del equipo de')
+    .replace(/\b(?:Soy|Aquí está)\s+ValiAutoFlow\b/gi, 'Soy Jhon del equipo')
+    .replace(/\bValiAutoFlow\s+aquí/gi, 'Jhon del equipo aquí')
+}
+
+function removeAIReferences(text: string): string {
+  return text
+    .replace(/\bComo\s+asistente\s+virtual\b[,:]?\s*/gi, '')
+    .replace(/\bSoy\s+una\s+IA\b(?:\s+que)?[^.!?]*(?:[.!?]|$)/gi, '')
+    .replace(/\b(?:asistente virtual|modelo de IA|inteligencia artificial)\b[,:]?/gi, '')
 }
 
 // ═══════════════════════════════════════════════════════════════

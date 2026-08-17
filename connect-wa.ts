@@ -1,4 +1,8 @@
-import { whatsAppManager } from '@/lib/whatsapp/connection'
+import { getWhatsAppManager } from '@/lib/whatsapp/connection'
+
+const workspaceId = process.env.WORKSPACE_ID
+if (!workspaceId) throw new Error('WORKSPACE_ID is required')
+const whatsAppManager = getWhatsAppManager(workspaceId)
 
 async function main() {
   console.log('═══════════════════════════════════════════════════')

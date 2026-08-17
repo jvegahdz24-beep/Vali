@@ -104,7 +104,25 @@ vi.mock('@/lib/ai/crm-tool-parser', () => ({
 }))
 
 vi.mock('@/lib/ai/agent-router', () => ({
+  AgentRouter: class {
+    routeMessage() {
+      return {
+        agentType: 'qualifier',
+        confidence: 0.5,
+        reasoning: 'stub',
+        intent: 'general',
+      }
+    }
+  },
   getAgentForContact: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('@/lib/event-bus', () => ({
+  publish: vi.fn().mockResolvedValue('evt_test'),
+  eventBus: {
+    emit: vi.fn().mockResolvedValue('evt_test'),
+    on: vi.fn().mockReturnValue(() => {}),
+  },
 }))
 
 vi.mock('@/lib/telegram', () => ({

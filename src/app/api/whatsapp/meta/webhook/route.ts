@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
             pushName: senderName,
             remoteJid: `${senderPhone}@s.whatsapp.net`,
             externalId: msg.id,
-            channel: 'WHATSAPP',
+            channel: 'whatsapp',
             workspaceId: config.workspaceId,
             messageType: msg.type,
           })

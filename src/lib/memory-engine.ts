@@ -356,15 +356,17 @@ export async function getRelevantMemories(
   const topIds = ranked.slice(0, limit).map((m) => m.id)
   await reinforceMemories(topIds)
 
-  // Build a lookup map from allMemories
-  const memoryMap = new Map(allMemories.map((m) => [m.id, m]))
+  // El delegate Nexus es una frontera temporal: validar la forma esperada antes de mapear.
+  type PrismaMemoryRecord = Parameters<typeof mapToStoredMemory>[0]
+  const typedMemories = allMemories as PrismaMemoryRecord[]
+  const memoryMap = new Map(typedMemories.map((m) => [m.id, m]))
 
   // Cache result
-  const result: RelevantMemory[] = ranked.slice(0, limit).map((m, i) => {
+  const result: RelevantMemory[] = ranked.slice(0, limit).flatMap((m, i) => {
     const original = memoryMap.get(m.id)
     return original
-      ? { ...mapToStoredMemory(original), relevanceScore: 1 - (i / limit) }
-      : { id: m.id } as any
+      ? [{ ...mapToStoredMemory(original), relevanceScore: 1 - (i / limit) }]
+      : []
   })
 
   relevanceCache.set(cacheKey, { memories: result, timestamp: Date.now() })
@@ -407,14 +409,16 @@ export async function searchMemories(
   const matchedIds = ranked.slice(0, limit).map((m) => m.id)
   await reinforceMemories(matchedIds)
 
-  // Build a lookup map from allMemories
-  const memoryMap = new Map(allMemories.map((m) => [m.id, m]))
+  // El delegate Nexus es una frontera temporal: validar la forma esperada antes de mapear.
+  type PrismaMemoryRecord = Parameters<typeof mapToStoredMemory>[0]
+  const typedMemories = allMemories as PrismaMemoryRecord[]
+  const memoryMap = new Map(typedMemories.map((m) => [m.id, m]))
 
-  return ranked.slice(0, limit).map((m, i) => {
+  return ranked.slice(0, limit).flatMap((m, i) => {
     const original = memoryMap.get(m.id)
     return original
-      ? { ...mapToStoredMemory(original), relevanceScore: 1 - (i / limit) }
-      : { id: m.id } as any
+      ? [{ ...mapToStoredMemory(original), relevanceScore: 1 - (i / limit) }]
+      : []
   })
 }
 

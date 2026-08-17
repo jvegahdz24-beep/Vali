@@ -94,9 +94,9 @@ export const MODULE_ROLES: Record<string, WorkspaceRole[]> = {
   settings: ['owner', 'admin'],
   'settings:whatsapp': ['owner', 'admin'],
   team: ['owner', 'admin'],
-  // Panel Desarrollador: el DUEÑO ve el de SU propio workspace. 'admin' de
-  // plataforma sigue exclusivo de superadmin.
-  developer: ['owner', 'admin'],
+  // Panel Desarrollador y administración de plataforma: exclusivos del
+  // superadmin global, nunca de un rol de workspace.
+  developer: [],
   admin: [],
 }
 

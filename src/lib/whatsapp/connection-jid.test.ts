@@ -27,10 +27,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // connection.ts triggers via `whatsAppRegistry.bootstrapFromDb()`
 // in the registry init. The bootstrap touches the real DB, which
 // we must avoid. We do that by stubbing db BEFORE the import.
-const mockDb = {
+const mockDb = vi.hoisted(() => ({
   whatsAppAuth: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
   workspace: { findMany: vi.fn().mockResolvedValue([]) },
-}
+}))
 
 vi.mock('@/lib/db', () => ({ db: mockDb }))
 

@@ -138,18 +138,9 @@ export async function POST(req: NextRequest) {
       workspaceId: resolvedWorkspaceId,
     })
 
-    return NextResponse.json({
-      success: true,
-      message: 'Webhook processed',
-      conversationId: result.conversationId,
-      contactId: result.contactId,
-      aiResponse: result.aiReplyText,
-      analysis: {
-        action: result.engineResult.action,
-        strategy: result.engineResult.strategy,
-        agentRouting: result.engineResult.agentRouting,
-      },
-    })
+    // Webhook providers only need an acknowledgement. Never return AI text,
+    // contact IDs or internal routing metadata to an external caller.
+    return NextResponse.json({ received: true, processed: true })
   } catch (error) {
     console.error('[Webhook Error]', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
@@ -157,5 +148,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'active', service: 'ValiAutoFlow WhatsApp Webhook' })
+  return NextResponse.json({ error: 'Not found' }, { status: 404 })
 }

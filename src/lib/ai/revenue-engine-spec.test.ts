@@ -88,11 +88,14 @@ describe('intent → acción esperada (spec Paso 1)', () => {
   })
 })
 
-describe('follow-up timeline — spec 7/14/21/28, máx 4', () => {
-  it('has exactly 4 steps spaced 7 days apart', () => {
-    expect(FOLLOW_UP_TIMELINE).toHaveLength(4)
-    for (const step of FOLLOW_UP_TIMELINE) {
-      expect(step.delayMinutes).toBe(7 * 24 * 60)
-    }
+describe('follow-up timeline — ráfaga inicial y cola larga', () => {
+  it('has 20 sequential steps with a long-tail section after the initial sequence', () => {
+    expect(FOLLOW_UP_TIMELINE).toHaveLength(20)
+    expect(FOLLOW_UP_TIMELINE.map((step) => step.step)).toEqual(
+      Array.from({ length: 20 }, (_, index) => index),
+    )
+    expect(FOLLOW_UP_TIMELINE.slice(0, 8).every((step) => !step.longTail)).toBe(true)
+    expect(FOLLOW_UP_TIMELINE.slice(8).every((step) => step.longTail === true)).toBe(true)
+    expect(FOLLOW_UP_TIMELINE.every((step) => step.delayMinutes > 0)).toBe(true)
   })
 })

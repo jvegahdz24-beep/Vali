@@ -6,6 +6,8 @@
 
 import { db } from '@/lib/db'
 
+const ANALYTICS_ALERTS_ENABLED = process.env.ANALYTICS_ALERTS_ENABLED === 'true'
+
 // ─── Types ──────────────────────────────────────────────────
 
 export interface GhostingAlert {
@@ -305,6 +307,8 @@ export async function detectGhosting(workspaceId: string): Promise<GhostingAlert
 }
 
 export async function storeGhostingAlerts(workspaceId: string, alerts: GhostingAlert[]): Promise<void> {
+  if (!ANALYTICS_ALERTS_ENABLED) return
+
   for (const alert of alerts) {
     // Check if we already have an unresolved alert for this contact
     const existing = await db.analyticsAlert.findFirst({
@@ -1202,16 +1206,19 @@ export async function getGhostingAlerts(workspaceId: string): Promise<GhostingAl
   // Store new alerts
   await storeGhostingAlerts(workspaceId, liveAlerts)
 
-  // Get stored unresolved alerts
-  const storedAlerts = await db.analyticsAlert.findMany({
-    where: {
-      workspaceId,
-      alertType: { in: ['ghosting_risk', 'ghosted'] },
-      isResolved: false,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  })
+  // El almacenamiento persistente requiere una migración explícita del modelo.
+  // Mientras la feature flag esté apagada, las alertas en vivo siguen disponibles.
+  const storedAlerts = ANALYTICS_ALERTS_ENABLED
+    ? await db.analyticsAlert.findMany({
+        where: {
+          workspaceId,
+          alertType: { in: ['ghosting_risk', 'ghosted'] },
+          isResolved: false,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      })
+    : []
 
   // Merge: prefer live data, add stored that aren't already covered
   const liveContactIds = new Set(liveAlerts.map((a) => a.contactId))

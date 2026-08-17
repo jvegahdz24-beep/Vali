@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
     // Handle the event (all DB logic is in handleWebhookEvent)
     const result = await handleWebhookEvent(event)
 
-    return NextResponse.json({ received: true, ...result })
+    // Stripe solo necesita un acuse; no devolver acciones, IDs ni estado interno.
+    void result
+    return NextResponse.json({ received: true })
   } catch (error) {
     console.error('[Stripe Webhook Error]', error)
     return NextResponse.json(

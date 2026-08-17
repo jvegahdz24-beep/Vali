@@ -431,7 +431,19 @@ describe('autoCreateOrUpdateDeal() — Pipeline CRM automático por score', () =
     )
   })
 
-  it('Usa producto real del catálogo cuando coincide con tags del contacto', async () => {
+  it('Usa producto real del catálogo cuando coincide con el producto declarado por el contacto', async () => {
+    mockDbContact.findUnique.mockResolvedValue({
+      tags: '[]',
+      customFields: '{}',
+      notes: null,
+      leadProfile: {
+        preferredProduct: 'CRM Pro',
+        budget: null,
+        mainObjection: null,
+        timeline: null,
+        interests: '[]',
+      },
+    })
     mockDbCatalogItem.findMany.mockResolvedValue([
       {
         id: 'cat-1',

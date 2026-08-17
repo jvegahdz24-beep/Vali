@@ -17,6 +17,9 @@ export type LogTag =
   | 'FRONTEND'
   | 'FOLLOWUP'
   | 'STAGE_TRACKER'
+  | 'EVENT_BUS'
+  | 'LIFE_ENGINE'
+  | (string & {})
 
 export interface LogEntry {
   tag: string       // e.g. "[CORE]"
@@ -32,6 +35,16 @@ let _lastError: { message: string; tag: string; step: string; timestamp: string 
 
 export function getLastError() {
   return _lastError
+}
+
+/**
+ * Development-only diagnostic logger. It is intentionally silent in production
+ * so internal prompts, identifiers and provider details do not leak to clients.
+ */
+export function debug(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug(...args)
+  }
 }
 
 // ─── Core Logger ─────────────────────────────────────────────
