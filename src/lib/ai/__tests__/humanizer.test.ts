@@ -259,9 +259,14 @@ describe('getRandomDelay', () => {
   })
 
   it('agrega delay extra para mensajes más largos', () => {
-    const shortDelay = getRandomDelay(10)
-    const longDelay = getRandomDelay(500)
-    expect(longDelay).toBeGreaterThanOrEqual(shortDelay)
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    try {
+      const shortDelay = getRandomDelay(10)
+      const longDelay = getRandomDelay(500)
+      expect(longDelay).toBeGreaterThanOrEqual(shortDelay)
+    } finally {
+      randomSpy.mockRestore()
+    }
   })
 })
 
