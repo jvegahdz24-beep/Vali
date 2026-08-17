@@ -49,6 +49,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The SSH deploy consumes the self-contained Next.js server artifact.
+  output: "standalone",
   typescript: {
     ignoreBuildErrors: false,
   },
