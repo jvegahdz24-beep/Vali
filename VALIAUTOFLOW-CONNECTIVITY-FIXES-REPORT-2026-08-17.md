@@ -1,9 +1,9 @@
 # ValiAutoFlow — Informe de correcciones de conectividad y preparación de despliegue
 
 **Fecha:** 17 de agosto de 2026
-**Rama:** `audit/functional-connectivity-fixes-2026-08-17`
-**Base de comparación:** `audit/import-valiautoflow-2026-08-17`
-**Alcance:** correcciones funcionales P0–P1, endurecimiento del build y preparación de despliegue. No se modificó `main`, no se enviaron mensajes externos y no se alteraron datos de producción.
+**Rama de entrega:** `production-ready`
+**Base de código:** release unificado de seguridad y conectividad de ValiAutoFlow.
+**Alcance:** correcciones funcionales P0–P1, endurecimiento del build y validación del despliegue SSH. No se modificó `main`, no se enviaron mensajes externos y no se alteraron datos de producción.
 
 ## Resumen ejecutivo
 
@@ -22,7 +22,7 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | P1.2 | Historial de importaciones | Nuevo modelo `ImportJob`, migración MySQL y endpoint sin `@ts-ignore` ni fallback silencioso a lista vacía. |
 | P1.3 | Publicación de Marketing | Respuesta por canal con estados `published`, `failed`, `skipped` o `partial`; los errores y resultados se persisten. |
 | P1.4 | Analytics | La API y la interfaz muestran que los datos son `snapshot/polling`, con refresco cada 30 segundos, no push en tiempo real. |
-| Build | Preparación de producción | `npm run build` ejecuta `prisma generate && next build --webpack`; el build final terminó correctamente. |
+| Build | Preparación de producción | `npm run build` ejecuta `prisma generate && next build --webpack`; `output: "standalone"` genera `.next/standalone/server.js` para el deploy SSH. |
 
 ## Archivos principales modificados
 
@@ -52,6 +52,7 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | `11b4de8` | Estabilizar la aserción aleatoria heredada de humanización. |
 | `4f381a1` | Alinear el entorno de Vitest con Prisma y autenticación. |
 | `7c019d2` | Documentar defaults seguros de runtime. |
+| `68626a5` | Publicar el artifact standalone requerido por el deploy SSH y hacer obligatorio su upload. |
 
 ## Validación ejecutada
 
@@ -60,7 +61,9 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | `npx tsc --noEmit` | **0 errores**. |
 | `npx vitest run --reporter=dot` | **45 archivos y 465 pruebas aprobadas**. |
 | `git diff --check` | **Sin errores de whitespace**. |
-| `npm run build` | **Build de producción completado** con Prisma generado y Webpack. |
+| `npm run build` | **Build de producción completado** con Prisma generado, Webpack y `.next/standalone/server.js`. |
+| CI/CD run `32050356672` | **Lint/typecheck, tests y build aprobados**; el artifact `standalone-build` se subió y descargó correctamente. |
+| Job `deploy` del run `32050356672` | **Bloqueado antes de SSH** porque `DEPLOY_SSH_KEY` y `DEPLOY_HOST` llegaron vacíos; no se ejecutó ningún cambio en producción. |
 | Diagnóstico aislado por archivo Vitest | **45/45 archivos aprobados**. |
 
 La prueba heredada `getRandomDelay` en `humanizer.test.ts` era probabilística: una bonificación de longitud podía ser superada por la varianza aleatoria. No se ocultó ni se excluyó. Se corrigió el test para controlar `Math.random` durante la aserción, preservando la cobertura del comportamiento y eliminando el falso negativo. La suite final pasó con 465/465 pruebas.
@@ -77,18 +80,22 @@ El worker de follow-ups requiere que Vercel o el entorno objetivo invoque de for
 
 El publicador de Marketing aún depende de que cada proveedor esté correctamente conectado y autorizado. El nuevo contrato evita falsos positivos, pero no puede fabricar una confirmación cuando faltan credenciales o permisos de un canal.
 
+El pipeline de deploy ya genera y descarga correctamente el artifact standalone, pero el job SSH permanece bloqueado por la ausencia de los secretos de repositorio `DEPLOY_SSH_KEY` y `DEPLOY_HOST`. El log comprobado mostró ambos valores vacíos y falló al intentar copiar hacia `:/app/valiautoflow/`; por tanto, no existe evidencia de conexión ni de modificación del servidor productivo.
+
 ## Checklist de despliegue seguro
 
-Antes de un despliegue productivo se debe confirmar el proyecto Vercel correcto, el entorno de base de datos compatible con MySQL, la presencia de `DATABASE_URL`, `NEXTAUTH_SECRET` de longitud suficiente, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET` y `WORKER_KEY`, además de las credenciales de los proveedores realmente usados. `SEED_ENABLED`, `DEMO_MODE` y `NEXUS_ENABLED` deben permanecer en `false` en producción.
+Antes de reintentar el deploy se deben configurar en GitHub Actions los secretos `DEPLOY_SSH_KEY` —clave privada del usuario de despliegue— y `DEPLOY_HOST` —destino SSH en formato `usuario@host`; el workflow añade el directorio fijo `/app/valiautoflow/`—. También deben existir en el servidor el directorio destino, Node.js compatible, `pm2` y el proceso `valiautoflow` o un mecanismo equivalente para el arranque inicial.
 
-La rama debe desplegarse primero como Preview. Después de validar login, aislamiento multi-tenant, automatización manual, claim de follow-up, permisos de Agent Factory, importaciones, Analytics y publicación por canal, se puede promover a producción. Las migraciones deben ejecutarse con el procedimiento del proveedor de base de datos y con respaldo previo; este trabajo no ejecutó migraciones externas ni modificó datos.
+Antes de reiniciar la aplicación, el administrador del servidor debe ejecutar `prisma migrate deploy` contra una base MySQL compatible, con respaldo previo y revisión del estado de migraciones. El workflow actual no automatiza esa operación. También deben confirmarse `DATABASE_URL`, `NEXTAUTH_SECRET` de longitud suficiente, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET` y `WORKER_KEY`, además de las credenciales de los proveedores realmente usados. `SEED_ENABLED`, `DEMO_MODE` y `NEXUS_ENABLED` deben permanecer en `false` en producción.
+
+Después de habilitar los secretos, se debe relanzar el workflow y validar login, aislamiento multi-tenant, automatización manual, claim de follow-up, permisos de Agent Factory, importaciones, Analytics y publicación por canal. Este trabajo no ejecutó migraciones externas, no abrió una sesión SSH y no modificó datos de producción.
 
 ## Estado de entrega
 
-El código está subido a GitHub en la rama `audit/functional-connectivity-fixes-2026-08-17` y el Pull Request **#4** está abierto contra `audit/import-valiautoflow-2026-08-17`. El despliegue productivo queda condicionado a resolver la compatibilidad MySQL/PostgreSQL y a confirmar las variables de entorno del proyecto Vercel.
+El código corregido está subido a GitHub en la rama `production-ready`; el Pull Request **#4** ya fue integrado en la línea de trabajo y la rama activa de despliegue es la release unificada. El run CI/CD `32050356672`, disparado por el commit `68626a5`, terminó con lint/typecheck, 465 pruebas y build aprobados. El artifact `standalone-build` se generó, se subió y se descargó correctamente en el job deploy.
 
-Se intentó un Preview aislado. La carga directa fue rechazada por el límite de Vercel de 300 archivos; el repositorio contiene 909 archivos rastreados necesarios para el árbol completo. También se solicitó enlazar un proyecto Vercel separado al repositorio corregido, pero el proyecto devuelto no apareció posteriormente en el inventario del equipo y las consultas de lectura devolvieron 404/403. Por ello no se declara un Preview como exitoso y no se modificó el proyecto productivo existente, que está enlazado a otro repositorio.
+El despliegue productivo **no se completó**. El job `deploy` falló antes de abrir SSH porque los secretos `DEPLOY_SSH_KEY` y `DEPLOY_HOST` no están configurados —o no son visibles para este workflow— en el repositorio. El fallo no demuestra un problema del código ni del artifact y no se realizaron cambios en el servidor productivo.
 
-El siguiente paso seguro es corregir la visibilidad/permisos de la integración Vercel del equipo o enlazar manualmente el proyecto Preview al repositorio `jvegahdz24-beep/Vali`; después, un nuevo push de la rama debe generar el Preview. No se debe promover a producción hasta validar ese Preview y resolver la compatibilidad MySQL/PostgreSQL.
+El siguiente paso manual para Jonathan es configurar esos dos secretos en la configuración de Actions del repositorio, confirmar que el usuario SSH tiene permisos sobre `/app/valiautoflow/`, revisar que `pm2` esté preparado y ejecutar la migración MySQL pendiente de forma controlada. Después debe relanzarse el workflow y realizar las pruebas de humo funcionales antes de considerar la release desplegada. La alternativa Vercel no se utilizó porque el proyecto existente está enlazado a otro repositorio y la aplicación mantiene un schema Prisma MySQL; migrar a Supabase PostgreSQL requeriría un proyecto técnico separado, no un cambio de URL.
 
 **Autor:** Manus AI
