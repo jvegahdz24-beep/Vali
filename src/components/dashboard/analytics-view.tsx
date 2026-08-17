@@ -288,7 +288,7 @@ export function AnalyticsView({ workspaceId }: AnalyticsViewProps) {
         <div>
           <h3 className="text-lg font-semibold">Analíticas</h3>
           <p className="text-sm text-muted-foreground">
-            Métricas y rendimiento del equipo
+            Métricas y rendimiento del equipo · incluye el Motor de Seguimiento
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -313,6 +313,9 @@ export function AnalyticsView({ workspaceId }: AnalyticsViewProps) {
           </Button>
         </div>
       </div>
+
+      {/* ═══ Motor de Seguimiento: qué gatillo psicológico revive más leads ═══ */}
+      <FollowupEngineCard workspaceId={workspaceId} />
 
       {/* Key Metrics with Period Comparison */}
       {isLoading ? (
@@ -756,5 +759,72 @@ export function AnalyticsView({ workspaceId }: AnalyticsViewProps) {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ─── MOTOR DE SEGUIMIENTO: tasa de respuesta por gatillo psicológico ───
+// (pedido 2026-07-20: "medir qué gatillo revive más leads")
+interface FuStat { tipo: string; label: string; enviados: number; respondieron: number; tasa: number }
+function FollowupEngineCard({ workspaceId }: { workspaceId: string }) {
+  const [data, setData] = useState<{ total: { enviados: number; respondieron: number; tasa: number }; porGatillo: FuStat[]; leadsRevividos: number; days: number } | null>(null)
+  const [days, setDays] = useState(30)
+
+  useEffect(() => {
+    if (!workspaceId) return
+    fetch(`/api/analytics/followups?workspaceId=${workspaceId}&days=${days}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.success && setData(j))
+      .catch(() => {})
+  }, [workspaceId, days])
+
+  if (!data) return null
+  const max = Math.max(1, ...data.porGatillo.map((g) => g.tasa))
+  return (
+    <Card className="border-violet-500/25">
+      <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2">
+        <div>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Target className="h-4 w-4 text-violet-500" /> Motor de Seguimiento — qué gatillo revive más leads
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            De cada seguimiento automático enviado, ¿el cliente respondió en los 7 días siguientes?
+          </p>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          {[30, 90].map((d) => (
+            <button key={d} onClick={() => setDays(d)}
+              className={cn('h-6 px-2 rounded-full text-[10px] font-semibold border',
+                days === d ? 'bg-violet-500/15 text-violet-500 border-violet-500/40' : 'border-border text-muted-foreground hover:bg-muted/60')}>
+              {d}d
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-1">
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 mb-3">
+          <span className="text-sm"><b className="text-lg text-violet-500">{data.total.enviados}</b> <span className="text-xs text-muted-foreground">seguimientos enviados</span></span>
+          <span className="text-sm"><b className="text-lg text-emerald-500">{data.total.respondieron}</b> <span className="text-xs text-muted-foreground">obtuvieron respuesta</span></span>
+          <span className="text-sm"><b className="text-lg">{data.total.tasa}%</b> <span className="text-xs text-muted-foreground">tasa global</span></span>
+          <span className="text-sm"><b className="text-lg text-amber-500">{data.leadsRevividos}</b> <span className="text-xs text-muted-foreground">leads revividos (únicos)</span></span>
+        </div>
+        {data.porGatillo.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">Aún no hay seguimientos enviados en este periodo — la tabla se llena sola conforme el motor trabaje.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {data.porGatillo.map((g) => (
+              <div key={g.tipo} className="flex items-center gap-2">
+                <span className="w-44 shrink-0 text-xs font-medium truncate">{g.label}</span>
+                <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all"
+                    style={{ width: `${Math.max(3, (g.tasa / max) * 100)}%` }} />
+                </div>
+                <span className="w-24 shrink-0 text-right text-[11px] text-muted-foreground font-mono">{g.tasa}% ({g.respondieron}/{g.enviados})</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-[10px] text-muted-foreground">Con 2-3 semanas de datos podrás afinar la escalera: los gatillos con mejor tasa merecen ir más temprano en la secuencia.</p>
+      </CardContent>
+    </Card>
   )
 }

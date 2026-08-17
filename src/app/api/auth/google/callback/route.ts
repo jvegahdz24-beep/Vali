@@ -6,13 +6,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth-edge'
+import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth'
 import {
   exchangeCodeForTokens,
   getGoogleUser,
   GOOGLE_STATE_COOKIE_NAME,
 } from '@/lib/google-oauth'
 import { DEFAULT_PIPELINE_STAGES } from '@/lib/constants'
+import { acceptPendingInvitations } from '@/lib/auth/accept-invitations'
 
 export async function GET(req: NextRequest) {
   try {
@@ -229,6 +230,12 @@ export async function GET(req: NextRequest) {
         })
       }
 
+      // Auto-aceptar invitaciones pendientes para este email ANTES de crear un
+      // workspace propio: si al usuario lo invitaron a un equipo, se une a ESE
+      // equipo (y así el check de abajo ya lo encuentra como miembro y no le
+      // crea un workspace huérfano). Arregla el flujo de invitación por Google.
+      await acceptPendingInvitations(user.id, user.email)
+
       // Ensure user has a workspace (edge case: existing user without workspace)
       const existingMember = await db.workspaceMember.findFirst({
         where: { userId: user.id },
@@ -317,12 +324,14 @@ export async function GET(req: NextRequest) {
     })
 
     // ─── Set session cookie and redirect to dashboard ───────
-    const response = NextResponse.redirect(new URL('/', req.url))
+    // Location RELATIVA (no new URL('/', req.url)): detrás del proxy req.url es
+    // el host interno (localhost:3105) y el redirect rompía con ERR_CONNECTION_REFUSED.
+    const response = new NextResponse(null, { status: 302, headers: { Location: '/' } })
 
     // Clear the state cookie
     response.cookies.set(GOOGLE_STATE_COOKIE_NAME, '', {
       httpOnly: true,
-      secure: false, // Behind Caddy reverse proxy
+      secure: process.env.NODE_ENV === 'production', // SEC-003
       sameSite: 'lax',
       maxAge: 0,
       path: '/',
@@ -331,9 +340,9 @@ export async function GET(req: NextRequest) {
     // Set the session cookie
     response.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: false, // Behind Caddy reverse proxy
+      secure: process.env.NODE_ENV === 'production', // SEC-003
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: 7 * 24 * 60 * 60, // 7 days
       path: '/',
     })
 

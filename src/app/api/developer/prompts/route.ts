@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
+import { invalidatePersonalityCache } from '@/lib/ai/message-processor'
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,10 +32,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       personas,
-      bySlug: personas.reduce<Record<string, typeof personas[0]>>((acc, p) => {
+      bySlug: personas.reduce((acc: Record<string, (typeof personas)[0]>, p) => {
         acc[p.slug] = p
         return acc
-      }, {}),
+      }, {} as Record<string, (typeof personas)[0]>),
     })
   } catch (error) {
     return errorResponse(error, 'Error al obtener prompts')
@@ -45,12 +46,13 @@ export async function PUT(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const body = await req.json()
-    const { workspaceId, slug, systemPrompt, tone, language } = body
+    const { workspaceId, slug, name, systemPrompt, tone, language, isActive } = body
 
     if (!workspaceId || !slug) {
       return NextResponse.json({ error: 'workspaceId and slug are required' }, { status: 400 })
     }
-    await requireWorkspace(workspaceId, session.userId)
+    const member = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(member.role, 'agents.manage')
 
     if (!systemPrompt) {
       return NextResponse.json({ error: 'systemPrompt is required' }, { status: 400 })
@@ -60,20 +62,25 @@ export async function PUT(req: NextRequest) {
       where: { workspaceId_slug: { workspaceId, slug } },
       create: {
         workspaceId,
-        name: slug,
+        name: name || slug,
         slug,
         systemPrompt,
         tone: tone || 'professional',
         language: language || 'es',
-        isActive: true,
+        isActive: isActive !== undefined ? isActive : true,
         isDefault: false,
       },
       update: {
+        ...(name && { name }),
         systemPrompt,
         ...(tone && { tone }),
         ...(language && { language }),
+        ...(isActive !== undefined && { isActive }),
       },
     })
+
+    // Invalidate personality cache so the next message uses the new prompt immediately
+    invalidatePersonalityCache(workspaceId)
 
     return NextResponse.json({
       success: true,
@@ -94,7 +101,8 @@ export async function DELETE(req: NextRequest) {
     if (!workspaceId || !id) {
       return NextResponse.json({ error: 'workspaceId and id are required' }, { status: 400 })
     }
-    await requireWorkspace(workspaceId, session.userId)
+    const member = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(member.role, 'agents.manage')
 
     await db.agentPersona.deleteMany({ where: { id, workspaceId } })
 

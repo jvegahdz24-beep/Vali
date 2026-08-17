@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,7 +61,8 @@ export async function PUT(req: NextRequest) {
     const body = await req.json()
     const { workspaceId, apiKeys, baseUrl, timeout, retryCount } = body
 
-    await requireWorkspace(workspaceId, session.userId)
+    const member = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(member.role, 'settings.advanced')
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },

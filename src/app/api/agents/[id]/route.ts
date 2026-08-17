@@ -6,8 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function PUT(
   req: NextRequest,
@@ -22,9 +21,7 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Agent not found' }, { status: 404 })
     }
-
-    // RBAC: Update agent requires owner or admin
-    await rbac.ownerOrAdmin(session, existing.workspaceId)
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     const {
       name,
@@ -89,9 +86,7 @@ export async function DELETE(
     if (!existing) {
       return Response.json({ error: 'Agent not found' }, { status: 404 })
     }
-
-    // RBAC: Delete agent requires owner or admin
-    await rbac.ownerOrAdmin(session, existing.workspaceId)
+    await requireWorkspace(existing.workspaceId, session.userId)
 
     // Delete agent and all related records
     await db.agent.delete({ where: { id } })

@@ -536,17 +536,27 @@ function calculateConfidence(
   pattern: BehaviorPattern
 ): { score: number; reason: string } {
   const eventCount = events.length
+  const now = Date.now()
   const hasRecentEvent = events.some(
-    (e: any) => Date.now() - e.createdAt.getTime() < TWO_HOURS
+    (e: any) => now - e.createdAt.getTime() < TWO_HOURS
   )
 
-  // Base confidence from event count (max 1 at 10 events)
-  const base = Math.min(eventCount / 10, 1)
+  // ── Data volume ──
+  // EngineEvents alone are too sparse — most active leads have 0, which made
+  // EVERY lead show 0% confidence (multiplicative formula collapses to 0).
+  // We also count the conversation's message volume so an engaged lead reflects
+  // real confidence even without logged engine events.
+  const messageCount = contact?.leadProfile?.totalMessages ?? 0
+  const dataPoints = eventCount + messageCount
+  const base = Math.min(dataPoints / 8, 1) // ~8 interacciones → datos suficientes
 
-  // Data freshness factor
-  const freshness = hasRecentEvent ? 1 : 0.6
+  // ── Freshness ── recent engine event OR recent inbound message (24h)
+  const lastActivity = contact?.lastMessageAt ?? contact?.leadProfile?.lastActiveAt ?? null
+  const recentActivity = hasRecentEvent ||
+    (lastActivity ? now - new Date(lastActivity).getTime() < 24 * 60 * 60 * 1000 : false)
+  const freshness = recentActivity ? 1 : 0.6
 
-  // Pattern effectiveness (from outcome data)
+  // Pattern effectiveness (from outcome data) — neutral 0.6 when no outcomes yet
   const outcomes = events.filter((e: any) => e.type === 'ACTION_OUTCOME')
   const successes = outcomes.filter(
     (e: any) =>
@@ -555,19 +565,19 @@ function calculateConfidence(
       )
   )
   const effectiveness =
-    outcomes.length > 0 ? successes.length / outcomes.length : 0.5
+    outcomes.length > 0 ? successes.length / outcomes.length : 0.6
 
-  const score = base * effectiveness * freshness
+  const score = Math.round(base * effectiveness * freshness * 100) / 100
 
   let reason = ''
-  if (events.length < 3) {
-    reason = 'Datos insuficientes (< 3 eventos)'
-  } else if (!hasRecentEvent) {
-    reason = 'Sin datos recientes (último evento > 2h)'
+  if (dataPoints < 3) {
+    reason = 'Datos insuficientes (poca interacción aún)'
+  } else if (!recentActivity) {
+    reason = 'Sin actividad reciente (> 24h)'
   } else if (effectiveness < 0.3) {
     reason = 'Historial bajo de respuestas positivas'
   } else {
-    reason = 'Datos recientes con historial positivo'
+    reason = 'Datos recientes con buena interacción'
   }
 
   return { score, reason }

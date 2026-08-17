@@ -1,7 +1,7 @@
 // POST /api/whatsapp/ephemeral/send — Send via ephemeral client
 import { NextRequest, NextResponse } from 'next/server'
 import { ephemeralManager } from '@/lib/whatsapp/ephemeral-client'
-import { whatsAppManager } from '@/lib/whatsapp/connection'
+import { getWhatsAppManager } from '@/lib/whatsapp/connection'
 import { db } from '@/lib/db'
 import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { getClientIp } from '@/lib/api-auth'
@@ -9,9 +9,12 @@ import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ error: 'No workspace in session' }, { status: 400 })
+    }
     const ip = getClientIp(req)
-    const rl = await rateLimit(`${ip}:ephemeral:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
+    const rl = rateLimit(`${ip}:ephemeral:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
     if (!rl.success) {
       return NextResponse.json({ error: 'Demasiados mensajes.', code: 'RATE_LIMITED' }, { status: 429 })
     }
@@ -21,7 +24,11 @@ export async function POST(req: NextRequest) {
     if (!phone || !message) {
       return NextResponse.json({ error: 'phone y message son requeridos', code: 'VALIDATION_ERROR' }, { status: 400 })
     }
+    if (workspaceId && workspaceId !== session.workspaceId) {
+      return NextResponse.json({ error: 'Workspace mismatch', code: 'FORBIDDEN' }, { status: 403 })
+    }
 
+    const manager = getWhatsAppManager(session.workspaceId)
     let result: { success: boolean; id?: string; error?: string; source?: string }
 
     if (clientId) {
@@ -32,7 +39,7 @@ export async function POST(req: NextRequest) {
       const r = await client.send(phone, message)
       result = { ...r, source: `ephemeral:${clientId}` }
     } else {
-      result = await ephemeralManager.sendAny(phone, message, (p, t) => whatsAppManager.sendMessage(p, t))
+      result = await ephemeralManager.sendAny(phone, message, (p, t) => manager.sendMessage(p, t))
     }
 
     if (!result.success) {

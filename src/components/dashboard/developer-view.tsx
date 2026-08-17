@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Key, FileText, Webhook, Terminal as TermIcon, Database, Settings,
+  Key, Webhook, Terminal as TermIcon, Database, Settings,
   Eye, EyeOff, Play, CheckCircle2, XCircle, MinusCircle,
-  Save, RotateCcw, RefreshCw, Download, Trash2, Plus, Clock,
+  Save, RefreshCw, Download, Trash2, Plus, Clock,
   ChevronDown, ChevronRight, AlertTriangle, Copy, Send,
   Loader2, Zap, Shield, ToggleLeft, ToggleRight, Info,
   Search, Filter, X, Activity,
@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
@@ -62,8 +61,7 @@ interface TableInfo {
   records: Record<string, unknown>[]
 }
 
-// ─── Logs start empty, populated from API at runtime ─────────
-const DEV_LOGS: LogEntry[] = []
+
 
 // ─── Component ─────────────────────────────────────────
 export function DeveloperView({ workspaceId }: DeveloperViewProps) {
@@ -76,11 +74,8 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
   const [retryCount, setRetryCount] = useState(3)
   const [keysLoaded, setKeysLoaded] = useState(false)
 
-  // ── System Prompts State ──
-  const [selectedPrompt, setSelectedPrompt] = useState('JHON')
-  const [promptContent, setPromptContent] = useState(PERSONALITY_PROMPTS['JHON'] || '')
+  // ── Saved indicator (reused by API keys save) ──
   const [promptSaved, setPromptSaved] = useState(false)
-  const [customPrompts, setCustomPrompts] = useState<Record<string, string>>({})
 
   // ── Webhooks State ──
   const [webhooks, setWebhooks] = useState<WebhookEntry[]>([])
@@ -91,10 +86,11 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
   const [webhookDeliveries, setWebhookDeliveries] = useState<{ status: number; url: string; time: string; event: string }[]>([])
 
   // ── Logs State ──
-  const [logs, setLogs] = useState<LogEntry[]>(DEV_LOGS)
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [logFilter, setLogFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all')
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [logsExpanded, setLogsExpanded] = useState(true)
+  const [logsLoading, setLogsLoading] = useState(false)
 
   // ── Debug Console State ──
   const [debugMessage, setDebugMessage] = useState('')
@@ -122,11 +118,35 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
     aiCallsPerMinute: 30,
     maxContacts: 5000,
   })
+  const [envVars, setEnvVars] = useState<{ key: string; val: string; masked: boolean }[]>([])
 
   // ── Handlers ──
   const toggleKeyVisibility = (key: string) => {
     setShowKeys(prev => ({ ...prev, [key]: !prev[key] }))
   }
+
+  // ── Load Env Config from DB on mount ──
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await fetch(`/api/developer/config?workspaceId=${workspaceId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.envVars) setEnvVars(data.envVars)
+          if (data.limits) {
+            setRateLimits(prev => ({
+              ...prev,
+              maxContacts: data.limits.maxContacts ?? prev.maxContacts,
+            }))
+          }
+          if (data.featureFlags) {
+            setFeatureFlags(prev => ({ ...prev, ...data.featureFlags }))
+          }
+        }
+      } catch { /* silently ignore */ }
+    }
+    loadConfig()
+  }, [workspaceId])
 
   // ── Load API Keys from DB on mount ──
   useEffect(() => {
@@ -135,7 +155,15 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
         const res = await fetch(`/api/developer/api-keys?workspaceId=${workspaceId}`)
         if (res.ok) {
           const data = await res.json()
-          if (data.apiKeys) setApiKeys(data.apiKeys)
+          if (data.maskedKeys) {
+            setApiKeys(data.maskedKeys)
+            // Mark providers that already have a saved key as 'valid'
+            const savedStatus: Record<string, 'valid'> = {}
+            for (const [prov, val] of Object.entries(data.maskedKeys as Record<string, string>)) {
+              if (val && val.length > 0) savedStatus[prov] = 'valid'
+            }
+            setKeyStatus(prev => ({ ...prev, ...savedStatus }))
+          }
           if (data.connection) {
             const conn = data.connection as Record<string, unknown>
             if (conn.baseUrl) setBaseUrl(conn.baseUrl as string)
@@ -149,29 +177,47 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
     loadKeys()
   }, [workspaceId])
 
-  // ── Load Custom Prompts from DB on mount ──
-  useEffect(() => {
-    const loadPrompts = async () => {
-      try {
-        const res = await fetch(`/api/developer/prompts?workspaceId=${workspaceId}`)
-        if (res.ok) {
-          const data = await res.json()
-          const map: Record<string, string> = {}
-          if (data.personas) {
-            for (const p of data.personas) {
-              map[p.slug] = p.systemPrompt
-            }
-          }
-          setCustomPrompts(map)
-          // If current personality has a custom prompt, use it
-          if (map[selectedPrompt]) {
-            setPromptContent(map[selectedPrompt])
-          }
-        }
-      } catch { /* use defaults */ }
+  // ── Fetch real logs from API ──
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true)
+    try {
+      const params = new URLSearchParams({ workspaceId, limit: '100' })
+      if (logFilter !== 'all') params.set('level', logFilter)
+      const res = await fetch(`/api/developer/logs?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.logs) setLogs(data.logs)
+      }
+    } catch { /* keep existing logs */ } finally {
+      setLogsLoading(false)
     }
-    loadPrompts()
-  }, [workspaceId])
+  }, [workspaceId, logFilter])
+
+  // Load logs on mount and when filter changes
+  useEffect(() => { fetchLogs() }, [fetchLogs])
+
+  // Poll when autoRefresh is enabled; upgrade to SSE for real-time streaming
+  useEffect(() => {
+    if (!autoRefresh) return
+    // Initial fetch to populate existing logs
+    fetchLogs()
+    // Open SSE stream for live runtime log updates
+    const url = `/api/developer/logs/stream?workspaceId=${workspaceId}`
+    const es = new EventSource(url)
+    es.onmessage = (event) => {
+      try {
+        const entry = JSON.parse(event.data)
+        setLogs(prev => [entry, ...prev].slice(0, 200))
+      } catch { /* ignore malformed */ }
+    }
+    es.onerror = () => {
+      // On SSE failure fall back to polling
+      es.close()
+    }
+    // Keep a 30s poll as safety net for DB logs that don't go through addDeveloperLog
+    const id = setInterval(fetchLogs, 30000)
+    return () => { es.close(); clearInterval(id) }
+  }, [autoRefresh, fetchLogs, workspaceId])
 
   // ── Load Webhooks from DB on mount ──
   useEffect(() => {
@@ -199,13 +245,24 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
   const testApiKey = async (provider: string) => {
     setKeyStatus(prev => ({ ...prev, [provider]: 'testing' }))
     try {
+      // Only send the raw key if it's not a masked value loaded from DB
+      const rawKey = apiKeys[provider] || ''
+      const isRealKey = rawKey.length > 0 && !rawKey.includes('•')
       const res = await fetch('/api/developer/test-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: provider, message: 'test' }),
+        body: JSON.stringify({ agentId: provider, message: 'test', apiKey: isRealKey ? rawKey : undefined }),
       })
       if (res.ok) {
         setKeyStatus(prev => ({ ...prev, [provider]: 'valid' }))
+        // Auto-save the validated key to DB
+        if (isRealKey) {
+          fetch('/api/developer/api-keys', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspaceId, apiKeys: { ...apiKeys, [provider]: rawKey }, baseUrl, timeout, retryCount }),
+          }).catch(() => { /* non-critical */ })
+        }
       } else {
         setKeyStatus(prev => ({ ...prev, [provider]: 'invalid' }))
       }
@@ -229,34 +286,6 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
     } catch (err) {
       addLog('error', 'api-keys', `Error guardando API keys: ${err instanceof Error ? err.message : 'Unknown'}`)
     }
-  }
-
-  const handlePromptChange = (id: string) => {
-    setSelectedPrompt(id)
-    // Use custom prompt from DB if it exists, otherwise use default
-    setPromptContent(customPrompts[id] || PERSONALITY_PROMPTS[id] || '')
-  }
-
-  const savePrompt = async () => {
-    try {
-      const res = await fetch('/api/developer/prompts', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, slug: selectedPrompt, systemPrompt: promptContent }),
-      })
-      if (res.ok) {
-        setCustomPrompts(prev => ({ ...prev, [selectedPrompt]: promptContent }))
-        setPromptSaved(true)
-        setTimeout(() => setPromptSaved(false), 2000)
-        addLog('info', 'prompts', `Prompt guardado para ${selectedPrompt}`)
-      }
-    } catch (err) {
-      addLog('error', 'prompts', `Error guardando prompt: ${err instanceof Error ? err.message : 'Unknown'}`)
-    }
-  }
-
-  const resetPrompt = () => {
-    setPromptContent(PERSONALITY_PROMPTS[selectedPrompt] || '')
   }
 
   const generateSecret = () => {
@@ -352,7 +381,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
   const fetchTableData = async () => {
     try {
-      const res = await fetch(`/api/developer/export?table=${selectedTable.toLowerCase()}s&format=json`)
+      const res = await fetch(`/api/developer/export?table=${selectedTable.toLowerCase()}s&format=json&workspaceId=${workspaceId}`)
       if (res.ok) {
         const data = await res.json()
         setTableData({
@@ -373,7 +402,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
   const exportTable = async () => {
     try {
-      const res = await fetch(`/api/developer/export?table=${selectedTable.toLowerCase()}s&format=csv`)
+      const res = await fetch(`/api/developer/export?table=${selectedTable.toLowerCase()}s&format=csv&workspaceId=${workspaceId}`)
       if (res.ok) {
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -391,9 +420,6 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
   const filteredLogs = logFilter === 'all' ? logs : logs.filter(l => l.level === logFilter)
 
-  const charCount = promptContent.length
-  const tokenEstimate = Math.ceil(charCount / 4)
-
   const webhookEvents = [
     { id: 'message.received', label: 'Mensaje recibido' },
     { id: 'message.sent', label: 'Mensaje enviado' },
@@ -403,21 +429,21 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
   ]
 
   return (
-    <div className="min-h-full bg-[#0f172a] text-slate-200">
+    <div className="min-h-full bg-background text-foreground">
       {/* Header */}
-      <div className="border-b border-slate-700/50 bg-[#0c1222] px-4 lg:px-6 py-4">
+      <div className="border-b border-border/50 bg-muted/30 px-4 lg:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
               <TermIcon className="h-4 w-4 text-emerald-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Panel de Desarrollador</h3>
-              <p className="text-xs text-slate-400">Herramientas avanzadas y configuración técnica</p>
+              <h3 className="text-base font-semibold text-foreground">Panel de Desarrollador</h3>
+              <p className="text-xs text-muted-foreground">Herramientas avanzadas y configuración técnica</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="h-6 text-[10px] font-mono border-slate-600 text-slate-400">
+            <Badge variant="outline" className="h-6 text-[10px] font-mono border-border text-muted-foreground">
               {workspaceId.slice(0, 8)}...
             </Badge>
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -428,28 +454,24 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
       {/* Tabs */}
       <div className="px-4 lg:px-6 pt-4">
         <Tabs defaultValue="api-keys" className="space-y-4">
-          <TabsList className="bg-slate-800/50 border border-slate-700/50 w-full flex-wrap h-auto gap-1 p-1">
-            <TabsTrigger value="api-keys" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
+          <TabsList className="bg-muted/50 border border-border/50 w-full flex-wrap h-auto gap-1 p-1">
+            <TabsTrigger value="api-keys" className="gap-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-emerald-400">
               <Key className="h-3.5 w-3.5" />
               API Keys
             </TabsTrigger>
-            <TabsTrigger value="prompts" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
-              <FileText className="h-3.5 w-3.5" />
-              System Prompts
-            </TabsTrigger>
-            <TabsTrigger value="webhooks" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
+            <TabsTrigger value="webhooks" className="gap-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-emerald-400">
               <Webhook className="h-3.5 w-3.5" />
               Webhooks
             </TabsTrigger>
-            <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
+            <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-emerald-400">
               <Activity className="h-3.5 w-3.5" />
               Logs & Debug
             </TabsTrigger>
-            <TabsTrigger value="database" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
+            <TabsTrigger value="database" className="gap-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-emerald-400">
               <Database className="h-3.5 w-3.5" />
               Base de Datos
             </TabsTrigger>
-            <TabsTrigger value="config" className="gap-1.5 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-400">
+            <TabsTrigger value="config" className="gap-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-emerald-400">
               <Settings className="h-3.5 w-3.5" />
               Configuración
             </TabsTrigger>
@@ -477,15 +499,15 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                     ? 'border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60'
                     : apiKeys[key]
                       ? 'border-blue-500/30 bg-blue-500/5'
-                      : 'border-slate-700/50 bg-slate-800/30'
+                      : 'border-border/50 bg-muted/30'
                 )}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
                       <div className="flex-1 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Label className="text-sm font-medium text-slate-200">{prov.name}</Label>
-                            <span className="text-[10px] text-slate-500 font-mono">{prov.defaultModel}</span>
+                            <Label className="text-sm font-medium text-foreground">{prov.name}</Label>
+                            <span className="text-[10px] text-muted-foreground font-mono">{prov.defaultModel}</span>
                             {isRecommended && (
                               <Badge className="h-5 text-[9px] bg-emerald-500/15 text-emerald-400 border-emerald-500/25 gap-0.5">
                                 <Zap className="h-2.5 w-2.5" />
@@ -511,14 +533,14 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                                 'h-5 text-[10px]',
                                 apiKeys[key]
                                   ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                  : 'bg-slate-700 text-slate-400 border-slate-600'
+                                  : 'bg-muted text-muted-foreground border-border'
                               )}>
                                 {apiKeys[key] ? 'Configurada' : 'Sin configurar'}
                               </Badge>
                             )}
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed -mt-1">{prov.description}</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed -mt-1">{prov.description}</p>
                         {/* Available models pills */}
                         <div className="flex flex-wrap gap-1.5">
                           {prov.models.map(model => (
@@ -528,7 +550,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                                 'text-[9px] font-mono px-1.5 py-0.5 rounded border',
                                 model === prov.defaultModel
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : 'bg-slate-800 text-slate-500 border-slate-700'
+                                  : 'bg-muted text-muted-foreground border-border'
                               )}
                             >
                               {model}{model === prov.defaultModel && ' *'}
@@ -539,7 +561,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           <Input
                             type={showKeys[key] ? 'text' : 'password'}
                             placeholder={`sk-... ${prov.name}`}
-                            className="h-9 bg-slate-900/50 border-slate-700 text-slate-200 font-mono text-xs pr-20"
+                            className="h-9 bg-muted/30 border-border text-foreground font-mono text-xs pr-20"
                             value={apiKeys[key] || ''}
                             onChange={(e) => setApiKeys(prev => ({ ...prev, [key]: e.target.value }))}
                           />
@@ -547,7 +569,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-slate-400 hover:text-slate-200"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
                               onClick={() => toggleKeyVisibility(key)}
                             >
                               {showKeys[key] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -555,7 +577,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-slate-400 hover:text-emerald-400"
+                              className="h-7 w-7 text-muted-foreground hover:text-emerald-400"
                               onClick={() => testApiKey(key)}
                               disabled={keyStatus[key] === 'testing'}
                             >
@@ -570,24 +592,24 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
               )})}
 
               {/* Connection Settings */}
-              <Card className="border-slate-700/50 bg-slate-800/30">
+              <Card className="border-border/50 bg-muted/30">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Shield className="h-4 w-4 text-slate-400" />
-                    <Label className="text-sm font-medium text-slate-200">Configuración de Conexión</Label>
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium text-foreground">Configuración de Conexión</Label>
                   </div>
                   <div className="grid gap-2">
-                    <Label className="text-xs text-slate-400">Base URL Override (para modelos self-hosted)</Label>
+                    <Label className="text-xs text-muted-foreground">Base URL Override (para modelos self-hosted)</Label>
                     <Input
                       placeholder="https://api.groq.com/openai/v1"
-                      className="h-9 bg-slate-900/50 border-slate-700 text-slate-200 font-mono text-xs"
+                      className="h-9 bg-muted/30 border-border text-foreground font-mono text-xs"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
                     />
                   </div>
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs text-slate-400">Timeout: {timeout}s</Label>
+                      <Label className="text-xs text-muted-foreground">Timeout: {timeout}s</Label>
                     </div>
                     <Slider
                       value={[timeout]}
@@ -595,21 +617,21 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                       min={5}
                       max={60}
                       step={5}
-                      className="[&>span]:bg-slate-600 [&>span>span]:bg-emerald-500"
+                      className="[&>span]:bg-border [&>span>span]:bg-emerald-500"
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label className="text-xs text-slate-400">Reintentos: {retryCount}</Label>
+                    <Label className="text-xs text-muted-foreground">Reintentos: {retryCount}</Label>
                     <Slider
                       value={[retryCount]}
                       onValueChange={([v]) => setRetryCount(v)}
                       min={1}
                       max={5}
                       step={1}
-                      className="[&>span]:bg-slate-600 [&>span>span]:bg-emerald-500"
+                      className="[&>span]:bg-border [&>span>span]:bg-emerald-500"
                     />
                   </div>
-                  <Button onClick={saveApiKeys} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                  <Button onClick={saveApiKeys} className="bg-emerald-600 hover:bg-emerald-700 text-foreground text-xs">
                     <Save className="h-3.5 w-3.5 mr-1.5" />
                     Guardar Configuración
                   </Button>
@@ -618,115 +640,14 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
             </div>
           </TabsContent>
 
-          {/* ═══ TAB 2: System Prompts ═══ */}
-          <TabsContent value="prompts" className="space-y-4 pb-6">
-            <div className="grid gap-4 lg:grid-cols-2">
-              {/* Prompt Editor */}
-              <div className="space-y-4">
-                <Card className="border-slate-700/50 bg-slate-800/30">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium text-slate-200">Editor de System Prompt</Label>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                        <span>{charCount} caracteres</span>
-                        <span>·</span>
-                        <span>~{tokenEstimate} tokens</span>
-                      </div>
-                    </div>
-                    <Select value={selectedPrompt} onValueChange={handlePromptChange}>
-                      <SelectTrigger className="bg-slate-900/50 border-slate-700 text-slate-200 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.keys(PERSONALITY_PROMPTS).map(k => (
-                          <SelectItem key={k} value={k}>{k}</SelectItem>
-                        ))}
-                        <SelectItem value="Custom">Custom (crear nuevo)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="relative">
-                      <Textarea
-                        value={promptContent}
-                        onChange={(e) => setPromptContent(e.target.value)}
-                        rows={20}
-                        className="font-mono text-xs bg-slate-900/80 border-slate-700 text-slate-200 leading-relaxed resize-none"
-                        placeholder="Escribe tu system prompt aquí..."
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button onClick={savePrompt} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-                        <Save className="h-3.5 w-3.5 mr-1.5" />
-                        Guardar Prompt
-                      </Button>
-                      <Button onClick={resetPrompt} variant="outline" className="border-slate-600 text-slate-400 hover:text-slate-200 text-xs">
-                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                        Reset por defecto
-                      </Button>
-                      {promptSaved && (
-                        <span className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Guardado
-                        </span>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Preview Panel */}
-              <div className="space-y-4">
-                <Card className="border-slate-700/50 bg-slate-800/30">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-4 w-4 text-slate-400" />
-                      <Label className="text-sm font-medium text-slate-200">Vista Previa</Label>
-                    </div>
-                    <div className="bg-slate-900/80 rounded-lg p-4 font-mono text-xs text-slate-300 max-h-[500px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                      {promptContent ? promptContent : 'Selecciona una personalidad para ver el prompt...'}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-slate-700/50 bg-slate-800/30">
-                  <CardContent className="p-4 space-y-3">
-                    <Label className="text-sm font-medium text-slate-200">Personalidades Disponibles</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: 'JHON', emoji: '💼', desc: 'Asesor comercial inteligente' },
-                        { id: 'Professional', emoji: '💼', desc: 'B2B formal' },
-                        { id: 'Friendly', emoji: '😊', desc: 'Retail casual' },
-                        { id: 'Aggressive', emoji: '🔥', desc: 'Alta presión' },
-                      ].map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => handlePromptChange(p.id)}
-                          className={cn(
-                            'p-2.5 rounded-lg border text-left text-xs transition-colors',
-                            selectedPrompt === p.id
-                              ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-400'
-                              : 'border-slate-700 hover:border-slate-600 text-slate-400'
-                          )}
-                        >
-                          <span className="text-base mr-1.5">{p.emoji}</span>
-                          <span className="font-medium">{p.id}</span>
-                          <span className="block text-[10px] text-slate-500 mt-0.5">{p.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* ═══ TAB 3: Webhooks ═══ */}
+          {/* ═══ TAB 2: Webhooks ═══ */}
           <TabsContent value="webhooks" className="space-y-4 pb-6">
             <div className="grid gap-4 lg:grid-cols-2">
               {/* Webhooks List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-slate-200">Webhooks Configurados</Label>
-                  <Button onClick={() => setShowAddWebhook(!showAddWebhook)} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7">
+                  <Label className="text-sm font-medium text-foreground">Webhooks Configurados</Label>
+                  <Button onClick={() => setShowAddWebhook(!showAddWebhook)} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-foreground text-xs h-7">
                     <Plus className="h-3 w-3 mr-1" />
                     Agregar
                   </Button>
@@ -735,17 +656,17 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                 {showAddWebhook && (
                   <Card className="border-emerald-500/30 bg-emerald-500/5">
                     <CardContent className="p-3 space-y-3">
-                      <Label className="text-xs text-slate-300">URL del Webhook</Label>
+                      <Label className="text-xs text-foreground">URL del Webhook</Label>
                       <Input
                         placeholder="https://tu-servidor.com/webhook"
-                        className="h-8 bg-slate-900/50 border-slate-700 text-slate-200 font-mono text-xs"
+                        className="h-8 bg-muted/30 border-border text-foreground font-mono text-xs"
                         value={newWebhookUrl}
                         onChange={(e) => setNewWebhookUrl(e.target.value)}
                       />
-                      <Label className="text-xs text-slate-300">Eventos</Label>
+                      <Label className="text-xs text-foreground">Eventos</Label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {webhookEvents.map(ev => (
-                          <label key={ev.id} className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                          <label key={ev.id} className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                             <input
                               type="checkbox"
                               checked={newWebhookEvents.includes(ev.id)}
@@ -753,50 +674,50 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                                 if (e.target.checked) setNewWebhookEvents(prev => [...prev, ev.id])
                                 else setNewWebhookEvents(prev => prev.filter(x => x !== ev.id))
                               }}
-                              className="rounded border-slate-600 bg-slate-900 accent-emerald-500"
+                              className="rounded border-border bg-muted/40 accent-emerald-500"
                             />
                             {ev.label}
                           </label>
                         ))}
                       </div>
                       <div className="flex gap-2">
-                        <Button onClick={addWebhook} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7">Crear Webhook</Button>
-                        <Button onClick={() => setShowAddWebhook(false)} size="sm" variant="ghost" className="text-slate-400 text-xs h-7">Cancelar</Button>
+                        <Button onClick={addWebhook} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-foreground text-xs h-7">Crear Webhook</Button>
+                        <Button onClick={() => setShowAddWebhook(false)} size="sm" variant="ghost" className="text-muted-foreground text-xs h-7">Cancelar</Button>
                       </div>
                     </CardContent>
                   </Card>
                 )}
 
                 {webhooks.length === 0 ? (
-                  <Card className="border-slate-700/50 bg-slate-800/20">
+                  <Card className="border-border/50 bg-muted/20">
                     <CardContent className="p-6 text-center">
-                      <Webhook className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                      <p className="text-xs text-slate-500">Sin webhooks configurados</p>
-                      <p className="text-[10px] text-slate-600 mt-1">Agrega un webhook para recibir notificaciones de eventos</p>
+                      <Webhook className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground">Sin webhooks configurados</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Agrega un webhook para recibir notificaciones de eventos</p>
                     </CardContent>
                   </Card>
                 ) : (
                   webhooks.map(wh => (
-                    <Card key={wh.id} className="border-slate-700/50 bg-slate-800/30">
+                    <Card key={wh.id} className="border-border/50 bg-muted/30">
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-mono text-emerald-400 truncate max-w-[200px]">{wh.url}</span>
-                          <Badge className={cn('h-5 text-[10px]', wh.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-400')}>
+                          <Badge className={cn('h-5 text-[10px]', wh.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted text-muted-foreground')}>
                             {wh.active ? 'Activo' : 'Inactivo'}
                           </Badge>
                         </div>
                         <div className="flex gap-1 flex-wrap">
                           {wh.events.map(ev => (
-                            <Badge key={ev} variant="outline" className="h-5 text-[10px] border-slate-600 text-slate-500">{ev}</Badge>
+                            <Badge key={ev} variant="outline" className="h-5 text-[10px] border-border text-muted-foreground">{ev}</Badge>
                           ))}
                         </div>
                         <div className="flex items-center justify-between pt-1">
-                          <span className="text-[10px] text-slate-600 font-mono truncate max-w-[180px]">{wh.secret.slice(0, 20)}...</span>
+                          <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[180px]">{wh.secret.slice(0, 20)}...</span>
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-emerald-400" onClick={() => testWebhook(wh.url)}>
+                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-emerald-400" onClick={() => testWebhook(wh.url)}>
                               <Play className="h-3 w-3" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-400" onClick={() => removeWebhook(wh.id)}>
+                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-red-400" onClick={() => removeWebhook(wh.id)}>
                               <Trash2 className="h-3 w-3" />
                             </Button>
                           </div>
@@ -809,25 +730,25 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
               {/* Request Log */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium text-slate-200">Últimas Entregas (10)</Label>
-                <Card className="border-slate-700/50 bg-slate-800/30">
+                <Label className="text-sm font-medium text-foreground">Últimas Entregas (10)</Label>
+                <Card className="border-border/50 bg-muted/30">
                   <CardContent className="p-3">
                     {webhookDeliveries.length === 0 ? (
                       <div className="text-center py-8">
-                        <Activity className="h-6 w-6 text-slate-600 mx-auto mb-2" />
-                        <p className="text-xs text-slate-500">Sin entregas registradas</p>
+                        <Activity className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-xs text-muted-foreground">Sin entregas registradas</p>
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-[400px] overflow-y-auto">
                         {webhookDeliveries.slice(0, 10).map((d, i) => (
-                          <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900/50 text-xs">
+                          <div key={i} className="flex items-center justify-between p-2 rounded bg-muted/30 text-xs">
                             <div className="flex items-center gap-2">
                               <Badge className={cn('h-4 text-[10px] font-mono', d.status < 300 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400')}>
                                 {d.status}
                               </Badge>
-                              <span className="text-slate-400">{d.event}</span>
+                              <span className="text-muted-foreground">{d.event}</span>
                             </div>
-                            <span className="text-[10px] text-slate-600 font-mono">{new Date(d.time).toLocaleTimeString('es-MX')}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{new Date(d.time).toLocaleTimeString('es-MX')}</span>
                           </div>
                         ))}
                       </div>
@@ -845,7 +766,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium text-slate-200">Visor de Logs</Label>
+                    <Label className="text-sm font-medium text-foreground">Visor de Logs</Label>
                     <div className="flex items-center gap-1">
                       {(['all', 'info', 'warn', 'error'] as const).map(level => (
                         <button
@@ -857,8 +778,8 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                               ? level === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-400'
                               : level === 'warn' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
                               : level === 'info' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                              : 'bg-slate-700 border-slate-600 text-slate-300'
-                              : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                              : 'bg-muted border-border text-foreground'
+                              : 'border-border text-muted-foreground hover:border-border'
                           )}
                         >
                           {level.toUpperCase()}
@@ -868,29 +789,37 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={fetchLogs}
+                      disabled={logsLoading}
+                      className="flex items-center gap-1 h-6 px-2 text-[10px] font-mono rounded border border-border text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn('h-3 w-3', logsLoading && 'animate-spin')} />
+                      Actualizar
+                    </button>
+                    <button
                       onClick={() => setAutoRefresh(!autoRefresh)}
                       className={cn(
                         'flex items-center gap-1 h-6 px-2 text-[10px] font-mono rounded border transition-colors',
-                        autoRefresh ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'border-slate-700 text-slate-500'
+                        autoRefresh ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'border-border text-muted-foreground'
                       )}
                     >
                       <RefreshCw className={cn('h-3 w-3', autoRefresh && 'animate-spin')} />
                       Auto
                     </button>
-                    <Button variant="ghost" size="sm" className="h-6 text-slate-500 text-[10px] hover:text-red-400" onClick={() => setLogs([])}>
+                    <Button variant="ghost" size="sm" className="h-6 text-muted-foreground text-[10px] hover:text-red-400" onClick={() => setLogs([])}>
                       <Trash2 className="h-3 w-3 mr-1" />
                       Limpiar
                     </Button>
                   </div>
                 </div>
-                <div className="bg-[#0a0f1c] rounded-lg border border-slate-800 overflow-hidden">
+                <div className="bg-muted/30 rounded-lg border border-border overflow-hidden">
                   <div className="max-h-[500px] overflow-y-auto p-3 space-y-1 font-mono text-xs">
                     {filteredLogs.length === 0 ? (
-                      <div className="text-center py-8 text-slate-600">Sin logs</div>
+                      <div className="text-center py-8 text-muted-foreground">Sin logs</div>
                     ) : (
                       filteredLogs.map(log => (
-                        <div key={log.id} className="flex gap-2 py-0.5 hover:bg-slate-800/50 rounded px-1">
-                          <span className="text-slate-600 shrink-0">{new Date(log.timestamp).toLocaleTimeString('es-MX')}</span>
+                        <div key={log.id} className="flex gap-2 py-0.5 hover:bg-muted/50 rounded px-1">
+                          <span className="text-muted-foreground shrink-0">{new Date(log.timestamp).toLocaleTimeString('es-MX')}</span>
                           <Badge className={cn(
                             'h-4 text-[9px] shrink-0 px-1',
                             log.level === 'error' ? 'bg-red-500/10 text-red-400' :
@@ -899,8 +828,8 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           )}>
                             {log.level}
                           </Badge>
-                          <span className="text-slate-500 shrink-0">[{log.source}]</span>
-                          <span className="text-slate-300">{log.message}</span>
+                          <span className="text-muted-foreground shrink-0">[{log.source}]</span>
+                          <span className="text-foreground">{log.message}</span>
                         </div>
                       ))
                     )}
@@ -911,16 +840,16 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
               {/* Debug Console */}
               <div className="space-y-4">
                 <Collapsible open={logsExpanded} onOpenChange={setLogsExpanded}>
-                  <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-slate-200 w-full">
+                  <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-foreground w-full">
                     {logsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     Consola de Debug
                   </CollapsibleTrigger>
                   <CollapsibleContent className="space-y-3 pt-3">
-                    <Card className="border-slate-700/50 bg-slate-800/30">
+                    <Card className="border-border/50 bg-muted/30">
                       <CardContent className="p-3 space-y-3">
                         <div className="flex gap-2">
                           <Select value={debugAgent} onValueChange={setDebugAgent}>
-                            <SelectTrigger className="w-36 h-8 bg-slate-900/50 border-slate-700 text-slate-200 text-xs">
+                            <SelectTrigger className="w-36 h-8 bg-muted/30 border-border text-foreground text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -933,7 +862,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                         <div className="relative">
                           <Input
                             placeholder="Escribe un mensaje de prueba..."
-                            className="h-9 bg-slate-900/50 border-slate-700 text-slate-200 text-xs pr-20 font-mono"
+                            className="h-9 bg-muted/30 border-border text-foreground text-xs pr-20 font-mono"
                             value={debugMessage}
                             onChange={(e) => setDebugMessage(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleDebugSend()}
@@ -942,7 +871,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                             onClick={handleDebugSend}
                             disabled={debugLoading || !debugMessage.trim()}
                             size="sm"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 bg-emerald-600 hover:bg-emerald-700 text-foreground text-xs"
                           >
                             {debugLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
                             Enviar
@@ -952,19 +881,19 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                         {debugResult && (
                           <div className="space-y-2">
                             <div className="flex gap-2 text-[10px] font-mono">
-                              <Badge className="bg-slate-700 text-slate-300 h-5">{debugResult.tokens} tokens</Badge>
-                              <Badge className="bg-slate-700 text-slate-300 h-5">{debugResult.time}ms</Badge>
+                              <Badge className="bg-muted text-foreground h-5">{debugResult.tokens} tokens</Badge>
+                              <Badge className="bg-muted text-foreground h-5">{debugResult.time}ms</Badge>
                             </div>
-                            <div className="bg-slate-900/80 rounded-lg p-3 text-xs text-emerald-300 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
+                            <div className="bg-muted/40/80 rounded-lg p-3 text-xs text-emerald-300 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
                               {debugResult.response}
                             </div>
                             <Collapsible>
-                              <CollapsibleTrigger className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1">
+                              <CollapsibleTrigger className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1">
                                 <ChevronRight className="h-3 w-3" />
                                 Ver Prompt Enviado
                               </CollapsibleTrigger>
                               <CollapsibleContent>
-                                <div className="bg-slate-900/80 rounded p-3 text-[10px] text-slate-400 max-h-[150px] overflow-y-auto font-mono whitespace-pre-wrap mt-1">
+                                <div className="bg-muted/40/80 rounded p-3 text-[10px] text-muted-foreground max-h-[150px] overflow-y-auto font-mono whitespace-pre-wrap mt-1">
                                   {debugResult.prompt}
                                 </div>
                               </CollapsibleContent>
@@ -977,29 +906,29 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                 </Collapsible>
 
                 {/* AI Agent Test */}
-                <Card className="border-slate-700/50 bg-slate-800/30">
+                <Card className="border-border/50 bg-muted/30">
                   <CardContent className="p-3 space-y-3">
                     <div className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-yellow-400" />
-                      <Label className="text-sm font-medium text-slate-200">Test Rápido de Agente</Label>
+                      <Label className="text-sm font-medium text-foreground">Test Rápido de Agente</Label>
                     </div>
-                    <p className="text-[10px] text-slate-500">Envía un mensaje de prueba y visualiza la respuesta completa del agente IA con todos los metadatos.</p>
+                    <p className="text-[10px] text-muted-foreground">Envía un mensaje de prueba y visualiza la respuesta completa del agente IA con todos los metadatos.</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-slate-900/50 rounded p-2 text-center">
-                        <p className="text-[10px] text-slate-500 mb-1">Respuesta</p>
+                      <div className="bg-muted/30 rounded p-2 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1">Respuesta</p>
                         <p className="text-xs font-bold text-emerald-400">{debugResult ? 'Recibida' : '—'}</p>
                       </div>
-                      <div className="bg-slate-900/50 rounded p-2 text-center">
-                        <p className="text-[10px] text-slate-500 mb-1">Tiempo</p>
-                        <p className="text-xs font-bold text-slate-300">{debugResult ? `${debugResult.time}ms` : '—'}</p>
+                      <div className="bg-muted/30 rounded p-2 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1">Tiempo</p>
+                        <p className="text-xs font-bold text-foreground">{debugResult ? `${debugResult.time}ms` : '—'}</p>
                       </div>
-                      <div className="bg-slate-900/50 rounded p-2 text-center">
-                        <p className="text-[10px] text-slate-500 mb-1">Tokens</p>
-                        <p className="text-xs font-bold text-slate-300">{debugResult ? debugResult.tokens : '—'}</p>
+                      <div className="bg-muted/30 rounded p-2 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1">Tokens</p>
+                        <p className="text-xs font-bold text-foreground">{debugResult ? debugResult.tokens : '—'}</p>
                       </div>
-                      <div className="bg-slate-900/50 rounded p-2 text-center">
-                        <p className="text-[10px] text-slate-500 mb-1">Agente</p>
-                        <p className="text-xs font-bold text-slate-300">{debugAgent}</p>
+                      <div className="bg-muted/30 rounded p-2 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-1">Agente</p>
+                        <p className="text-xs font-bold text-foreground">{debugAgent}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -1013,7 +942,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
             <div className="grid gap-4 lg:grid-cols-3">
               {/* Table Selector */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium text-slate-200">Tablas</Label>
+                <Label className="text-sm font-medium text-foreground">Tablas</Label>
                 <div className="space-y-1 max-h-[500px] overflow-y-auto">
                   {dbTables.map(table => (
                     <button
@@ -1023,18 +952,18 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                         'w-full text-left p-2 rounded text-xs font-mono transition-colors flex items-center justify-between',
                         selectedTable === table
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                       )}
                     >
                       <span>{table}</span>
                       {tableData?.name === table && (
-                        <Badge className="h-4 text-[9px] bg-slate-700 text-slate-400">{tableData.count}</Badge>
+                        <Badge className="h-4 text-[9px] bg-muted text-muted-foreground">{tableData.count}</Badge>
                       )}
                     </button>
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={exportTable} variant="outline" size="sm" className="border-slate-600 text-slate-400 hover:text-slate-200 text-xs flex-1">
+                  <Button onClick={exportTable} variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground text-xs flex-1">
                     <Download className="h-3 w-3 mr-1" />
                     Exportar CSV
                   </Button>
@@ -1044,30 +973,30 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
               {/* Table Data */}
               <div className="lg:col-span-2 space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-slate-200">
+                  <Label className="text-sm font-medium text-foreground">
                     {selectedTable} {tableData?.name === selectedTable && `(${tableData.count} registros)`}
                   </Label>
-                  <Button variant="ghost" size="sm" className="text-slate-500 text-xs" onClick={fetchTableData}>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={fetchTableData}>
                     <RefreshCw className="h-3 w-3 mr-1" />
                     Refrescar
                   </Button>
                 </div>
-                <div className="bg-[#0a0f1c] rounded-lg border border-slate-800 overflow-hidden">
+                <div className="bg-muted/30 rounded-lg border border-border overflow-hidden">
                   <div className="max-h-[300px] overflow-auto">
                     {tableData && tableData.records.length > 0 ? (
                       <table className="w-full text-xs font-mono">
-                        <thead className="bg-slate-800/50 sticky top-0">
+                        <thead className="bg-muted/50 sticky top-0">
                           <tr>
                             {Object.keys(tableData.records[0]).map(col => (
-                              <th key={col} className="text-left p-2 text-slate-500 border-b border-slate-700/50 whitespace-nowrap">{col}</th>
+                              <th key={col} className="text-left p-2 text-muted-foreground border-b border-border/50 whitespace-nowrap">{col}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {tableData.records.slice(0, 10).map((row, i) => (
-                            <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                            <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
                               {Object.values(row).map((val, j) => (
-                                <td key={j} className="p-2 text-slate-400 max-w-[200px] truncate">
+                                <td key={j} className="p-2 text-muted-foreground max-w-[200px] truncate">
                                   {typeof val === 'string' ? (val.length > 40 ? val.slice(0, 40) + '...' : val) : JSON.stringify(val)}
                                 </td>
                               ))}
@@ -1076,7 +1005,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                         </tbody>
                       </table>
                     ) : (
-                      <div className="text-center py-12 text-slate-600">
+                      <div className="text-center py-12 text-muted-foreground">
                         <Database className="h-6 w-6 mx-auto mb-2" />
                         Selecciona una tabla para ver sus datos
                       </div>
@@ -1085,22 +1014,22 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                 </div>
 
                 {/* Raw Query */}
-                <Card className="border-slate-700/50 bg-slate-800/30">
+                <Card className="border-border/50 bg-muted/30">
                   <CardContent className="p-3 space-y-3">
-                    <Label className="text-xs text-slate-300">Consulta SQL (solo SELECT)</Label>
+                    <Label className="text-xs text-foreground">Consulta SQL (solo SELECT)</Label>
                     <div className="flex gap-2">
                       <Input
                         placeholder="SELECT * FROM Contact WHERE status = 'active' LIMIT 10"
-                        className="flex-1 h-8 bg-slate-900/50 border-slate-700 text-slate-200 font-mono text-xs"
+                        className="flex-1 h-8 bg-muted/30 border-border text-foreground font-mono text-xs"
                         value={rawQuery}
                         onChange={(e) => setRawQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && addLog('info', 'database', `Query ejecutada: ${rawQuery}`)}
                       />
-                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8" onClick={() => addLog('info', 'database', `Query ejecutada: ${rawQuery}`)}>
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-foreground text-xs h-8" onClick={() => addLog('info', 'database', `Query ejecutada: ${rawQuery}`)}>
                         <Play className="h-3 w-3" />
                       </Button>
                     </div>
-                    <p className="text-[10px] text-slate-600">
+                    <p className="text-[10px] text-muted-foreground">
                       <AlertTriangle className="h-3 w-3 inline mr-1" />
                       Solo se permiten consultas SELECT de lectura. Las consultas destructivas serán bloqueadas.
                     </p>
@@ -1114,11 +1043,11 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
           <TabsContent value="config" className="space-y-4 pb-6">
             <div className="grid gap-4 lg:grid-cols-2">
               {/* Feature Flags */}
-              <Card className="border-slate-700/50 bg-slate-800/30">
+              <Card className="border-border/50 bg-muted/30">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex items-center gap-2">
-                    <ToggleLeft className="h-4 w-4 text-slate-400" />
-                    <Label className="text-sm font-medium text-slate-200">Feature Flags</Label>
+                    <ToggleLeft className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium text-foreground">Feature Flags</Label>
                   </div>
                   <div className="space-y-3">
                     {[
@@ -1128,14 +1057,24 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                       { key: 'conversationAnalytics' as const, label: 'Analytics de Conversación', desc: 'Analiza métricas de conversaciones' },
                       { key: 'developerMode' as const, label: 'Modo Desarrollador', desc: 'Muestra información técnica en la UI' },
                     ].map(flag => (
-                      <div key={flag.key} className="flex items-center justify-between p-2 rounded bg-slate-900/30">
+                      <div key={flag.key} className="flex items-center justify-between p-2 rounded bg-muted/40/30">
                         <div>
-                          <p className="text-xs font-medium text-slate-300">{flag.label}</p>
-                          <p className="text-[10px] text-slate-600">{flag.desc}</p>
+                          <p className="text-xs font-medium text-foreground">{flag.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{flag.desc}</p>
                         </div>
                         <Switch
                           checked={featureFlags[flag.key]}
-                          onCheckedChange={(checked) => setFeatureFlags(prev => ({ ...prev, [flag.key]: checked }))}
+                          onCheckedChange={async (checked) => {
+                            const updated = { ...featureFlags, [flag.key]: checked }
+                            setFeatureFlags(updated)
+                            try {
+                              await fetch('/api/developer/config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ workspaceId, featureFlags: updated }),
+                              })
+                            } catch { /* silently ignore */ }
+                          }}
                           className="data-[state=checked]:bg-emerald-500"
                         />
                       </div>
@@ -1146,16 +1085,16 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
 
               {/* Rate Limits */}
               <div className="space-y-4">
-                <Card className="border-slate-700/50 bg-slate-800/30">
+                <Card className="border-border/50 bg-muted/30">
                   <CardContent className="p-4 space-y-4">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-slate-400" />
-                      <Label className="text-sm font-medium text-slate-200">Rate Limits</Label>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-sm font-medium text-foreground">Rate Limits</Label>
                     </div>
                     <div className="space-y-4">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs text-slate-400">Mensajes por hora</Label>
+                          <Label className="text-xs text-muted-foreground">Mensajes por hora</Label>
                           <span className="text-xs font-mono text-emerald-400">{rateLimits.messagesPerHour}</span>
                         </div>
                         <Slider
@@ -1164,12 +1103,12 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           min={10}
                           max={500}
                           step={10}
-                          className="[&>span]:bg-slate-600 [&>span>span]:bg-emerald-500"
+                          className="[&>span]:bg-border [&>span>span]:bg-emerald-500"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs text-slate-400">Llamadas IA por minuto</Label>
+                          <Label className="text-xs text-muted-foreground">Llamadas IA por minuto</Label>
                           <span className="text-xs font-mono text-emerald-400">{rateLimits.aiCallsPerMinute}</span>
                         </div>
                         <Slider
@@ -1178,12 +1117,12 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           min={1}
                           max={100}
                           step={1}
-                          className="[&>span]:bg-slate-600 [&>span>span]:bg-emerald-500"
+                          className="[&>span]:bg-border [&>span>span]:bg-emerald-500"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs text-slate-400">Max Contactos</Label>
+                          <Label className="text-xs text-muted-foreground">Max Contactos</Label>
                           <span className="text-xs font-mono text-emerald-400">{rateLimits.maxContacts.toLocaleString()}</span>
                         </div>
                         <Slider
@@ -1192,7 +1131,7 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                           min={100}
                           max={100000}
                           step={100}
-                          className="[&>span]:bg-slate-600 [&>span>span]:bg-emerald-500"
+                          className="[&>span]:bg-border [&>span>span]:bg-emerald-500"
                         />
                       </div>
                     </div>
@@ -1200,24 +1139,19 @@ export function DeveloperView({ workspaceId }: DeveloperViewProps) {
                 </Card>
 
                 {/* Environment */}
-                <Card className="border-slate-700/50 bg-slate-800/30">
+                <Card className="border-border/50 bg-muted/30">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <Info className="h-4 w-4 text-slate-400" />
-                      <Label className="text-sm font-medium text-slate-200">Variables de Entorno</Label>
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-sm font-medium text-foreground">Variables de Entorno</Label>
                     </div>
                     <div className="space-y-1.5 font-mono text-xs">
-                      {[
-                        { key: 'DATABASE_URL', val: 'file:./db/dev.db', masked: false },
-                        { key: 'NODE_ENV', val: 'development', masked: false },
-                        { key: 'GROQ_API_KEY', val: 'gsk_••••••••••••', masked: true },
-                        { key: 'DEEPSEEK_API_KEY', val: 'sk-••••••••••••', masked: true },
-                        { key: 'NEXTAUTH_SECRET', val: '••••••••••••', masked: true },
-                        { key: 'APP_VERSION', val: '1.0.0', masked: false },
-                      ].map(env => (
-                        <div key={env.key} className="flex items-center justify-between p-1.5 rounded bg-slate-900/50">
-                          <span className="text-slate-500">{env.key}</span>
-                          <span className={env.masked ? 'text-slate-600' : 'text-slate-400'}>{env.val}</span>
+                      {(envVars.length > 0 ? envVars : [
+                        { key: 'Cargando...', val: '', masked: false },
+                      ]).map(env => (
+                        <div key={env.key} className="flex items-center justify-between p-1.5 rounded bg-muted/30">
+                          <span className="text-muted-foreground">{env.key}</span>
+                          <span className={env.masked ? 'text-muted-foreground' : 'text-muted-foreground'}>{env.val}</span>
                         </div>
                       ))}
                     </div>

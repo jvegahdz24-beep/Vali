@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { whatsAppManager } from '@/lib/whatsapp/connection'
-import { db } from '@/lib/db'
 import { validateBody, whatsappSendSchema } from '@/lib/validations'
-import { requireAuth, requireWorkspace, errorResponse, getClientIp } from '@/lib/api-auth'
+import { requireAuth, errorResponse, getClientIp } from '@/lib/api-auth'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { sendOperatorMessage } from '@/lib/whatsapp/operator-send'
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ error: 'No workspace in session' }, { status: 400 })
+    }
 
     const ip = getClientIp(req)
-    const rl = await rateLimit(`${ip}:whatsapp:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
+    const rl = rateLimit(`${ip}:whatsapp:send`, RATE_LIMITS.whatsappSend.limit, RATE_LIMITS.whatsappSend.windowMs)
     if (!rl.success) {
       return NextResponse.json({ error: 'Demasiados mensajes. Intenta más tarde.', code: 'RATE_LIMITED' }, { status: 429 })
     }
@@ -23,47 +25,48 @@ export async function POST(req: NextRequest) {
 
     const { phone, message, workspaceId, conversationId, contactId } = validation.data
 
-    // Verify workspace access before sending
-    if (workspaceId) {
-      await requireWorkspace(workspaceId, session.userId)
+    // SECURITY: enforce that the workspaceId in the request body (if any)
+    // matches the authenticated session — prevents cross-tenant sends.
+    if (workspaceId && workspaceId !== session.workspaceId) {
+      return NextResponse.json({ error: 'Workspace mismatch', code: 'FORBIDDEN' }, { status: 403 })
     }
 
-    const result = await whatsAppManager.sendMessage(phone, message)
+    // conversationId is required so the message can be persisted into
+    // the right thread. Refuse early with a clear 400 if missing.
+    if (!conversationId) {
+      return NextResponse.json(
+        { error: 'conversationId is required', code: 'VALIDATION_ERROR' },
+        { status: 400 },
+      )
+    }
+
+    // Routing is handled inside sendOperatorMessage:
+    //   Workspace.waChannel === 'meta' → Meta Cloud API
+    //   otherwise                       → Baileys (per-workspace manager)
+    const result = await sendOperatorMessage({
+      workspaceId: session.workspaceId,
+      phone,
+      message,
+      conversationId,
+      contactId: contactId ?? null,
+    })
 
     if (!result.success) {
-      return NextResponse.json({ success: false, error: result.error || 'Error al enviar mensaje' }, { status: 503 })
+      // Channel send failed (Baileys disconnected, Meta 4xx, etc.)
+      return NextResponse.json(
+        { success: false, error: result.error || 'Error al enviar mensaje' },
+        { status: 503 },
+      )
     }
 
-    if (conversationId && workspaceId) {
-      try {
-        await db.message.create({
-          data: {
-            conversationId,
-            content: message,
-            type: 'text',
-            direction: 'outbound',
-            senderType: 'human',
-            externalId: result.id || undefined,
-          },
-        })
-
-        await db.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: new Date(), lastMessagePreview: message.slice(0, 100) },
-        })
-
-        if (contactId) {
-          await db.contact.update({
-            where: { id: contactId },
-            data: { lastMessageAt: new Date() },
-          })
-        }
-      } catch (dbError) {
-        console.error('[WhatsApp Send] DB save error (message was still sent):', dbError)
-      }
-    }
-
-    return NextResponse.json({ success: true, messageId: result.id, phone, message })
+    return NextResponse.json({
+      success: true,
+      messageId: result.messageId,
+      phone,
+      message,
+      delivered: result.delivered,
+      persisted: result.persisted,
+    })
   } catch (error) {
     return errorResponse(error, 'Error al enviar mensaje')
   }

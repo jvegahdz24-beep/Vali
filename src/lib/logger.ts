@@ -4,11 +4,6 @@
 // Tags: [AUTH] [CORE] [AI] [WHATSAPP] [DB] [ERROR] [MIDDLEWARE] [FLOW]
 // ═══════════════════════════════════════════════════════════════
 
-/** Debug logger — only outputs when DEBUG env var is set */
-export const debug = process.env.DEBUG === 'true'
-  ? (...args: unknown[]) => console.log('[DEBUG]', ...args)
-  : () => {}
-
 export type LogTag =
   | 'AUTH'
   | 'CORE'
@@ -22,14 +17,6 @@ export type LogTag =
   | 'FRONTEND'
   | 'FOLLOWUP'
   | 'STAGE_TRACKER'
-  | 'EVENT_BUS'
-  | 'LIFE_ENGINE'
-  | 'HEALTH'
-  | 'REDIS'
-  | 'QUEUE'
-  | 'METRICS'
-  | 'TRACING'
-  | 'OBSERVABILITY'
 
 export interface LogEntry {
   tag: string       // e.g. "[CORE]"
@@ -64,7 +51,7 @@ function formatEntry(entry: LogEntry): string {
 /**
  * Log an info message.
  */
-export function logInfo(tag: string, step: string, meta: Record<string, unknown> = {}) {
+export function logInfo(tag: LogTag, step: string, meta: Record<string, unknown> = {}) {
   const entry: LogEntry = { tag: `[${tag}]`, step, status: 'info', meta }
   console.log(formatEntry(entry))
 }
@@ -72,7 +59,7 @@ export function logInfo(tag: string, step: string, meta: Record<string, unknown>
 /**
  * Log a successful operation.
  */
-export function logOk(tag: string, step: string, meta: Record<string, unknown> = {}) {
+export function logOk(tag: LogTag, step: string, meta: Record<string, unknown> = {}) {
   const entry: LogEntry = { tag: `[${tag}]`, step, status: 'ok', meta }
   console.log(formatEntry(entry))
 }
@@ -80,7 +67,7 @@ export function logOk(tag: string, step: string, meta: Record<string, unknown> =
 /**
  * Log a warning (non-fatal).
  */
-export function logWarn(tag: string, step: string, meta: Record<string, unknown> = {}) {
+export function logWarn(tag: LogTag, step: string, meta: Record<string, unknown> = {}) {
   const entry: LogEntry = { tag: `[${tag}]`, step, status: 'warn', meta }
   console.warn(formatEntry(entry))
 }
@@ -89,7 +76,7 @@ export function logWarn(tag: string, step: string, meta: Record<string, unknown>
  * Log an error (fatal or important).
  * Also stores it as the last error for the debug endpoint.
  */
-export function logError(tag: string, step: string, error: unknown, meta: Record<string, unknown> = {}) {
+export function logError(tag: LogTag, step: string, error: unknown, meta: Record<string, unknown> = {}) {
   const message = error instanceof Error ? error.message : String(error)
   const stack = error instanceof Error ? error.stack : undefined
 
@@ -112,7 +99,7 @@ export function logError(tag: string, step: string, error: unknown, meta: Record
 /**
  * Create a step timer for measuring latency.
  */
-export function logTimer(tag: string, step: string) {
+export function logTimer(tag: LogTag, step: string) {
   const start = Date.now()
   return {
     /**

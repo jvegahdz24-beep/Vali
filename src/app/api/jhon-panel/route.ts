@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
       contactName: string
       contactPhone: string | null
       contactScore: number
+      contactAvatar: string | null
+      contactChannel: string
     })[] = []
 
     for (const contact of contacts) {
@@ -56,6 +58,8 @@ export async function GET(req: NextRequest) {
           contactName: `${contact.firstName}${contact.lastName ? ' ' + contact.lastName : ''}`,
           contactPhone: contact.phone,
           contactScore: contact.leadScore,
+          contactAvatar: contact.avatar || null,
+          contactChannel: contact.source || 'whatsapp',
         })
       } catch {
         // Skip failed interpretations silently

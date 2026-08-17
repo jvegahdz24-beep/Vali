@@ -4,11 +4,20 @@
 // Handles: images, videos, audio, documents, stickers, locations
 // ═══════════════════════════════════════════════════════════════
 
-import { debug } from '@/lib/logger'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { db } from '@/lib/db'
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+/** Convert Baileys Uint8Array fields (fileSha256, mediaKey) to hex string or null */
+function bytesToHex(val: Uint8Array | string | null | undefined): string | null {
+  if (!val) return null
+  if (typeof val === 'string') return val
+  if (val instanceof Uint8Array) return Buffer.from(val).toString('hex')
+  return null
+}
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -84,8 +93,8 @@ export function detectMedia(msg: any): MediaInfo | null {
       fileSize: img.fileLength || undefined,
       width: img.width || undefined,
       height: img.height || undefined,
-      mediaKey: img.mediaKey,
-      externalId: img.fileSha256 || img.mediaKey,
+      mediaKey: bytesToHex(img.mediaKey) || undefined,
+      externalId: bytesToHex(img.fileSha256) || bytesToHex(img.mediaKey) || undefined,
     }
   }
 
@@ -101,8 +110,8 @@ export function detectMedia(msg: any): MediaInfo | null {
       width: vid.width || undefined,
       height: vid.height || undefined,
       durationSeconds: vid.seconds || undefined,
-      mediaKey: vid.mediaKey,
-      externalId: vid.fileSha256 || vid.mediaKey,
+      mediaKey: bytesToHex(vid.mediaKey) || undefined,
+      externalId: bytesToHex(vid.fileSha256) || bytesToHex(vid.mediaKey) || undefined,
     }
   }
 
@@ -119,8 +128,8 @@ export function detectMedia(msg: any): MediaInfo | null {
       ),
       fileSize: aud.fileLength || undefined,
       durationSeconds: aud.seconds || undefined,
-      mediaKey: aud.mediaKey,
-      externalId: aud.fileSha256 || aud.mediaKey,
+      mediaKey: bytesToHex(aud.mediaKey) || undefined,
+      externalId: bytesToHex(aud.fileSha256) || bytesToHex(aud.mediaKey) || undefined,
     }
   }
 
@@ -134,8 +143,8 @@ export function detectMedia(msg: any): MediaInfo | null {
       caption: doc.caption || undefined,
       fileSize: doc.fileLength || undefined,
       // pageCount removed — not in Baileys 7 document message
-      mediaKey: doc.mediaKey,
-      externalId: doc.fileSha256 || doc.mediaKey,
+      mediaKey: bytesToHex(doc.mediaKey) || undefined,
+      externalId: bytesToHex(doc.fileSha256) || bytesToHex(doc.mediaKey) || undefined,
     }
   }
 
@@ -149,8 +158,8 @@ export function detectMedia(msg: any): MediaInfo | null {
       fileSize: stk.fileLength || undefined,
       width: stk.width || undefined,
       height: stk.height || undefined,
-      mediaKey: stk.mediaKey,
-      externalId: stk.fileSha256 || stk.mediaKey,
+      mediaKey: bytesToHex(stk.mediaKey) || undefined,
+      externalId: bytesToHex(stk.fileSha256) || bytesToHex(stk.mediaKey) || undefined,
     }
   }
 
@@ -197,6 +206,7 @@ export async function downloadAndSaveMedia(
     workspaceId?: string
     conversationId?: string
     messageId?: string
+    waMsgKey?: string
   } = {}
 ): Promise<string | null> {
   ensureDirs()
@@ -244,11 +254,21 @@ export async function downloadAndSaveMedia(
         metadata: JSON.stringify({
           mediaType: mediaInfo.type,
           isVoiceNote: mediaInfo.mimeType === 'audio/ogg',
+          waMsgKey: options.waMsgKey,
         }),
       },
     })
 
-    debug(`[Media] Saved: ${mediaInfo.fileName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
+    // Vincula al mensaje: si el mensaje de WhatsApp ya se guardó (mismo key),
+    // enlázalo ahora. Si aún no existe, message-processor lo enlazará al guardarse.
+    if (!options.messageId && options.waMsgKey) {
+      const existing = await db.message.findFirst({ where: { externalId: options.waMsgKey }, select: { id: true, conversationId: true } }).catch(() => null)
+      if (existing) {
+        await db.mediaFile.update({ where: { id: mediaRecord.id }, data: { messageId: existing.id, conversationId: existing.conversationId } }).catch(() => {})
+      }
+    }
+
+    console.log(`[Media] Saved: ${mediaInfo.fileName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error downloading/saving media:', error)
@@ -258,7 +278,7 @@ export async function downloadAndSaveMedia(
 
 // ─── Download Buffer Helper ───────────────────────────────────
 
-async function downloadMediaBuffer(sock: any, msg: any): Promise<Buffer | null> {
+export async function downloadMediaBuffer(sock: any, msg: any): Promise<Buffer | null> {
   try {
     // Baileys v7 downloadMediaMessage
     const { downloadMediaMessage } = await import('@whiskeysockets/baileys')
@@ -312,7 +332,7 @@ async function generateThumbnail(
       .webp({ quality: 70 })
       .toFile(thumbPath)
 
-    debug(`[Media] Thumbnail created: ${thumbFileName}`)
+    console.log(`[Media] Thumbnail created: ${thumbFileName}`)
     return thumbPath
   } catch (error) {
     console.warn('[Media] Thumbnail generation failed:', error)
@@ -387,7 +407,7 @@ async function saveMetadataOnly(
       },
     })
 
-    debug(`[Media] Metadata saved: ${fileName} (ID: ${mediaRecord.id})`)
+    console.log(`[Media] Metadata saved: ${fileName} (ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error saving metadata:', error)
@@ -452,7 +472,7 @@ export async function saveUploadedFile(
       },
     })
 
-    debug(`[Media] Upload saved: ${safeName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
+    console.log(`[Media] Upload saved: ${safeName} (${buffer.length} bytes, ID: ${mediaRecord.id})`)
     return mediaRecord.id
   } catch (error) {
     console.error('[Media] Error saving uploaded file:', error)

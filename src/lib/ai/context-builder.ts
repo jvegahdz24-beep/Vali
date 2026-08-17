@@ -9,11 +9,15 @@
  * Se lee de workspace.settings (JSON) en la DB.
  */
 export interface BusinessContext {
-  businessType?: string   // Tipo de negocio: "clínica dental", "restaurante", "taller mecánico"
-  offer?: string          // Qué vende: "servicios dentales", "comida italiana", "reparación de autos"
-  avgTicket?: string      // Ticket promedio: "$2,000 MXN", "$500 MXN", "$3,000 MXN"
-  leadSource?: string     // Canal principal: "redes sociales", "Google", "referidos", "WhatsApp"
-  goal?: string           // Objetivo: "generar ventas", "agendar citas", "cerrar contratos"
+  businessType?: string      // Tipo de negocio: "clínica dental", "restaurante", "taller mecánico"
+  offer?: string             // Qué vende: "servicios dentales", "comida italiana", "reparación de autos"
+  avgTicket?: string         // Ticket promedio: "$2,000 MXN", "$500 MXN", "$3,000 MXN"
+  leadSource?: string        // Canal principal: "redes sociales", "Google", "referidos", "WhatsApp"
+  goal?: string              // Objetivo: "generar ventas", "agendar citas", "cerrar contratos"
+  businessAddress?: string   // Dirección física: "Av. Insurgentes 123, Col. Roma, CDMX"
+  businessPhone?: string     // Teléfono de contacto: "+52 55 1234 5678"
+  businessHours?: string     // Horario de atención: "Lun–Vie 9am–6pm, Sáb 10am–2pm"
+  appointmentUrl?: string    // Liga para agendar cita: "https://calendly.com/minegocio"
 }
 
 /**
@@ -25,6 +29,10 @@ const DEFAULTS: Required<BusinessContext> = {
   avgTicket: 'no especificado',
   leadSource: 'redes sociales',
   goal: 'generar ventas',
+  businessAddress: '',
+  businessPhone: '',
+  businessHours: '',
+  appointmentUrl: '',
 }
 
 /**
@@ -48,6 +56,20 @@ export function buildDynamicContext(settings: Record<string, unknown> | null | u
   const avgTicket = s.avgTicket || DEFAULTS.avgTicket
   const leadSource = s.leadSource || DEFAULTS.leadSource
   const goal = s.goal || DEFAULTS.goal
+  const businessAddress = s.businessAddress || ''
+  const businessPhone = s.businessPhone || ''
+  const businessHours = s.businessHours || ''
+  const appointmentUrl = s.appointmentUrl || ''
+
+  const contactLines: string[] = []
+  if (businessAddress) contactLines.push(`- Dirección: ${businessAddress}`)
+  if (businessPhone) contactLines.push(`- Teléfono: ${businessPhone}`)
+  if (businessHours) contactLines.push(`- Horario: ${businessHours}`)
+  if (appointmentUrl) contactLines.push(`- Agendar cita: ${appointmentUrl}`)
+
+  const contactBlock = contactLines.length > 0
+    ? `\n${contactLines.join('\n')}`
+    : ''
 
   return `INFORMACIÓN DEL NEGOCIO:
 
@@ -55,14 +77,14 @@ export function buildDynamicContext(settings: Record<string, unknown> | null | u
 - Qué vende: ${offer}
 - Ticket promedio: ${avgTicket}
 - Canal principal: ${leadSource}
-- Objetivo: ${goal}
+- Objetivo: ${goal}${contactBlock}
 
 INSTRUCCIONES DE ADAPTACIÓN:
 
 Adapta toda la conversación a este contexto.
 Habla como experto en este tipo de negocio.
 Usa ejemplos, analogías y cierres relevantes a esta industria.
-
+${contactLines.length > 0 ? 'Cuando el cliente pregunte por dirección, teléfono, horario o citas, usa los datos de arriba — NUNCA inventes ni uses placeholders.' : ''}
 No cambies la estructura de ventas.
 No rompas la lógica de diagnóstico → problema → solución → cierre.`
 }

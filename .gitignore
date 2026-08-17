@@ -91,6 +91,11 @@ prompt
 keepalive*.sh
 analyze-frames.*
 
+# --- Locked/internal files ---
+_amad_ecosystem.config.js
+/let
+/production
+
 # --- Misc ---
 *.mp4
 *.mp3
@@ -105,3 +110,24 @@ mini-services/
 .idea/
 .vscode/
 *.code-workspace
+*.tmp
+
+# AMAD backup: excluir dependencias/artefactos/medios regenerables
+node_modules/
+.next/
+dist/
+build/
+out/
+.cache/
+.turbo/
+.vercel/
+coverage/
+*.mkv
+*.webm
+
+# Local secrets and customer exports — never commit
+.env
+.env.*
+!.env.example
+public/exports/
+scripts/persona-backup-*

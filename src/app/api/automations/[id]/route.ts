@@ -7,8 +7,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function GET(
   req: NextRequest,
@@ -22,9 +21,7 @@ export async function GET(
     if (!automation) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
-
-    // RBAC: Any workspace member can view an automation
-    await rbac.canRead(session, automation.workspaceId)
+    await requireWorkspace(automation.workspaceId, session.userId)
 
     return Response.json({
       ...automation,
@@ -50,9 +47,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
-
-    // RBAC: Update automation requires owner or admin
-    await rbac.ownerOrAdmin(session, existing.workspaceId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'automations.manage')
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
@@ -90,9 +86,8 @@ export async function DELETE(
     if (!existing) {
       return Response.json({ error: 'Automation not found' }, { status: 404 })
     }
-
-    // RBAC: Delete automation requires owner or admin
-    await rbac.ownerOrAdmin(session, existing.workspaceId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'automations.manage')
 
     await db.automation.delete({ where: { id } })
 

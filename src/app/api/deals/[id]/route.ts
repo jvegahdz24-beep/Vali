@@ -7,7 +7,9 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
+import { publish } from '@/lib/event-bus'
+import { recordDealOutcome } from '@/lib/engine/outcomes'
 
 export async function GET(
   req: NextRequest,
@@ -55,8 +57,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Deal no encontrado' }, { status: 404 })
     }
-
-    await requireWorkspace(existing.workspaceId, session.userId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     const { stageId, title, value, currency, description, status, contactId, assignedTo, lostReason, expectedCloseDate, order } = body
 
@@ -96,6 +98,18 @@ export async function PUT(
       },
     })
 
+    // Ciclo de aprendizaje gBrain: registra el resultado del cierre (lo lee engine/memory.ts)
+    if (status === 'won' || status === 'lost') {
+      await recordDealOutcome({
+        workspaceId: existing.workspaceId,
+        contactId: deal.contact?.id ?? existing.contactId,
+        won: status === 'won',
+        dealId: deal.id,
+        value: deal.value,
+        reason: status === 'lost' ? (lostReason ?? existing.lostReason ?? null) : null,
+      })
+    }
+
     // Track event
     if (status === 'won' || status === 'lost' || stageId) {
       await db.analyticsEvent.create({
@@ -107,10 +121,50 @@ export async function PUT(
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage?.name,
+            stage: deal.stage.name,
           }),
         },
       })
+    }
+
+    // FIX P0: Publish deal.stage.changed event + persist DealStageHistory
+    if (stageId && stageId !== existing.stageId) {
+      const oldStage = await db.pipelineStage.findUnique({ where: { id: existing.stageId } })
+      const contactName = deal.contact ? `${deal.contact.firstName} ${(deal.contact as any).lastName || ''}`.trim() : undefined
+
+      // Persist history record
+      await db.dealStageHistory.create({
+        data: {
+          dealId: deal.id,
+          workspaceId: existing.workspaceId,
+          contactId: deal.contact?.id ?? existing.contactId ?? undefined,
+          userId: session.userId,
+          oldStageId: existing.stageId,
+          oldStageName: oldStage?.name ?? null,
+          newStageId: deal.stageId,
+          newStageName: deal.stage.name,
+        },
+      })
+
+      publish('deal.stage.changed', {
+        dealId: deal.id,
+        workspaceId: existing.workspaceId,
+        contactId: deal.contact?.id ?? existing.contactId,
+        contactName,
+        oldStageId: existing.stageId,
+        oldStageName: oldStage?.name,
+        newStageId: deal.stageId,
+        newStageName: deal.stage.name,
+        value: deal.value,
+      })
+
+      // FLUJOS POR ETAPA (contrato §2c): ejecuta las MarketingAutomation
+      // configuradas para esta etapa (bienvenida/seguimiento/cierre/postventa),
+      // enviando por el canal preferido del lead. Fire-and-forget: nunca rompe
+      // el guardado del deal.
+      import('@/lib/marketing/stage-flows')
+        .then((m) => m.runStageFlows(existing.workspaceId, deal.contact?.id ?? existing.contactId, deal.stage.name, deal.stageId))
+        .catch(() => {})
     }
 
     return Response.json({ success: true, deal })
@@ -132,8 +186,8 @@ export async function DELETE(
     if (!deal) {
       return Response.json({ error: 'Deal no encontrado' }, { status: 404 })
     }
-
-    await requireWorkspace(deal.workspaceId, session.userId)
+    const member = await requireWorkspace(deal.workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     await db.deal.delete({ where: { id } })
 

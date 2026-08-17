@@ -84,11 +84,14 @@ describe('API: Seed', () => {
     expect(typeof mod.POST).toBe('function')
   })
 
-  it('GET should return error without auth (protected endpoint)', async () => {
+  it('GET should return seed status', async () => {
     const mod = await import('@/app/api/seed/route')
     const req = new Request('http://localhost/api/seed') as any
     const res = await mod.GET(req)
-    expect([401, 500]).toContain(res.status)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data).toHaveProperty('seeded')
+    expect(data).toHaveProperty('stats')
   })
 })
 

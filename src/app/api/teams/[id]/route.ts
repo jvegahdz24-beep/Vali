@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
 
 export async function PUT(
   req: NextRequest,
@@ -21,6 +21,10 @@ export async function PUT(
     if (!role || !workspaceId) {
       return Response.json({ error: 'role y workspaceId son requeridos' }, { status: 400 })
     }
+
+    // Solo owner/admin del workspace pueden cambiar roles.
+    const caller = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(caller.role, 'team.manage')
 
     const validRoles = ['owner', 'admin', 'member', 'viewer']
     if (!validRoles.includes(role)) {
@@ -79,6 +83,10 @@ export async function DELETE(
     if (!workspaceId) {
       return Response.json({ error: 'workspaceId es requerido' }, { status: 400 })
     }
+
+    // Solo owner/admin del workspace pueden eliminar miembros.
+    const caller = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(caller.role, 'team.manage')
 
     // Verify member exists
     const member = await db.workspaceMember.findUnique({

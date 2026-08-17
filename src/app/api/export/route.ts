@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { logAudit, getRequestIp } from '@/lib/audit'
 
 export async function GET(request: NextRequest) {
   try {
@@ -127,6 +128,12 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         )
     }
+
+    // ValiGuard: registrar la exportaci\u00f3n de datos en la bit\u00e1cora de auditor\u00eda
+    try {
+      const rowCount = Math.max(0, csvContent.split('\n').length - 1)
+      await logAudit({ workspaceId: workspaceId!, userId: session.userId, action: 'export_csv', resourceType: type, ip: getRequestIp(request), metadata: { type, rows: rowCount, filename } })
+    } catch { /* nunca romper la exportaci\u00f3n */ }
 
     return new Response('\ufeff' + csvContent, {
       status: 200,

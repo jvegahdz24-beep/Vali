@@ -7,7 +7,8 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
+import { logAudit, getRequestIp } from '@/lib/audit'
 
 export async function GET(
   req: NextRequest,
@@ -55,8 +56,8 @@ export async function PUT(
     if (!existing) {
       return Response.json({ error: 'Contact not found' }, { status: 404 })
     }
-
-    await requireWorkspace(existing.workspaceId, session.userId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     // Check duplicate phone if changed
     if (phone && phone !== existing.phone) {
@@ -111,14 +112,19 @@ export async function DELETE(
     if (!existing) {
       return Response.json({ error: 'Contact not found' }, { status: 404 })
     }
-
-    await requireWorkspace(existing.workspaceId, session.userId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     // Soft delete: set status to archived
     const contact = await db.contact.update({
       where: { id },
       data: { status: 'archived' },
     })
+
+    // ValiGuard: registrar eliminación de contacto (cambio crítico)
+    try {
+      await logAudit({ workspaceId: existing.workspaceId, userId: session.userId, action: 'delete_contact', resourceId: id, resourceType: 'contact', ip: getRequestIp(req), metadata: { name: `${existing.firstName || ''} ${existing.lastName || ''}`.trim(), phone: existing.phone } })
+    } catch { /* no romper el borrado */ }
 
     return Response.json({ success: true, contact })
   } catch (error) {

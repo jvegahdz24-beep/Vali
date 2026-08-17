@@ -6,14 +6,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCheckoutSession, PLAN_PRICE_IDS } from '@/lib/stripe'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
+import {
+  CouponValidationError,
+  ensureStripeCouponForCheckout,
+  validateCouponForCheckout,
+} from '@/lib/billing-coupons'
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const body = await req.json()
-    const { workspaceId, planKey, billingPeriod = 'monthly' } = body
+    const { workspaceId, planKey, billingPeriod = 'monthly', couponCode } = body
 
     if (!workspaceId || !planKey) {
       return NextResponse.json(
@@ -21,9 +25,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-
-    // RBAC: Billing requires owner or admin
-    await rbac.ownerOrAdmin(session, workspaceId)
+    const caller = await requireWorkspace(workspaceId, session.userId, { allowSuspended: true })
+    requirePermission(caller.role, 'billing.manage')
 
     // Validate plan key
     if (!PLAN_PRICE_IDS[planKey]) {
@@ -58,6 +61,12 @@ export async function POST(req: NextRequest) {
     }
 
     const ownerEmail = workspace.members[0]?.user?.email
+    const validatedCoupon = couponCode
+      ? await validateCouponForCheckout({ code: couponCode, workspaceId, planKey })
+      : null
+    const stripeCouponId = validatedCoupon
+      ? await ensureStripeCouponForCheckout(validatedCoupon.coupon)
+      : null
 
     // Create Stripe Checkout session
     const result = await createCheckoutSession({
@@ -65,14 +74,32 @@ export async function POST(req: NextRequest) {
       planKey,
       billingPeriod,
       customerEmail: ownerEmail || undefined,
+      ...(validatedCoupon && stripeCouponId && {
+        coupon: {
+          id: validatedCoupon.coupon.id,
+          code: validatedCoupon.coupon.code,
+          stripeCouponId,
+          label: validatedCoupon.label,
+        },
+      }),
     })
 
     return NextResponse.json({
       success: true,
       checkoutUrl: result.checkoutUrl,
       sessionId: result.sessionId,
+      appliedCoupon: validatedCoupon
+        ? {
+            code: validatedCoupon.coupon.code,
+            label: validatedCoupon.label,
+            duration: validatedCoupon.coupon.duration,
+          }
+        : null,
     })
   } catch (error) {
+    if (error instanceof CouponValidationError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.statusCode })
+    }
     return errorResponse(error, 'Error al crear sesión de pago')
   }
 }

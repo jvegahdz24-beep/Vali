@@ -4,46 +4,31 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    await requireAuth(request)
-    const { whatsAppManager } = await import('@/lib/whatsapp/connection')
-    const status = whatsAppManager.getStatus()
-
-    // Check auth directory
-    let authInfo: Record<string, unknown> = {}
-    try {
-      const fs = await import('fs')
-      const path = await import('path')
-      const authDir = path.join(process.cwd(), '.whatsapp-auth')
-      const credsPath = path.join(authDir, 'creds.json')
-      if (fs.existsSync(credsPath)) {
-        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'))
-        authInfo = {
-          hasCreds: true,
-          registered: creds.registered,
-          me: creds.me?.id || null,
-          hasAdvisoryKey: !!creds.advisoryQuestionEncryptedKey,
-          platform: creds.platform,
-          lastSync: creds.lastAccountSyncTimestamp,
-        }
-      } else {
-        const files = fs.existsSync(authDir) ? fs.readdirSync(authDir) : []
-        authInfo = { hasCreds: false, authFiles: files.length }
-      }
-    } catch (e: any) {
-      authInfo = { error: e.message }
+    const session = await requireAuth(req)
+    if (!session.workspaceId) {
+      return NextResponse.json({ error: 'No workspace in session' }, { status: 400 })
     }
+
+    const { tryGetWhatsAppManager, whatsAppRegistry } = await import('@/lib/whatsapp/connection')
+    const manager = tryGetWhatsAppManager(session.workspaceId)
+    const status = manager
+      ? manager.getStatus()
+      : { workspaceId: session.workspaceId, connected: false, connecting: false, qrCode: null, phone: null, lastActivity: null }
 
     return NextResponse.json({
       status,
-      authInfo,
-      singletonAlive: true,
+      workspaceId: session.workspaceId,
+      totalConnectedWorkspaces: whatsAppRegistry.all().filter((m) => m.isConnected()).length,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
-    return errorResponse(error, 'Error al obtener diagnóstico de WhatsApp')
+  } catch (error: any) {
+    return NextResponse.json({
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    }, { status: 500 })
   }
 }

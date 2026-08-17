@@ -1,123 +1,103 @@
 // ═══════════════════════════════════════════════════════════════
-// ValiAutoFlow — Telegram Webhook Endpoint
-// POST /api/telegram/webhook — Receives updates from Telegram
-//
-// Telegram sends bot updates here. We parse the update, identify
-// which workspace bot it belongs to, and process the command.
-//
-// SECURITY: Telegram webhook secret token verification
+// ValiAutoFlow — Telegram Webhook (Section 15)
+// Receives Telegram updates and saves chatId when user sends /start
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import {
-  handleTelegramWebhook,
-  verifyTelegramWebhook,
-  type TelegramUpdate,
-} from '@/lib/telegram-control'
 
-/**
- * POST /api/telegram/webhook
- *
- * Telegram Bot API sends updates here when a message is sent
- * to any registered bot. The bot token is extracted from the
- * URL path or query parameter to identify the workspace.
- */
-export async function POST(req: NextRequest) {
-  try {
-    // ─── Security: Verify webhook secret ──────────────────────
-    const secretHeader = req.headers.get('x-telegram-bot-api-secret-token')
-    const envSecret = process.env.TELEGRAM_WEBHOOK_SECRET
-
-    if (envSecret && secretHeader !== envSecret) {
-      return NextResponse.json(
-        { error: 'Invalid webhook secret' },
-        { status: 403 }
-      )
-    }
-
-    // ─── Parse update ─────────────────────────────────────────
-    const body: TelegramUpdate = await req.json()
-
-    if (!body.update_id) {
-      return NextResponse.json(
-        { error: 'Invalid update format' },
-        { status: 400 }
-      )
-    }
-
-    // ─── Identify bot ─────────────────────────────────────────
-    // The bot token can be passed via query param (for flexibility)
-    // or we can look it up from the message context
-    const botTokenFromQuery = req.nextUrl.searchParams.get('bot_token')
-
-    if (!botTokenFromQuery) {
-      // Try to find bot by checking all active bots
-      // Telegram doesn't send the bot token in the update payload,
-      // so we need another strategy. We iterate through active bots.
-      // For production, each bot should have a unique webhook URL.
-      console.warn('[Telegram Webhook] No bot_token query param — trying all active bots')
-
-      const activeBots = await db.telegramBot.findMany({
-        where: { isActive: true, chatId: { not: null } },
-        select: { botToken: true, chatId: true, workspaceId: true },
-      })
-
-      if (activeBots.length === 0) {
-        return NextResponse.json({ ok: true, processed: false, reason: 'no_active_bots' })
-      }
-
-      // Try each bot — only the correct one will have the right update_id pattern
-      // In practice, each bot should have its own webhook URL with bot_token param
-      // This is a fallback for single-bot setups
-      if (activeBots.length === 1) {
-        const result = await handleTelegramWebhook(body, activeBots[0].botToken)
-        return NextResponse.json({ ok: true, ...result })
-      }
-
-      return NextResponse.json(
-        { error: 'Multiple bots active — specify bot_token query param' },
-        { status: 400 }
-      )
-    }
-
-    // ─── Verify bot exists ────────────────────────────────────
-    const bot = await db.telegramBot.findFirst({
-      where: { botToken: botTokenFromQuery },
-      select: { id: true, isActive: true },
-    })
-
-    if (!bot || !bot.isActive) {
-      return NextResponse.json(
-        { error: 'Bot not found or inactive' },
-        { status: 404 }
-      )
-    }
-
-    // ─── Process the update ───────────────────────────────────
-    const result = await handleTelegramWebhook(body, botTokenFromQuery)
-
-    return NextResponse.json({
-      ok: true,
-      ...result,
-    })
-  } catch (error) {
-    console.error('[Telegram Webhook Error]', error)
-    return NextResponse.json(
-      { error: 'Webhook processing failed' },
-      { status: 500 }
-    )
+interface TelegramUpdate {
+  update_id: number
+  message?: {
+    message_id: number
+    from?: { id: number; first_name?: string; username?: string }
+    chat: { id: number; type: string }
+    text?: string
   }
 }
 
-/**
- * GET /api/telegram/webhook
- * Health check — Telegram uses this to verify the webhook endpoint.
- */
-export async function GET() {
-  return NextResponse.json({
-    status: 'active',
-    service: 'ValiAutoFlow Telegram Webhook',
-    timestamp: new Date().toISOString(),
-  })
+export async function POST(req: NextRequest) {
+  try {
+    // Verify webhook secret to prevent spoofed requests
+    const secret = req.headers.get('x-telegram-bot-api-secret-token')
+    const expected = process.env.TELEGRAM_WEBHOOK_SECRET
+    if (expected && secret !== expected) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const update: TelegramUpdate = await req.json()
+    const message = update.message
+    if (!message?.text || !message.from) {
+      return NextResponse.json({ ok: true })
+    }
+
+    const text = message.text.trim()
+    const chatId = String(message.chat.id)
+
+    // Handle /start [token] — link Telegram chat to user account
+    if (text.startsWith('/start')) {
+      const parts = text.split(' ')
+      const linkToken = parts[1] // optional token to identify user
+
+      if (linkToken) {
+        // Find user by telegramLinkToken (stored in metadata or a dedicated column)
+        // For now, find user whose email matches a stored token mapping
+        const session = await db.session.findFirst({
+          where: { sessionToken: linkToken },
+          include: { user: true },
+        })
+
+        if (session?.user) {
+          await db.user.update({
+            where: { id: session.user.id },
+            data: { telegramChatId: chatId },
+          })
+
+          // Send confirmation
+          const token = process.env.TELEGRAM_BOT_TOKEN
+          if (token) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: `✅ Tu cuenta ValiAutoFlow ha sido vinculada correctamente. Recibirás notificaciones aquí.`,
+              }),
+            })
+          }
+        } else {
+          // Token not found — just acknowledge
+          const token = process.env.TELEGRAM_BOT_TOKEN
+          if (token) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: `⚠️ Token inválido o expirado. Genera un nuevo enlace desde la configuración de ValiAutoFlow.`,
+              }),
+            })
+          }
+        }
+      } else {
+        // Plain /start without token — inform about linking
+        const token = process.env.TELEGRAM_BOT_TOKEN
+        if (token) {
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: `👋 Bienvenido a ValiAutoFlow. Para vincular tu cuenta, ve a Ajustes → Notificaciones y usa el enlace de Telegram.`,
+            }),
+          })
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error('[Telegram webhook]', error)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
 }

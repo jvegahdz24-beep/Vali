@@ -3,11 +3,15 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { requireAuth } from '@/lib/api-auth'
 
-// FIX C7: Added requireAuth — project download no longer public
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request)
-  if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
+  // Only superadmins can download the project source
+  try {
+    const session = await requireAuth(request)
+    if (session.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {

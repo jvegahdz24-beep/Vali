@@ -6,8 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
-import { rbac } from '@/lib/rbac'
+import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
 
 export async function POST(
   req: NextRequest,
@@ -17,16 +16,17 @@ export async function POST(
     const session = await requireAuth(req)
     const { id } = await params
 
-    const automation = await db.automation.findUnique({
-      where: { id },
+    // SEC-014: Include workspaceId filter so not-found and forbidden
+    // both return 404 — prevents IDOR oracle (existence leak)
+    const workspaceId = session.workspaceId
+    const automation = await db.automation.findFirst({
+      where: workspaceId ? { id, workspaceId } : { id },
     })
 
     if (!automation) {
       return Response.json({ error: 'Automatización no encontrada' }, { status: 404 })
     }
-
-    // RBAC: Run automation requires member or higher
-    await rbac.canWrite(session, automation.workspaceId)
+    await requireWorkspace(automation.workspaceId, session.userId)
 
     const runTimestamp = new Date()
 

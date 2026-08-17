@@ -7,14 +7,17 @@
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireWorkspace, errorResponse } from '@/lib/api-auth'
+import { requireAuth, requireWorkspace, requirePermission, errorResponse } from '@/lib/api-auth'
+import { canViewAllData } from '@/lib/rbac'
+import { recordDealOutcome } from '@/lib/engine/outcomes'
+import { markInventorySoldForWonDeal, reserveInventoryForDeal, releaseInventoryForDeal, markContactAsCustomer } from '@/lib/crm/inventory-sync'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req)
     const { searchParams } = new URL(req.url)
     const workspaceId = searchParams.get('workspaceId')
-    await requireWorkspace(workspaceId!, session.userId)
+    const member = await requireWorkspace(workspaceId!, session.userId)
 
     const pipelineId = searchParams.get('pipelineId')
     const stageId = searchParams.get('stageId')
@@ -27,6 +30,8 @@ export async function GET(req: NextRequest) {
       ...(stageId ? { stageId } : {}),
       ...(contactId ? { contactId } : {}),
       ...(status ? { status } : {}),
+      // RBAC: el vendedor solo ve los tratos asignados a él.
+      ...(canViewAllData(member.role) ? {} : { assignedTo: session.userId }),
     }
 
     const deals = await db.deal.findMany({
@@ -64,7 +69,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { workspaceId, pipelineId, stageId, contactId, title, value, currency, description, source, expectedCloseDate } = body
 
-    await requireWorkspace(workspaceId, session.userId)
+    const member = await requireWorkspace(workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     if (!pipelineId || !stageId || !title) {
       return Response.json(
@@ -107,7 +113,7 @@ export async function POST(req: NextRequest) {
       data: {
         workspaceId,
         eventType: 'deal_created',
-        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage?.name }),
+        eventData: JSON.stringify({ dealId: deal.id, title, value: deal.value, stage: deal.stage.name }),
       },
     })
 
@@ -131,9 +137,8 @@ export async function PUT(req: NextRequest) {
     if (!existing) {
       return Response.json({ error: 'Deal not found' }, { status: 404 })
     }
-
-    // Verify workspace ownership — prevent cross-tenant modification
-    await requireWorkspace(existing.workspaceId, session.userId)
+    const member = await requireWorkspace(existing.workspaceId, session.userId)
+    requirePermission(member.role, 'crm.write')
 
     const updateData: Record<string, unknown> = {}
     if (stageId !== undefined) updateData.stageId = stageId
@@ -171,18 +176,97 @@ export async function PUT(req: NextRequest) {
       },
     })
 
+    // Normaliza el STATUS al arrastrar a una etapa ganadora/perdedora: antes un
+    // drag a "Cerrado Ganado" dejaba status 'active' → el tablero mostraba
+    // "Ganados $0" aunque el embudo tuviera cierres (inconsistencia reportada).
+    let effectiveStatus = status as string | undefined
+    if (stageId && status === undefined && existing.status !== 'won' && existing.status !== 'lost') {
+      if (deal.stage?.isWon) {
+        await db.deal.update({ where: { id }, data: { status: 'won', wonAt: new Date() } })
+        deal.status = 'won'
+        effectiveStatus = 'won'
+        console.log(`[Deals] ${id} arrastrado a etapa ganadora → status=won automático`)
+      } else if (deal.stage?.isLost) {
+        await db.deal.update({ where: { id }, data: { status: 'lost', lostAt: new Date() } })
+        deal.status = 'lost'
+        effectiveStatus = 'lost'
+        console.log(`[Deals] ${id} arrastrado a etapa perdedora → status=lost automático`)
+      }
+    }
+
+    // Ciclo de aprendizaje gBrain: registra el resultado del cierre (lo lee engine/memory.ts)
+    if (effectiveStatus === 'won' || effectiveStatus === 'lost') {
+      await recordDealOutcome({
+        workspaceId: existing.workspaceId,
+        contactId: deal.contact?.id ?? existing.contactId,
+        won: effectiveStatus === 'won',
+        dealId: deal.id,
+        value: deal.value,
+        reason: effectiveStatus === 'lost' ? (lostReason ?? existing.lostReason ?? null) : null,
+      })
+    }
+
+    // ── Conexiones Pipeline → Inventario/Contacto (no críticas, nunca rompen el PUT) ──
+    // GANADO: unidad → vendida + contacto → etiqueta 'cliente'.
+    // Entra a NEGOCIACIÓN: unidad → apartada. Sale de Negociación sin ganar o
+    // se PIERDE: unidad apartada por este trato → liberada.
+    const becameWon = effectiveStatus === 'won' && existing.status !== 'won'
+    const becameLost = effectiveStatus === 'lost' && existing.status !== 'lost'
+    const dealContactId = deal.contact?.id ?? existing.contactId
+    const normStage = (s?: string | null) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+    let oldStageName = ''
+    if (stageId && existing.stageId && existing.stageId !== stageId) {
+      const oldStage = await db.pipelineStage.findUnique({ where: { id: existing.stageId }, select: { name: true } }).catch(() => null)
+      oldStageName = normStage(oldStage?.name)
+    }
+    const newStageName = normStage(deal.stage?.name)
+    const enteredNego = !!stageId && newStageName === 'negociacion' && oldStageName !== 'negociacion' && existing.stageId !== stageId
+    const leftNegoWithoutWin = !!stageId && oldStageName === 'negociacion' && newStageName !== 'negociacion' && !becameWon
+
+    if (becameWon) {
+      await markInventorySoldForWonDeal({
+        workspaceId: existing.workspaceId, dealId: deal.id, dealTitle: deal.title, contactId: dealContactId,
+      }).catch(() => {})
+      if (dealContactId) {
+        await markContactAsCustomer({
+          workspaceId: existing.workspaceId, contactId: dealContactId, dealId: deal.id, dealTitle: deal.title,
+        }).catch(() => {})
+        // POSTVENTA (2026-07-20): al ganar arranca la secuencia post-sale
+        // (7d check-in / 30d referidos+reseña / 180d servicio / 365d aniversario).
+        try {
+          const { schedulePostSale } = await import('@/lib/crm/postsale')
+          await schedulePostSale({ workspaceId: existing.workspaceId, contactId: dealContactId, dealTitle: deal.title })
+        } catch { /* nunca rompe el PUT */ }
+        // ATRIBUCIÓN (F2): la venta se acredita al agente IA que llevó la conversación.
+        try {
+          const { attributeSaleToAgent } = await import('@/lib/agent-factory/attribution')
+          await attributeSaleToAgent(existing.workspaceId, dealContactId)
+        } catch { /* no crítico */ }
+      }
+    } else if (enteredNego) {
+      await reserveInventoryForDeal({
+        workspaceId: existing.workspaceId, dealId: deal.id, dealTitle: deal.title, contactId: dealContactId,
+      }).catch(() => {})
+    }
+    if (becameLost || leftNegoWithoutWin) {
+      await releaseInventoryForDeal({
+        workspaceId: existing.workspaceId, dealId: deal.id, contactId: dealContactId,
+        reason: becameLost ? 'trato perdido' : 'el trato salió de Negociación',
+      }).catch(() => {})
+    }
+
     // Track event
-    if (status === 'won' || status === 'lost' || stageId) {
+    if (effectiveStatus === 'won' || effectiveStatus === 'lost' || stageId) {
       await db.analyticsEvent.create({
         data: {
           workspaceId: existing.workspaceId,
-          eventType: status === 'won' ? 'deal_won' : status === 'lost' ? 'deal_lost' : 'deal_updated',
+          eventType: effectiveStatus === 'won' ? 'deal_won' : effectiveStatus === 'lost' ? 'deal_lost' : 'deal_updated',
           eventData: JSON.stringify({
             dealId: deal.id,
             title: deal.title,
             value: deal.value,
             status: deal.status,
-            stage: deal.stage?.name,
+            stage: deal.stage.name,
           }),
         },
       })

@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, errorResponse } from '@/lib/api-auth'
 import { DEFAULT_PIPELINE_STAGES, PLANS } from '@/lib/constants'
 import crypto from 'crypto'
 import { randomPick, randomInt, randomDaysBack } from '@/lib/seeded-random'
@@ -73,7 +72,7 @@ const MEXICAN_CITIES = [
   'Cancún', 'Querétaro', 'Mérida', 'León', 'Aguascalientes',
 ]
 
-const SOURCES = ['whatsapp', 'facebook', 'instagram', 'google', 'webform', 'referral', 'telegram']
+const SOURCES = ['whatsapp', 'facebook', 'instagram', 'google', 'webform', 'referral']
 const PHONES_MOCK = [
   '5512345678', '5523456789', '5534567890', '5545678901', '5556789012',
   '5567890123', '5578901234', '5589012345', '5590123456', '5501234567',
@@ -160,11 +159,10 @@ function randomEmail(name: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── Production guard: ALWAYS disabled in production ────
-    // Demo seed is permanently disabled. Real leads come from WhatsApp only.
+    // ─── Production guard — completely disabled in production ───
     if (process.env.NODE_ENV === 'production') {
       return NextResponse.json(
-        { error: 'Seed endpoint is permanently disabled in production. Real contacts are created via WhatsApp.', code: 'SEED_DISABLED' },
+        { error: 'Not found' },
         { status: 404 }
       )
     }
@@ -178,7 +176,7 @@ export async function POST(req: NextRequest) {
       const expectedPin = process.env.SEED_PIN
       if (!expectedPin) {
         return NextResponse.json(
-          { error: 'SEED_PIN no configurado. No se permite reset sin PIN.', code: 'FORBIDDEN' },
+          { error: 'SEED_PIN no configurado', code: 'FORBIDDEN' },
           { status: 403 }
         )
       }
@@ -237,7 +235,7 @@ export async function POST(req: NextRequest) {
           name: 'ValiAutoFlow',
           slug: 'valiflow-jvega',
           ownerId: user.id,
-          industry: 'services',
+          industry: 'automotive',
           logo: null,
           plan: 'pro',
           maxContacts: defaultPlan.limits.maxContacts,
@@ -473,7 +471,7 @@ export async function POST(req: NextRequest) {
         data: {
           workspaceId: workspace.id,
           contactId: contact.id,
-          channel: randomPick(['whatsapp', 'whatsapp', 'whatsapp', 'telegram', 'webchat']),
+          channel: randomPick(['whatsapp', 'whatsapp', 'whatsapp', 'webchat']),
           status: contact.leadScore > 60 ? 'active' : randomPick(['active', 'active', 'closed', 'pending']),
           assignedAgentId: contact.leadScore > 70 ? 'sales' : 'qualifier',
           unreadCount: randomBetween(0, 3),
@@ -670,13 +668,6 @@ export async function POST(req: NextRequest) {
           secret: 'valiflow-whatsapp-secret-2026',
           isActive: true,
         },
-        {
-          workspaceId: workspace.id,
-          channel: 'telegram',
-          webhookUrl: '/api/webhooks/telegram',
-          secret: 'valiflow-telegram-secret-2026',
-          isActive: false,
-        },
       ],
     })
     console.log(`[Seed] Webhook configs created`)
@@ -738,7 +729,8 @@ export async function POST(req: NextRequest) {
 // GET endpoint to check seed status
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req)
+    // GET status check — always allow (needed by frontend to detect if DB is ready)
+    // Only POST (actual seeding) is guarded in production
 
     const workspaceCount = await db.workspace.count()
     const contactCount = await db.contact.count()
@@ -760,6 +752,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error('[Seed Status Error]', error)
-    return errorResponse(error, 'Internal server error')
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

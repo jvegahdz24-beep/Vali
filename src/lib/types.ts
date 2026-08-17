@@ -5,7 +5,7 @@
 // ─── Enums & Union Types ──────────────────────────────────────
 
 export type AgentType = 'qualifier' | 'sales' | 'followup' | 'coach' | 'custom'
-export type AIProvider = 'groq' | 'glm' | 'deepseek' | 'gemini' | 'openai'
+export type AIProvider = 'groq' | 'glm' | 'deepseek' | 'gemini' | 'openai' | 'minimax'
 export type Channel = 'whatsapp' | 'telegram' | 'instagram' | 'webchat'
 export type MessageDirection = 'inbound' | 'outbound'
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'document' | 'location' | 'interactive'
@@ -20,7 +20,9 @@ export type FollowUpStatus = 'pending' | 'sent' | 'failed' | 'cancelled'
 export type FollowUpTriggerType = 'inactivity' | 'scheduled' | 'event-based' | 'deal-stage-change'
 export type AutomationTriggerType = 'webhook' | 'schedule' | 'event' | 'message_received' | 'deal_stage_change'
 export type UserRole = 'owner' | 'admin' | 'member' | 'viewer'
-export type PersonalityName = 'JHON' | 'professional' | 'friendly' | 'aggressive'
+export type PersonalityName =
+  | 'JHON' | 'professional' | 'friendly' | 'aggressive'
+  | 'EXPERTO' | 'SELLER' | 'CERRADOR' | 'SERVICIO'
 export type IntentType =
   | 'greeting'
   | 'question'
@@ -186,6 +188,13 @@ export interface RevenueEngineDecision {
   followUpTasks: FollowUpTaskConfig[]
   crmUpdates: CRMUpdate[]
   agentRouting: AgentRoutingDecision
+  aiMetrics?: {
+    model: string
+    tokensUsed: number
+    latencyMs: number
+    systemPrompt?: string
+    analysisBlock?: string
+  }
 }
 
 export interface JHONResponse {
@@ -197,6 +206,16 @@ export interface JHONResponse {
   isClosingAttempt: boolean
   suggestedReplies: string[]
   urgencyBoost?: string
+  /** Internal: AI call metrics, stripped before sending to client */
+  _aiMetrics?: {
+    model: string
+    tokensUsed: number
+    latencyMs: number
+    /** Debug-only: the full system prompt sent to the model (captured when debug is on) */
+    systemPrompt?: string
+    /** Debug-only: the engine analysis block injected into the prompt */
+    analysisBlock?: string
+  }
 }
 
 export interface FollowUpTaskConfig {
@@ -261,18 +280,25 @@ export interface DealClosability {
 // ─── Plan Configuration ───────────────────────────────────────
 
 export interface PlanLimits {
-  maxContacts: number
-  maxAgents: number
-  maxConversations: number
+  maxContacts: number           // -1 = unlimited
+  maxAgents: number             // -1 = unlimited
+  maxConversations: number      // -1 = unlimited
+  maxAiMessages: number         // AI messages per month, -1 = unlimited
   maxPipelines: number
   maxAutomations: number
   maxMembers: number
+  maxFollowUpDays: number       // How many days ahead follow-ups can be scheduled
   aiProviders: number
   whatsappEnabled: boolean
   telegramEnabled: boolean
   instagramEnabled: boolean
   whiteLabel: boolean
   apiAccess: boolean
+  archetypesEnabled: boolean    // Psychological archetypes (Pro+)
+  leadScoringEnabled: boolean   // Advanced lead scoring (Pro+)
+  fullAnalyticsEnabled: boolean // Complete analytics (Pro+)
+  valiGuardEnabled: boolean     // ValiGuard complete (Enterprise)
+  customAiTraining: boolean     // AI trained per industry (Enterprise)
 }
 
 export interface PlanConfig {

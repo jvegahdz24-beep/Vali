@@ -32,8 +32,26 @@ export async function GET(req: NextRequest) {
                     id: true,
                     firstName: true,
                     lastName: true,
+                    phone: true,
+                    email: true,
                     avatar: true,
+                    source: true,
+                    tags: true,
+                    notes: true,
                     leadScore: true,
+                    temperature: true,
+                    lastMessageAt: true,
+                    createdAt: true,
+                    leadProfile: {
+                      select: {
+                        preferredProduct: true,
+                        budget: true,
+                        mainObjection: true,
+                        timeline: true,
+                        urgencyLevel: true,
+                        priceSensitivity: true,
+                      },
+                    },
                   },
                 },
               },
@@ -46,6 +64,34 @@ export async function GET(req: NextRequest) {
     })) as Array<any>
 
     // Calculate totals
+    // Deduplicate deals by contactId across all stages — keep only the deal
+    // at the most advanced stage (highest order) per contact per pipeline.
+    for (const p of pipelines) {
+      const stageOrderMap = new Map<string, number>(p.stages.map((s: { id: string; order: number }) => [s.id, s.order]))
+      const bestDealByContact = new Map<string, { stageId: string; order: number }>()
+
+      // First pass: find the best (most advanced) deal per contactId
+      for (const s of p.stages) {
+        for (const d of s.deals) {
+          if (!d.contactId) continue
+          const existing = bestDealByContact.get(d.contactId)
+          const thisOrder = stageOrderMap.get(d.stageId) ?? 0
+          if (!existing || thisOrder > existing.order) {
+            bestDealByContact.set(d.contactId, { stageId: d.stageId, order: thisOrder })
+          }
+        }
+      }
+
+      // Second pass: remove deals that are not the best for their contact
+      for (const s of p.stages) {
+        s.deals = s.deals.filter((d: { contactId: string | null; stageId: string }) => {
+          if (!d.contactId) return true // keep deals without contact
+          const best = bestDealByContact.get(d.contactId)
+          return best?.stageId === d.stageId
+        })
+      }
+    }
+
     const totalPipelineValue = pipelines.reduce(
       (sum, p) =>
         sum +

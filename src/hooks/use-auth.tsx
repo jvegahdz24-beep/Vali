@@ -28,14 +28,17 @@ export interface AuthUser {
   workspaceId?: string
   workspaceName?: string
   workspaceSlug?: string
-  workspacePlan?: string
+  /** Logo del espacio de trabajo (URL) — se muestra en el menú lateral. */
+  workspaceLogo?: string | null
+  /** Per-workspace role (owner/admin/member/viewer) — drives RBAC in the UI. */
+  workspaceRole?: string | null
 }
 
 interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -81,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchUser])
 
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string; role?: string }> => {
     try {
       // FIX: Add AbortController with timeout (15s) to prevent infinite hang
       const controller = new AbortController()
@@ -106,17 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!res.ok) {
-        // Include details for debugging internal errors
-        const baseError = (data.error as string) || 'Error al iniciar sesión'
-        const details = data.details as string | undefined
-        const fullError = details && details !== 'undefined' ? `${baseError} (${details.slice(0, 120)})` : baseError
-        return { success: false, error: fullError }
+        return { success: false, error: (data.error as string) || 'Error al iniciar sesión' }
       }
 
       if (data.success) {
         // Fetch full user info after login
         await fetchUser()
-        return { success: true }
+        return { success: true, role: (data.user as Record<string, unknown>)?.role as string | undefined }
       }
 
       return { success: false, error: 'Error desconocido' }
