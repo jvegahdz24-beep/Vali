@@ -43,13 +43,11 @@ export function useSSEDashboard({
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectDelay = useRef(RECONNECT_DELAY_MS)
   const mountedRef = useRef(true)
+  const connectRef = useRef<() => void>(() => {})
 
   const onEventRef = useRef(onEvent)
   const onConnectRef = useRef(onConnect)
   const onDisconnectRef = useRef(onDisconnect)
-  onEventRef.current = onEvent
-  onConnectRef.current = onConnect
-  onDisconnectRef.current = onDisconnect
 
   const connect = useCallback(() => {
     if (!mountedRef.current || disabled || !workspaceId) return
@@ -89,7 +87,7 @@ export function useSSEDashboard({
 
       // Exponential backoff capped at 30s
       reconnectTimer.current = setTimeout(() => {
-        if (mountedRef.current) connect()
+        if (mountedRef.current) connectRef.current()
       }, reconnectDelay.current)
 
       reconnectDelay.current = Math.min(
@@ -98,6 +96,13 @@ export function useSSEDashboard({
       )
     }
   }, [workspaceId, disabled])
+
+  useEffect(() => {
+    onEventRef.current = onEvent
+    onConnectRef.current = onConnect
+    onDisconnectRef.current = onDisconnect
+    connectRef.current = connect
+  }, [onEvent, onConnect, onDisconnect, connect])
 
   useEffect(() => {
     mountedRef.current = true

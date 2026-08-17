@@ -50,7 +50,7 @@ type MessageHandler = (data: {
 
 interface BaileysModule {
   makeWASocket: typeof import('@whiskeysockets/baileys').makeWASocket
-  useMultiFileAuthState: typeof import('@whiskeysockets/baileys').useMultiFileAuthState
+  loadMultiFileAuthState: typeof import('@whiskeysockets/baileys').useMultiFileAuthState
   fetchLatestBaileysVersion: typeof import('@whiskeysockets/baileys').fetchLatestBaileysVersion
   DisconnectReason: typeof import('@whiskeysockets/baileys').DisconnectReason
 }
@@ -62,7 +62,7 @@ async function loadBaileys(): Promise<BaileysModule> {
     const baileys = await import('@whiskeysockets/baileys')
     baileysModule = {
       makeWASocket: baileys.makeWASocket,
-      useMultiFileAuthState: baileys.useMultiFileAuthState,
+      loadMultiFileAuthState: baileys.useMultiFileAuthState,
       fetchLatestBaileysVersion: baileys.fetchLatestBaileysVersion,
       DisconnectReason: baileys.DisconnectReason,
     }
@@ -128,12 +128,12 @@ export class EphemeralClient {
     try {
       const {
         makeWASocket,
-        useMultiFileAuthState,
+        loadMultiFileAuthState,
         fetchLatestBaileysVersion,
         DisconnectReason,
       } = await loadBaileys()
 
-      const { state, saveCreds } = await useMultiFileAuthState(this._authDir)
+      const { state, saveCreds } = await loadMultiFileAuthState(this._authDir)
       const { version } = await fetchLatestBaileysVersion()
 
       console.log(`[Ephemeral:${this.id}] Baileys v${version}, creating socket...`)

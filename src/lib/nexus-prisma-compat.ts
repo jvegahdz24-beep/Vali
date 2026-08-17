@@ -48,6 +48,9 @@ export type NexusModelDelegates = {
 }
 
 declare module '@prisma/client' {
+  // Intentional declaration merging: these delegates are added to PrismaClient
+  // only while the gated Nexus schema remains un-migrated.
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface PrismaClient extends NexusModelDelegates {}
 }
 

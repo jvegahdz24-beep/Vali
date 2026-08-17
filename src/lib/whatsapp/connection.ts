@@ -27,7 +27,7 @@ import { detectMedia, downloadAndSaveMedia, downloadMediaBuffer } from './media-
 import { understandMedia } from '@/lib/ai/media-understanding'
 import { fetchAvatarDataUri } from '@/lib/whatsapp/avatar'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { isDuplicateMessage } from './shared-dedup'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -292,14 +292,13 @@ export class WhatsAppManager {
 
   private _loadLidMappings(authDir: string) {
     try {
-      const fs = require('fs') as typeof import('fs')
-      const entries = fs.readdirSync(authDir)
+      const entries = readdirSync(authDir)
       let count = 0
       for (const entry of entries) {
         const reverseMatch = entry.match(/^lid-mapping-(\d+)_reverse\.json$/)
         if (reverseMatch) {
           try {
-            const phone = JSON.parse(fs.readFileSync(`${authDir}/${entry}`, 'utf8'))
+            const phone = JSON.parse(readFileSync(`${authDir}/${entry}`, 'utf8'))
             if (typeof phone === 'string') {
               this._lidToPhone.set(reverseMatch[1], phone)
               count++
@@ -310,7 +309,7 @@ export class WhatsAppManager {
         const forwardMatch = entry.match(/^lid-mapping-(\d+)\.json$/)
         if (forwardMatch) {
           try {
-            const lid = JSON.parse(fs.readFileSync(`${authDir}/${entry}`, 'utf8'))
+            const lid = JSON.parse(readFileSync(`${authDir}/${entry}`, 'utf8'))
             if (typeof lid === 'string') {
               this._lidToPhone.set(lid, forwardMatch[1])
               count++

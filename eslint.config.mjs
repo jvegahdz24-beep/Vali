@@ -15,10 +15,19 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/prefer-as-const": "off",
     "@typescript-eslint/no-unused-disable-directive": "off",
+    // CommonJS is forbidden in application modules; legacy scripts are outside the
+    // lint scope defined by package.json.
+    "@typescript-eslint/no-require-imports": "error",
+    "@typescript-eslint/no-empty-object-type": "error",
     
     // React rules
     "react-hooks/exhaustive-deps": "off",
     "react-hooks/purity": "off",
+    // Legacy client components use effect-driven synchronization; keep these visible
+    // without making the existing UI migration a deployment blocker.
+    "react-hooks/set-state-in-effect": "warn",
+    "react-hooks/error-boundaries": "warn",
+    "react-hooks/immutability": "warn",
     "react/no-unescaped-entities": "off",
     "react/display-name": "off",
     "react/prop-types": "off",

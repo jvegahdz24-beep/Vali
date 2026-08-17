@@ -5,6 +5,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { logInfo, logOk, logError } from '@/lib/logger'
+import { registerEventSubscribers } from '@/lib/event-bus-subscribers'
+import { startCronScheduler } from '@/lib/cron-scheduler'
+import { startWorkers } from '@/lib/workers'
 
 let _bootstrapped = false
 
@@ -23,7 +26,6 @@ export function bootstrapApp(): void {
 
   try {
     // 1. Register event bus subscribers
-    const { registerEventSubscribers } = require('@/lib/event-bus-subscribers')
     registerEventSubscribers()
     logOk('SYSTEM', 'bootstrap: event subscribers registered')
   } catch (err) {
@@ -32,7 +34,6 @@ export function bootstrapApp(): void {
 
   try {
     // 2. Start cron scheduler
-    const { startCronScheduler } = require('@/lib/cron-scheduler')
     startCronScheduler()
     logOk('SYSTEM', 'bootstrap: cron scheduler started')
   } catch (err) {
@@ -41,7 +42,6 @@ export function bootstrapApp(): void {
 
   try {
     // 3. Start BullMQ workers (followups, events, AI tasks, sync, notifications)
-    const { startWorkers } = require('@/lib/workers')
     startWorkers()
     logOk('SYSTEM', 'bootstrap: bullmq workers started')
   } catch (err) {
