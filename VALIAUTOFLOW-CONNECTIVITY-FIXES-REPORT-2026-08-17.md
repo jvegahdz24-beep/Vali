@@ -68,6 +68,7 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | CI/CD run `32050356672` | **Lint/typecheck, tests y build aprobados**; el artifact `standalone-build` se subió y descargó correctamente. |
 | CI/CD run `32212232905` sobre `72e9714` | **Lint/typecheck, tests y build aprobados**; el artifact standalone volvió a generarse correctamente. |
 | Job `deploy` del run `32212232905` | **Bloqueado por la validación explícita de configuración**: `DEPLOY_SSH_KEY` y `DEPLOY_HOST` llegaron vacíos; no se intentó SSH ni se ejecutó ningún cambio en producción. |
+| CI/CD run `32212660501` sobre `26a8211` | **Lint/typecheck, tests y build aprobados**; deploy volvió a detenerse en la validación previa por secretos vacíos. |
 | Diagnóstico aislado por archivo Vitest | **45/45 archivos aprobados**. |
 | `node --check` | **Scripts Node válidos**: runner de cron y copier de assets. |
 | `npm run lint` | **0 errores y 54 warnings preexistentes**, principalmente reglas de React Hooks y directivas ESLint no utilizadas. |
@@ -108,10 +109,22 @@ Después de habilitar los secretos, se debe relanzar el workflow y validar login
 
 ## Estado de entrega
 
-El código corregido está subido a GitHub en la rama `production-ready`; el Pull Request **#4** ya fue integrado en la línea de trabajo y la rama activa de despliegue es la release unificada. El run CI/CD `32212232905`, disparado por el commit `72e9714`, terminó con lint/typecheck, pruebas y build aprobados. El artifact `standalone-build` se generó correctamente y el job deploy lo descargó antes de validar los secretos.
+El código corregido está subido a GitHub en la rama `production-ready`; el Pull Request **#4** ya fue integrado en la línea de trabajo y la rama activa de despliegue es la release unificada. El run CI/CD `32212660501`, disparado por el commit documental `26a8211`, terminó con lint/typecheck, pruebas y build aprobados. El artifact `standalone-build` se generó correctamente y el job deploy lo descargó antes de validar los secretos. El run funcional anterior `32212232905` produjo el mismo resultado sobre el código corregido.
 
 El despliegue productivo **no se completó**. El job `deploy` falló en la nueva validación previa porque `DEPLOY_SSH_KEY` y `DEPLOY_HOST` llegaron vacíos. El fallo no demuestra un problema del código ni del artifact: confirma que el workflow ahora se detiene de manera segura antes de intentar una conexión incompleta. No se realizaron cambios en el servidor productivo.
 
 El siguiente paso manual para Jonathan es configurar los secretos de Actions, confirmar si el destino es un host Linux/SSH o el servidor Windows/NSSM documentado, preparar el usuario y directorio remotos, y ejecutar la migración MySQL pendiente de forma controlada. Después debe relanzarse el workflow y realizar las pruebas de humo funcionales antes de considerar la release desplegada. La alternativa Vercel no se utilizó porque el proyecto existente está enlazado a otro repositorio y la aplicación mantiene un schema Prisma MySQL; migrar a Supabase PostgreSQL requeriría un proyecto técnico separado, no un cambio de URL.
+
+## Fuentes técnicas consultadas
+
+Las decisiones de empaquetado y despliegue se contrastaron con la documentación oficial de Next.js: `output: "standalone"` genera un servidor autocontenido, pero requiere conservar los recursos estáticos y públicos en el layout de despliegue [1]. La guía de self-hosting confirma que el proceso standalone se inicia con `server.js` y debe recibir las variables de host/puerto del servidor [2]. La convención `instrumentation.ts` y su función `register()` se revisaron para evitar inicializaciones duplicadas por instancia [3]. Para la base de datos, Prisma documenta que `migrate deploy` es el comando de producción para aplicar migraciones pendientes y no sustituye una migración de proveedor [4] [5].
+
+### Referencias
+
+[1]: https://nextjs.org/docs/app/api-reference/config/next-config-js/output — Next.js, “Output: standalone”.
+[2]: https://nextjs.org/docs/app/getting-started/deploying — Next.js, “Deploying”.
+[3]: https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation — Next.js, “Instrumentation”.
+[4]: https://www.prisma.io/docs/orm/prisma-migrate/workflows/development-and-production — Prisma, “Development and production”.
+[5]: https://www.prisma.io/docs/prisma-client/deployment/deploy-database-changes-with-prisma-migrate — Prisma, “Deploy database changes with Prisma Migrate”.
 
 **Autor:** Manus AI
