@@ -1465,14 +1465,18 @@ const globalForRegistry = globalThis as unknown as {
 }
 
 let whatsAppRegistry: WhatsAppRegistry
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
+const isTestEnvironment = process.env.NODE_ENV === 'test'
 
 if (globalForRegistry.whatsAppRegistry) {
   whatsAppRegistry = globalForRegistry.whatsAppRegistry
 } else {
   whatsAppRegistry = new WhatsAppRegistry()
   globalForRegistry.whatsAppRegistry = whatsAppRegistry
-  whatsAppRegistry.bootstrapFromDb().catch((e) => console.error('[WhatsAppRegistry] bootstrap error:', e))
-  whatsAppRegistry.startWatchdog()
+  if (!isBuildPhase && !isTestEnvironment) {
+    whatsAppRegistry.bootstrapFromDb().catch((e) => console.error('[WhatsAppRegistry] bootstrap error:', e))
+    whatsAppRegistry.startWatchdog()
+  }
 }
 
 /**

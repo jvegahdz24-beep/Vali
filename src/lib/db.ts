@@ -34,10 +34,15 @@ function createPrismaClient() {
     log: process.env.PRISMA_LOG === 'true' ? ['query', 'error', 'warn'] : ['error'],
   })
 
-  // Eagerly connect so the native engine is ready before first request
-  base.$connect().catch((err: unknown) => {
-    console.error('[Prisma] Eager $connect() failed:', err)
-  })
+  // Eagerly connect only in a running server. Next evaluates server modules
+  // during build and tests may intentionally use an unavailable database.
+  const isBuildOrTest =
+    process.env.NEXT_PHASE === 'phase-production-build' || process.env.NODE_ENV === 'test'
+  if (!isBuildOrTest) {
+    base.$connect().catch((err: unknown) => {
+      console.error('[Prisma] Eager $connect() failed:', err)
+    })
+  }
 
   return base.$extends({
     query: {

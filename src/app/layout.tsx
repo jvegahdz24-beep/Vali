@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://valiautoflow.com"),
   title: "ValiAutoFlow — CRM Inteligente con IA",
   description: "Automatiza flujos de negocio con WhatsApp + IA. Pipeline CRM, Agentes inteligentes y automatización para Pymes en México y LATAM.",
   keywords: ["CRM", "WhatsApp", "IA", "automatización", "SaaS", "Pymes", "México", "LATAM", "chatbot"],
