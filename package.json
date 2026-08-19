@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3105 --webpack",
-    "build": "prisma generate && next build --webpack",
-    "start": "next start -p 3105 -p 3105",
+    "build": "prisma generate && next build --webpack && node scripts/copy-build-assets.cjs",
+    "start": "next start -p 3105",
     "start:bun": "NODE_ENV=production bun .next/standalone/server.js",
     "lint": "eslint src",
     "test": "vitest run",

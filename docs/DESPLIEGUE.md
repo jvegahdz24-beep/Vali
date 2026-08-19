@@ -28,7 +28,7 @@ Este documento explica cómo publicar cambios a producción de forma segura, y c
 ## 2. Reglas de oro (leer antes de tocar)
 
 1. **NUNCA** ejecutar `prisma generate`, `npm install` ni `prisma migrate` **dentro de `C:\Hosting\s704ag`** — el usuario del servicio no tiene permisos y da `EPERM`. Esas operaciones se hacen en el entorno de desarrollo.
-2. El **deploy es en el sitio** (build en `C:\Hosting\s704ag`) seguido de reinicio del servicio NSSM. No hay pipeline automático que publique al servidor Windows (el CI de GitHub Actions valida, no despliega).
+2. El servidor Windows descrito en esta guía se despliega **en el sitio** (build en `C:\Hosting\s704ag`) seguido de reinicio del servicio NSSM. El workflow de GitHub Actions tiene una ruta SSH separada para un host Linux/SSH compatible; solo se activa cuando existen `DEPLOY_SSH_KEY` y `DEPLOY_HOST`, y **no controla el servicio NSSM de Windows**.
 3. **Siempre reiniciar el servicio** tras cambiar código o `.env`: los cambios de `.env` solo se leen al arrancar; el código servido es el de `.next` generado por el build.
 4. Tras desplegar, **verificar**: login HTTP 200 + WhatsApp CONNECTED en el log.
 5. Detrás de Apache hay **timeout ~30s**: cualquier endpoint que tarde más debe ser **asíncrono** (responder al instante y trabajar en segundo plano), como la generación de video/reels.
@@ -124,18 +124,19 @@ Requisitos: Windows Server, Node.js 24, MySQL, Apache 2.4, Cloudflare configurad
 
 ---
 
-## 8. CI (GitHub Actions)
+## 8. CI/CD (GitHub Actions)
 
-- Repositorio: GitHub `amadsoftwaresolutions-spec/valia-autoflow`.
-- Workflow: `.github/workflows/ci-cd.yml` — en push/PR a `main`/`production-ready` corre **lint + typecheck + tests** (Node 24, `ubuntu-latest`).
-- El **deploy a producción es manual** (§3); el CI sirve para validar antes de desplegar.
-- Seguridad: el `git remote` tiene un token de acceso incrustado en la URL — se recomienda **rotarlo** y usar un credential manager en lugar de dejarlo en la URL.
+- Repositorio: GitHub `jvegahdz24-beep/Vali`.
+- Workflow: `.github/workflows/ci-cd.yml` — en `main` y `production-ready` ejecuta **lint, typecheck, pruebas y build standalone** con Node 24. En `production-ready`, el job `deploy` requiere `DEPLOY_SSH_KEY` y `DEPLOY_HOST`.
+- La ruta SSH copia el contenido de `.next/standalone/` al directorio configurado por `DEPLOY_REMOTE_DIR` —por defecto `/app/valiautoflow`— y verifica `/api/health` en `DEPLOY_PORT` —por defecto `3105`— después del reinicio.
+- Esta ruta SSH presupone un host compatible con OpenSSH, shell POSIX, Node.js y `pm2` opcional. **No sustituye el procedimiento Windows/NSSM de las secciones anteriores**. Para el servidor Windows actual, el despliegue continúa siendo manual hasta disponer de un runner Windows o un adaptador SSH específico.
+- El build ejecuta `scripts/copy-build-assets.cjs`, que copia `.next/static` y `public` dentro del artifact standalone y falla si alguno de los componentes obligatorios falta.
 
 ---
 
 ## 9. Checklist de despliegue
 
-- [ ] Build local/desarrollo compila sin errores TS/ESLint.
+- [ ] Build local/desarrollo compila sin errores TS/ESLint y genera `server.js`, `.next/static` y `public` dentro del artifact standalone.
 - [ ] Si tocaste esquema de BD: `db push` + `generate` hechos en desarrollo.
 - [ ] `nssm stop` + matar node residual.
 - [ ] `npm run build` termina imprimiendo el árbol de rutas.
@@ -143,4 +144,5 @@ Requisitos: Windows Server, Node.js 24, MySQL, Apache 2.4, Cloudflare configurad
 - [ ] `login` responde **200**.
 - [ ] WhatsApp **CONNECTED** en `.amad-service.log`.
 - [ ] Endpoint tocado responde correctamente (probar en producción).
+- [ ] Si se usa la ruta SSH: `/api/health` pasa después del reinicio y `DEPLOY_REMOTE_DIR`/`DEPLOY_PORT` apuntan al host correcto.
 - [ ] Si aplica, verificar el cron relacionado en `.cron-logs\`.

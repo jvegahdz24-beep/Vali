@@ -1,52 +1,49 @@
 /**
  * Cross-platform build asset copier.
- * Replaces "cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/"
+ * Copies the assets required by Next.js standalone output.
  * Works on Windows, macOS, and Linux.
  */
 const fs = require("fs");
 const path = require("path");
 
 function copyRecursiveSync(src, dest) {
-  const exists = fs.existsSync(src);
-  const stats = exists && fs.statSync(src);
-  const isDirectory = exists && stats.isDirectory();
+  const stats = fs.statSync(src);
 
-  if (isDirectory) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    const entries = fs.readdirSync(src);
-    for (const entry of entries) {
+  if (stats.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src)) {
       copyRecursiveSync(path.join(src, entry), path.join(dest, entry));
     }
-  } else if (exists) {
-    fs.copyFileSync(src, dest);
+    return;
   }
+
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
 }
 
 const root = path.resolve(__dirname, "..");
 const standaloneDir = path.join(root, ".next", "standalone");
-
-// 1. Copy .next/static → .next/standalone/.next/static
 const staticSrc = path.join(root, ".next", "static");
 const staticDest = path.join(standaloneDir, ".next", "static");
-if (fs.existsSync(staticSrc)) {
-  console.log("Copying .next/static → .next/standalone/.next/static ...");
-  copyRecursiveSync(staticSrc, staticDest);
-  console.log("  Done.");
-} else {
-  console.warn("  Warning: .next/static not found, skipping.");
-}
-
-// 2. Copy public → .next/standalone/public
 const publicSrc = path.join(root, "public");
 const publicDest = path.join(standaloneDir, "public");
-if (fs.existsSync(publicSrc)) {
-  console.log("Copying public → .next/standalone/public ...");
-  copyRecursiveSync(publicSrc, publicDest);
-  console.log("  Done.");
-} else {
-  console.warn("  Warning: public/ not found, skipping.");
+
+for (const requiredPath of [path.join(standaloneDir, "server.js"), staticSrc, publicSrc]) {
+  if (!fs.existsSync(requiredPath)) {
+    throw new Error(`Required standalone build path is missing: ${requiredPath}`);
+  }
 }
 
-console.log("\nBuild assets copied successfully.");
+console.log("Copying .next/static → .next/standalone/.next/static ...");
+copyRecursiveSync(staticSrc, staticDest);
+
+console.log("Copying public → .next/standalone/public ...");
+copyRecursiveSync(publicSrc, publicDest);
+
+for (const copiedPath of [path.join(standaloneDir, "server.js"), staticDest, publicDest]) {
+  if (!fs.existsSync(copiedPath)) {
+    throw new Error(`Standalone asset copy failed: ${copiedPath}`);
+  }
+}
+
+console.log("Build assets copied successfully.");

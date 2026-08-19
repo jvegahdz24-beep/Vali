@@ -76,6 +76,8 @@ const nextConfig: NextConfig = {
     "qrcode",
     "@prisma/client",
     ".prisma/client",
+    "bullmq",
+    "ioredis",
     "ffmpeg-static",
     "fluent-ffmpeg",
   ],

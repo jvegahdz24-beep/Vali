@@ -69,13 +69,49 @@ jobs:
         with:
           name: standalone-build
           path: .next/standalone/
+      - name: Validate deployment configuration
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_REMOTE_DIR: ${{ vars.DEPLOY_REMOTE_DIR || '/app/valiautoflow' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '3105' }}
+        run: |
+          if [[ -z "$DEPLOY_SSH_KEY" || -z "$DEPLOY_HOST" ]]; then
+            echo "Deployment blocked: DEPLOY_SSH_KEY and DEPLOY_HOST must be configured as GitHub Actions secrets."
+            exit 1
+          fi
+
       - name: Deploy to production via SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_REMOTE_DIR: ${{ vars.DEPLOY_REMOTE_DIR || '/app/valiautoflow' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '3105' }}
         run: |
+          set -euo pipefail
+          trap 'rm -f ~/.ssh/deploy_key' EXIT
           mkdir -p ~/.ssh
-          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          scp -r .next/standalone/ $DEPLOY_HOST:/app/valiautoflow/
-          ssh -i ~/.ssh/deploy_key $DEPLOY_HOST "cd /app/valiautoflow && pm2 restart valiautoflow || NODE_OPTIONS='--max-old-space-size=4096' PORT=3000 nohup node .next/standalone/server.js &"
+          if [[ -n "$DEPLOY_KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "${DEPLOY_HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+          # Copy the contents, not the directory itself: server.js must live at
+          # /app/valiautoflow/server.js, matching Next.js standalone output.
+          scp -r -i ~/.ssh/deploy_key .next/standalone/. "$DEPLOY_HOST:$DEPLOY_REMOTE_DIR/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_HOST" "cd '$DEPLOY_REMOTE_DIR' && if pm2 describe valiautoflow >/dev/null 2>&1; then NODE_ENV=production HOSTNAME=0.0.0.0 PORT='$DEPLOY_PORT' pm2 restart valiautoflow --update-env; else NODE_ENV=production HOSTNAME=0.0.0.0 PORT='$DEPLOY_PORT' NODE_OPTIONS='--max-old-space-size=4096' nohup node server.js > valiautoflow.log 2>&1 & fi"
+
+          for attempt in {1..12}; do
+            if ssh -i ~/.ssh/deploy_key "$DEPLOY_HOST" "curl --fail --silent --show-error --max-time 5 http://127.0.0.1:$DEPLOY_PORT/api/health >/dev/null"; then
+              echo "Remote health check passed on attempt $attempt."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Remote health check failed after restart."
+          exit 1
