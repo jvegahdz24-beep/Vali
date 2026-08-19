@@ -315,7 +315,7 @@ async function notifyHotInactiveLeads(workspaceId: string): Promise<{ notified: 
 
     // Skip if contact has a confirmed upcoming appointment
     const upcomingAppt = await db.appointment.findFirst({
-      where: { contactId: contact.id, status: 'pending', date: { gte: new Date() } },
+      where: { workspaceId, contactId: contact.id, status: 'pending', date: { gte: new Date() } },
     })
     if (upcomingAppt) continue
 
@@ -377,22 +377,29 @@ async function notifyStaleLeads7d(workspaceId: string): Promise<{ notified: numb
     },
     select: {
       id: true,
+      workspaceId: true,
       firstName: true,
       lastName: true,
       conversations: {
         where: { workspaceId },
-        orderBy: { lastMessageAt: 'desc' },
         take: 1,
-        select: { lastMessageAt: true },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          messages: {
+            where: { direction: 'inbound' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { createdAt: true },
+          },
+        },
       },
     },
   })
 
   const stale = candidates.filter(c => {
-    const last = c.conversations[0]?.lastMessageAt
-    if (!last) return false
-    // Get last INBOUND timestamp
-    return last.getTime() < SEVEN_DAYS_AGO.getTime()
+    const lastInbound = c.conversations[0]?.messages[0]?.createdAt
+    if (!lastInbound) return false
+    return lastInbound.getTime() < SEVEN_DAYS_AGO.getTime()
   })
   if (stale.length === 0) return { notified: 0 }
 
@@ -417,6 +424,7 @@ async function notifyStaleLeads7d(workspaceId: string): Promise<{ notified: numb
     const recentTask = await db.followUpTask.findFirst({
       where: {
         contactId: contact.id,
+        workspaceId: contact.workspaceId,
         createdAt: { gte: SEVEN_DAYS_AGO },
       },
       orderBy: { createdAt: 'desc' },
@@ -424,7 +432,8 @@ async function notifyStaleLeads7d(workspaceId: string): Promise<{ notified: numb
     const followUpSent = recentTask?.status === 'sent'
 
     const name = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Sin nombre'
-    const daysSince = Math.floor((Date.now() - (contact.conversations[0]?.lastMessageAt?.getTime() ?? Date.now())) / (24 * 60 * 60 * 1000))
+    const lastInbound = contact.conversations[0]?.messages[0]?.createdAt
+    const daysSince = Math.floor((Date.now() - (lastInbound?.getTime() ?? Date.now())) / (24 * 60 * 60 * 1000))
 
     await notifyStaleLead(workspaceId, {
       contactName: name,
@@ -438,7 +447,7 @@ async function notifyStaleLeads7d(workspaceId: string): Promise<{ notified: numb
         workspaceId,
         contactId: contact.id,
         type: 'STALE_LEAD_7D_NOTIFIED',
-        metadata: JSON.stringify({ daysSince, followUpSent, lastMessageAt: contact.conversations[0]?.lastMessageAt?.toISOString() }),
+        metadata: JSON.stringify({ daysSince, followUpSent, lastInboundAt: lastInbound?.toISOString() }),
       },
     })
 
