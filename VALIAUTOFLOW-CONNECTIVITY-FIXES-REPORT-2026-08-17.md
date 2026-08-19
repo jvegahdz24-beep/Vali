@@ -22,7 +22,7 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | P1.2 | Historial de importaciones | Nuevo modelo `ImportJob`, migración MySQL y endpoint sin `@ts-ignore` ni fallback silencioso a lista vacía. |
 | P1.3 | Publicación de Marketing | Respuesta por canal con estados `published`, `failed`, `skipped` o `partial`; los errores y resultados se persisten. |
 | P1.4 | Analytics | La API y la interfaz muestran que los datos son `snapshot/polling`, con refresco cada 30 segundos, no push en tiempo real. |
-| Build | Preparación de producción | `npm run build` ejecuta `prisma generate && next build --webpack`; `output: "standalone"` genera `.next/standalone/server.js` para el deploy SSH. |
+| Build | Preparación de producción | `npm run build` ejecuta Prisma, Webpack y `scripts/copy-build-assets.cjs`; el artifact exige `server.js`, `.next/static` y `public` dentro de `.next/standalone/`. |
 
 ## Archivos principales modificados
 
@@ -35,7 +35,7 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | Marketing | `src/lib/marketing/publish.ts`, `src/lib/marketing/publish-results.ts`, `src/lib/marketing/publish-results.test.ts`, `src/app/api/marketing/publish/route.ts` |
 | Analytics | `src/app/api/analytics/route.ts`, `src/components/dashboard/analytics-view.tsx` |
 | Eventos CRM | `src/lib/engine/durable-events.ts`, `src/lib/engine/durable-events.test.ts`, `src/app/api/deals/route.ts` |
-| Producción y calidad | `package.json`, `src/middleware.ts` → `src/proxy.ts`, `src/app/api/debug/system/route.ts`, `vitest.config.ts`, `src/lib/ai/__tests__/humanizer.test.ts`, `.env.example` |
+| Producción y calidad | `package.json`, `next.config.ts`, `.github/workflows/ci-cd.yml`, `scripts/copy-build-assets.cjs`, `docs/DESPLIEGUE.md`, `src/middleware.ts` → `src/proxy.ts`, `src/app/api/debug/system/route.ts`, `vitest.config.ts`, `src/lib/ai/__tests__/humanizer.test.ts`, `.env.example` |
 
 ## Commits de la rama
 
@@ -53,6 +53,9 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | `4f381a1` | Alinear el entorno de Vitest con Prisma y autenticación. |
 | `7c019d2` | Documentar defaults seguros de runtime. |
 | `68626a5` | Publicar el artifact standalone requerido por el deploy SSH y hacer obligatorio su upload. |
+| `916237e` | Completar el artifact con assets, corregir el layout remoto SSH, añadir health check y documentar la separación Linux/SSH frente a Windows/NSSM. |
+| `9179297` | Hacer confiable la ejecución del worker de follow-ups, propagar fallos HTTP y usar el último inbound real con filtros de workspace. |
+| `9a9e170` | Evitar conexiones Prisma y bootstrap WhatsApp durante build/tests y fijar `metadataBase` público. |
 
 ## Validación ejecutada
 
@@ -61,14 +64,26 @@ Además, se corrigió el build de producción para ejecutar `prisma generate` y 
 | `npx tsc --noEmit` | **0 errores**. |
 | `npx vitest run --reporter=dot` | **45 archivos y 465 pruebas aprobadas**. |
 | `git diff --check` | **Sin errores de whitespace**. |
-| `npm run build` | **Build de producción completado** con Prisma generado, Webpack y `.next/standalone/server.js`. |
+| `npm run build` | **Build de producción completado** con Prisma generado, Webpack, `server.js`, `.next/static` y `public` dentro de `.next/standalone/` (138 MB verificados). |
 | CI/CD run `32050356672` | **Lint/typecheck, tests y build aprobados**; el artifact `standalone-build` se subió y descargó correctamente. |
 | Job `deploy` del run `32050356672` | **Bloqueado antes de SSH** porque `DEPLOY_SSH_KEY` y `DEPLOY_HOST` llegaron vacíos; no se ejecutó ningún cambio en producción. |
 | Diagnóstico aislado por archivo Vitest | **45/45 archivos aprobados**. |
+| `node --check` | **Scripts Node válidos**: runner de cron y copier de assets. |
+| `npm run lint` | **0 errores y 54 warnings preexistentes**, principalmente reglas de React Hooks y directivas ESLint no utilizadas. |
 
 La prueba heredada `getRandomDelay` en `humanizer.test.ts` era probabilística: una bonificación de longitud podía ser superada por la varianza aleatoria. No se ocultó ni se excluyó. Se corrigió el test para controlar `Math.random` durante la aserción, preservando la cobertura del comportamiento y eliminando el falso negativo. La suite final pasó con 465/465 pruebas.
 
 Durante los tests que inicializan Prisma se observan avisos de conexión contra un endpoint MySQL local de prueba no disponible. No son fallos de Vitest ni conexiones a producción; reflejan que esos tests unitarios no levantan una base de datos. El proveedor real configurado en el schema sigue siendo MySQL.
+
+## Hallazgos forenses adicionales y correcciones aplicadas
+
+La investigación posterior a la primera release confirmó cuatro defectos operativos que podían dejar el sistema parcialmente funcional aunque la suite de pruebas permaneciera verde. El artifact anterior contenía `server.js`, pero el pipeline no copiaba explícitamente `public/` ni `.next/static/`; por ello el servidor podía arrancar sin recursos visuales o chunks estáticos. El build ahora ejecuta un copier multiplataforma que falla si falta cualquiera de los componentes y verifica sus destinos.
+
+El deploy SSH también copiaba el directorio `standalone` como una carpeta anidada, mientras que el runtime esperado por Next.js requiere `server.js` en la raíz del directorio de aplicación. El workflow ahora copia el contenido, configura host/puerto remotos, reinicia PM2 o arranca `server.js` como fallback y comprueba `/api/health` antes de marcar éxito. `DEPLOY_KNOWN_HOSTS` es opcional; si no se proporciona, el workflow obtiene la clave del host mediante `ssh-keyscan`.
+
+El runner de follow-ups de Windows llamaba únicamente al cron de alertas y no al endpoint worker protegido. Ahora la tarea `follow-ups` ejecuta primero el worker con `WORKER_KEY`, después las alertas con `CRON_SECRET`, registra cada resultado y devuelve error cuando una llamada HTTP falla. El runner Node recibió el mismo contrato: los errores ya no quedan absorbidos por `Promise.allSettled`.
+
+El análisis funcional de leads estancados usaba `conversation.lastMessageAt`, que puede corresponder a un mensaje saliente. Se corrigió para seleccionar el último mensaje `inbound` real y se añadieron filtros explícitos de `workspaceId` a las consultas relacionadas. Finalmente, Prisma y WhatsApp dejaron de abrir conexiones o timers durante `next build` y tests; los efectos de runtime se mantienen únicamente cuando se ejecuta el servidor.
 
 ## Riesgos pendientes antes de producción
 
@@ -76,15 +91,15 @@ El riesgo principal de despliegue es la incompatibilidad entre el proveedor decl
 
 La migración `add_import_job` fue escrita para MySQL porque ese es el proveedor actual del repositorio. Debe aplicarse únicamente a una base MySQL compatible. Si el destino definitivo es Supabase, la migración debe convertirse de forma controlada antes del despliegue, no mediante una sustitución manual de la URL.
 
-El worker de follow-ups requiere que Vercel o el entorno objetivo invoque de forma periódica el endpoint protegido del worker mediante `WORKER_KEY`. El cron de alertas ya no debe procesar tareas de follow-up; cualquier configuración que siga llamando solo al cron antiguo dejará tareas pendientes sin ejecutar.
+El worker de follow-ups requiere que el entorno objetivo invoque periódicamente el endpoint protegido mediante `WORKER_KEY`. En Windows, `scripts/cron-runner.ps1 -Endpoint follow-ups` ya ejecuta worker y alertas en orden; en Linux/PM2, `scripts/run-cron.mjs` mantiene el mismo contrato. Debe existir una sola agenda activa para evitar duplicación.
 
 El publicador de Marketing aún depende de que cada proveedor esté correctamente conectado y autorizado. El nuevo contrato evita falsos positivos, pero no puede fabricar una confirmación cuando faltan credenciales o permisos de un canal.
 
-El pipeline de deploy ya genera y descarga correctamente el artifact standalone, pero el job SSH permanece bloqueado por la ausencia de los secretos de repositorio `DEPLOY_SSH_KEY` y `DEPLOY_HOST`. El log comprobado mostró ambos valores vacíos y falló al intentar copiar hacia `:/app/valiautoflow/`; por tanto, no existe evidencia de conexión ni de modificación del servidor productivo.
+El pipeline de deploy ya genera y descarga correctamente el artifact standalone, pero el job SSH permanece bloqueado por la ausencia de los secretos de repositorio `DEPLOY_SSH_KEY` y `DEPLOY_HOST`. El log comprobado mostró ambos valores vacíos y falló antes de abrir la conexión; por tanto, no existe evidencia de conexión ni de modificación del servidor productivo. Además, la guía vigente describe un servidor Windows/NSSM, mientras que el workflow SSH presupone un host POSIX; deben elegirse y configurar explícitamente ambas rutas, no mezclarlas.
 
 ## Checklist de despliegue seguro
 
-Antes de reintentar el deploy se deben configurar en GitHub Actions los secretos `DEPLOY_SSH_KEY` —clave privada del usuario de despliegue— y `DEPLOY_HOST` —destino SSH en formato `usuario@host`; el workflow añade el directorio fijo `/app/valiautoflow/`—. También deben existir en el servidor el directorio destino, Node.js compatible, `pm2` y el proceso `valiautoflow` o un mecanismo equivalente para el arranque inicial.
+Antes de reintentar el deploy SSH se deben configurar en GitHub Actions los secretos `DEPLOY_SSH_KEY` —clave privada del usuario de despliegue— y `DEPLOY_HOST` —destino en formato `usuario@host`—. Se recomienda añadir `DEPLOY_KNOWN_HOSTS`; si se omite, el workflow usa `ssh-keyscan`. Las variables opcionales `DEPLOY_REMOTE_DIR` y `DEPLOY_PORT` permiten adaptar el host sin editar el workflow. También deben existir en el servidor el directorio destino, Node.js compatible, `curl` y `pm2` —o un mecanismo equivalente para el arranque inicial—.
 
 Antes de reiniciar la aplicación, el administrador del servidor debe ejecutar `prisma migrate deploy` contra una base MySQL compatible, con respaldo previo y revisión del estado de migraciones. El workflow actual no automatiza esa operación. También deben confirmarse `DATABASE_URL`, `NEXTAUTH_SECRET` de longitud suficiente, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET` y `WORKER_KEY`, además de las credenciales de los proveedores realmente usados. `SEED_ENABLED`, `DEMO_MODE` y `NEXUS_ENABLED` deben permanecer en `false` en producción.
 
@@ -96,6 +111,6 @@ El código corregido está subido a GitHub en la rama `production-ready`; el Pul
 
 El despliegue productivo **no se completó**. El job `deploy` falló antes de abrir SSH porque los secretos `DEPLOY_SSH_KEY` y `DEPLOY_HOST` no están configurados —o no son visibles para este workflow— en el repositorio. El fallo no demuestra un problema del código ni del artifact y no se realizaron cambios en el servidor productivo.
 
-El siguiente paso manual para Jonathan es configurar esos dos secretos en la configuración de Actions del repositorio, confirmar que el usuario SSH tiene permisos sobre `/app/valiautoflow/`, revisar que `pm2` esté preparado y ejecutar la migración MySQL pendiente de forma controlada. Después debe relanzarse el workflow y realizar las pruebas de humo funcionales antes de considerar la release desplegada. La alternativa Vercel no se utilizó porque el proyecto existente está enlazado a otro repositorio y la aplicación mantiene un schema Prisma MySQL; migrar a Supabase PostgreSQL requeriría un proyecto técnico separado, no un cambio de URL.
+El siguiente paso manual para Jonathan es configurar los secretos de Actions, confirmar si el destino es un host Linux/SSH o el servidor Windows/NSSM documentado, preparar el usuario y directorio remotos, y ejecutar la migración MySQL pendiente de forma controlada. Después debe relanzarse el workflow y realizar las pruebas de humo funcionales antes de considerar la release desplegada. La alternativa Vercel no se utilizó porque el proyecto existente está enlazado a otro repositorio y la aplicación mantiene un schema Prisma MySQL; migrar a Supabase PostgreSQL requeriría un proyecto técnico separado, no un cambio de URL.
 
 **Autor:** Manus AI
